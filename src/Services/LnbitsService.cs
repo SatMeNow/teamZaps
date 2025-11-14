@@ -82,16 +82,20 @@ public class LnbitsService
             return (null);
         }
     }
-    public Task<LnbitsPaymentStatus?> CheckPaymentStatusAsync(string paymentHash, CancellationToken cancellationToken = default)
+    public async Task<LnbitsPaymentStatus?> CheckPaymentStatusAsync(string paymentHash, CancellationToken cancellationToken = default)
     {
         try
         {
-            return (RequestAsync<LnbitsPaymentStatus>(HttpMethod.Get, $"/api/v1/payments/{paymentHash}", cancellationToken));
+            var res = await RequestAsync<LnbitsPaymentStatus>(HttpMethod.Get, $"/api/v1/payments/{paymentHash}", cancellationToken).ConfigureAwait(false);
+            {
+                res!.Amount = (res.Amount / 1000); // Convert msat to sat
+            }
+            return (res);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error checking payment status.");
-            return (Task.FromResult<LnbitsPaymentStatus?>(null));
+            return (null);
         }
     }
 

@@ -19,6 +19,12 @@ Finally we end up in this situation:
 ✅ The drawn pleb, who paid the host, defacto swapped fiat in sats 😎
 
 
+# Use the bot in a telegram group
+
+- [ ] Add the `TeamZapsBot` into your group.
+
+- [ ] Grant the bot admin rights.
+
 # Project Summary
 
 ## 🚀 Quick Commands

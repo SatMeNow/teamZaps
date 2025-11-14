@@ -1,11 +1,11 @@
-using System.Reflection;
 using teamZaps.Configuration;
 using teamZaps.Handlers;
 using teamZaps.Services;
+using teamZaps.Sessions;
 
 namespace teamZaps;
 
-public class Program
+public static class Program
 {
     public static async Task Main(string[] args)
     {
@@ -51,8 +51,24 @@ public class Program
             {
                 services.Configure<TelegramSettings>(hostContext.Configuration.GetSection(TelegramSettings.SectionName));
                 services.Configure<LnbitsSettings>(hostContext.Configuration.GetSection(LnbitsSettings.SectionName));
-                services.AddSingleton<UpdateHandler>();
+                services.Configure<BotBehaviorOptions>(hostContext.Configuration.GetSection(nameof(BotBehaviorOptions)));
+
                 services.AddSingleton<LnbitsService>();
+                services.AddSingleton<SessionManager>();
+                services.AddSingleton<SessionWorkflowService>();
+
+                services.AddSingleton<UpdateHandler>();
+
+                services.AddSingleton<ITelegramBotClient>(sp =>
+                {
+                    var settings = sp.GetRequiredService<IOptions<TelegramSettings>>().Value;
+                    if (string.IsNullOrWhiteSpace(settings.BotToken))
+                        throw new InvalidOperationException("Telegram bot token is not configured.");
+                    return new TelegramBotClient(settings.BotToken);
+                });
+
                 services.AddHostedService<TelegramBotService>();
-           });
+                services.AddHostedService<SessionMonitorService>();
+                services.AddHostedService<PaymentMonitorService>();
+            });
 }
