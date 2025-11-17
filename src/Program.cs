@@ -68,7 +68,6 @@ public static class Program
                 });
 
                 services.AddHostedService<TelegramBotService>();
-                services.AddHostedService<SessionMonitorService>();
                 services.AddHostedService<PaymentMonitorService>();
             });
 }

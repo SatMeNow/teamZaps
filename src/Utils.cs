@@ -5,18 +5,17 @@ namespace teamZaps.Utils
 {
     public static partial class ExtEnum
     {
-        public static FieldInfo? GetFieldInfo(this Enum source) => source.GetType().GetField(source.ToString());
-        public static string GetDescription(this Enum source) => GetDescription(GetFieldInfo(source));
-        public static string GetDescription(this FieldInfo? source)
+        public static string GetDescription(this Enum source) => GetFieldInfo(source)?.TryGetCustomAttribute<DescriptionAttribute>()?.Description ?? "";
+        public static string GetIcon(this Enum source) => GetFieldInfo(source)?.TryGetCustomAttribute<IconAttribute>()?.Icon ?? "";
+        private static FieldInfo? GetFieldInfo(this Enum source) => source.GetType().GetField(source.ToString());
+        private static T? TryGetCustomAttribute<T>(this FieldInfo? source)
+            where T : Attribute
         {
-            if (source is null)
-                return (string.Empty);
-
-            var attr = (DescriptionAttribute[])source.GetCustomAttributes(typeof(DescriptionAttribute), false);
-            if ((attr != null) && (attr.Length > 0))
-                return (attr[0].Description);
+            var attr = (T[]?)source?.GetCustomAttributes(typeof(T), false);
+            if (attr?.Length > 0)
+                return (attr[0]);
             else
-                return (source.Name);
+                return (null);
         }
     }
 }

@@ -70,6 +70,15 @@ public static class PaymentParser
     }
 }
 
+public enum PaymentStatus
+{
+    [Icon("⏳"), Description("Pay this invoice to add your contribution to the session!")]
+    Pending,
+    [Icon("✅"), Description("Thank you! Your payment has been confirmed.")]
+    Paid,
+    [Icon("❌"), Description("This invoice has expired.")]
+    Expired
+}
 public enum PaymentCurrency
 {
     [Description("sat")]

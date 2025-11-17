@@ -25,7 +25,7 @@ public class SessionManager
             ChatTitle = (chat.Title ?? ""),
             StartedByUserId = userId,
             StartedAt = DateTimeOffset.UtcNow,
-            Phase = SessionPhase.AcceptingPayments
+            Phase = SessionPhase.WaitingForLotteryParticipants
         };
 
         if (_sessions.TryAdd(chat.Id, session))
@@ -34,11 +34,13 @@ public class SessionManager
             return true;
         }
 
-        session = GetSession(chat.Id)!;
+        session = GetSessionByChat(chat.Id)!;
         return false;
     }
 
-    public SessionState? GetSession(long chatId) => _sessions.TryGetValue(chatId, out var session) ? session : null;
+    public SessionState? GetSessionByChat(long chatId) => _sessions.TryGetValue(chatId, out var session) ? session : null;
+    public SessionState? GetSessionByUser(long userId) => ActiveSessions
+        .FirstOrDefault(s => s.Participants.ContainsKey(userId));
 
     public bool RemoveSession(long chatId)
     {
@@ -49,6 +51,8 @@ public class SessionManager
 
             if (session is not null)
             {
+                session.Phase = SessionPhase.Closed;
+                
                 _lastSummaries[chatId] = new SessionSummary(
                     session.StartedAt,
                     DateTimeOffset.UtcNow,

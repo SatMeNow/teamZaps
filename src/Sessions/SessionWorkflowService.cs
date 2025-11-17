@@ -14,7 +14,8 @@ public class SessionWorkflowService
         _options = options.Value;
     }
 
-    public SessionState? GetSession(long chatId) => _sessionManager.GetSession(chatId);
+    public SessionState? GetSessionByChat(long chatId) => _sessionManager.GetSessionByChat(chatId);
+    public SessionState? GetSessionByUser(long userId) => _sessionManager.GetSessionByUser(userId);
 
     public bool TryStartSession(ChatFullInfo chat, long userId, string displayName, out SessionState session)
     {
@@ -53,19 +54,23 @@ public class SessionWorkflowService
         return new InlineKeyboardMarkup(new[] { submitInvoice, viewStatus });
     }
 
-    public InlineKeyboardMarkup BuildPayoutKeyboard(SessionState session, long voterUserId)
-    {
-        bool alreadyVoted = session.PayoutVotes.Contains(voterUserId);
-        var voteButton = InlineKeyboardButton.WithCallbackData(alreadyVoted ? "✅ Voted" : "⚡ Payout Now", CallbackActions.VotePayout);
-        var statusButton = InlineKeyboardButton.WithCallbackData("ℹ️ Status", CallbackActions.ViewStatus);
-        return new InlineKeyboardMarkup(new[] { voteButton, statusButton });
-    }
 
-    public InlineKeyboardMarkup BuildSessionJoinKeyboard(SessionState session, long userId)
+
+    public InlineKeyboardMarkup? BuildSessionJoinKeyboard(SessionState session, long userId)
     {
-        bool alreadyJoined = session.Participants.ContainsKey(userId);
-        var joinButton = InlineKeyboardButton.WithCallbackData(alreadyJoined ? "✅ Joined" : "🎯 Join Session", CallbackActions.JoinSession);
-        return new InlineKeyboardMarkup(new[] { joinButton });
+        if (session.Phase == SessionPhase.Closed)
+            return null;
+        else
+        {
+            bool alreadyJoined = session.Participants.ContainsKey(userId);
+            var joinButton = InlineKeyboardButton.WithCallbackData(alreadyJoined ? "✅ Joined" : "🎯 Join", CallbackActions.JoinSession);
+            InlineKeyboardButton closeButton;
+            if (session.HasPayments)
+                closeButton = InlineKeyboardButton.WithCallbackData("🏆 Close", CallbackActions.CloseSession);
+            else
+                closeButton = InlineKeyboardButton.WithCallbackData("❌ Cancel", CallbackActions.CancelSession);
+            return new InlineKeyboardMarkup(new[] { joinButton, closeButton });
+        }
     }
 
     public BotBehaviorOptions Options => _options;
@@ -78,6 +83,7 @@ public static class CallbackActions
     public const string JoinLottery = "join_lottery";
     public const string ViewStatus = "view_status";
     public const string SubmitInvoice = "submit_invoice";
-    public const string VotePayout = "vote_payout";
     public const string JoinSession = "join_session";
+    public const string CloseSession = "close_session";
+    public const string CancelSession = "cancel_session";
 }

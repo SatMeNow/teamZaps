@@ -55,6 +55,9 @@ public class PaymentMonitorService : BackgroundService
                         // [Workaround] The `status.Amount` field doen't seem to be valid :(
                         pending.SettledSats = (long)pending.Amount;
 
+                        // Update the payment message to show paid status
+                        await MessageHelper.UpdatePaymentMessageAsync(pending, PaymentStatus.Paid, _botClient, _logger, cancellationToken);
+
                         var paymentRecord = new PaymentRecord(
                             pending.UserId,
                             pending.DisplayName,

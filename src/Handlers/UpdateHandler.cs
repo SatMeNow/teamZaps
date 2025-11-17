@@ -98,6 +98,7 @@ public class UpdateHandler : IUpdateHandler
     private async Task HandleCommandAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
     {
         var chatId = message.Chat.Id;
+        var userId = message.From!.Id;
         message.GetCommand(out var cmd, out var args);
         
         try
@@ -123,7 +124,8 @@ public class UpdateHandler : IUpdateHandler
                         "🎯 *Team Zaps Help*\n\n" +
                         "*Commands:*\n" +
                         "/startsession - Start a new payment session\n" +
-                        "/endsession - End payments and start lottery\n" +
+                        "/closesession - Close payments and start lottery\n" +
+                        "/cancelsession - Cancel session (admin only)\n" +
                         "/status - View session details\n\n" +
                         "*How it works:*\n" +
                         "1️⃣ Join the session using the button on the pinned message\n" +
@@ -142,12 +144,12 @@ public class UpdateHandler : IUpdateHandler
                     await HandleStartSessionAsync(botClient, message, cancellationToken);
                     break;
 
-                case "/endsession":
-                    await HandleStopSessionAsync(botClient, message, cancellationToken);
+                case "/closesession":
+                    await HandleCloseSessionAsync(botClient, chatId, userId, cancellationToken);
                     break;
 
-                case "/closesession":
-                    await HandleCloseSessionAsync(botClient, message, cancellationToken);
+                case "/cancelsession":
+                    await HandleCancelSessionAsync(botClient, chatId, userId, cancellationToken);
                     break;
 
                 case "/status":
@@ -225,9 +227,12 @@ public class UpdateHandler : IUpdateHandler
                 $"• `1000` (sats)\n" +
                 $"• `5eur` or `5€`\n" + // TODO: no samples here
                 $"• `2eur+1000sat`\n\n" +
-                $"Use /endsession to end and start the lottery!",
+                $"Use /closesession to close and start the lottery!",
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
+            
+            session.StartMessageId = startMsg.MessageId;
+            
             try
             {
                 await MessageHelper.SendPinnedStatusAsync(session, botClient, _workflowService, cancellationToken);
@@ -246,24 +251,21 @@ public class UpdateHandler : IUpdateHandler
         }
     }
 
-    private async Task HandleStopSessionAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
+    private async Task HandleCloseSessionAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
     {
-        var chatId = message.Chat.Id;
-        var userId = message.From!.Id;
-
         // Check permissions
-        if (!_workflowService.Options.AllowNonAdminSessionStop)
+        if (!_workflowService.Options.AllowNonAdminSessionClose)
         {
             if (!await IsUserAdminAsync(botClient, chatId, userId, cancellationToken))
             {
                 await botClient.SendMessage(chatId,
-                    "❌ Only group administrators can stop a session.",
+                    "❌ Only group administrators can close a session.",
                     cancellationToken: cancellationToken);
                 return;
             }
         }
 
-        var session = _workflowService.GetSession(chatId);
+        var session = _workflowService.GetSessionByChat(chatId);
         if (session is null)
         {
             await botClient.SendMessage(chatId,
@@ -272,7 +274,7 @@ public class UpdateHandler : IUpdateHandler
             return;
         }
 
-        if (session.Phase != SessionPhase.AcceptingPayments)
+        if (session.Phase > SessionPhase.AcceptingPayments)
         {
             await botClient.SendMessage(chatId,
                 "⚠️ Session has already moved past the payment phase.",
@@ -280,47 +282,55 @@ public class UpdateHandler : IUpdateHandler
             return;
         }
 
-        var totalSats = _workflowService.TotalSats(session);
-        if (totalSats == 0)
+        if (!session.HasPayments)
         {
-            await HandleCloseSessionAsync(botClient, message, cancellationToken);
+            await HandleCancelSessionAsync(botClient, chatId, userId, cancellationToken);
             return;
         }
 
-        // Move to lottery phase
-        session.Phase = SessionPhase.LotteryOpen;
-        session.LotteryOpenedAt = DateTimeOffset.UtcNow;
-        session.LotteryClosesAt = DateTimeOffset.UtcNow.Add(_workflowService.Options.LotteryJoinWindow);
+        // Check if anyone entered the lottery
+        if (session.LotteryParticipants.Count == 0)
+        {
+            await botClient.SendMessage(chatId,
+                "❌ No one entered the lottery. Session cancelled.",
+                cancellationToken: cancellationToken);
 
-        var keyboard = _workflowService.BuildLotteryKeyboard(session, false);
-        var msg = await botClient.SendMessage(chatId,
-            $"🎰 *Lottery Started!*\n\n" +
-            $"Total pot: *{totalSats} sats*\n" +
-            $"Participants: *{session.Participants.Count}*\n\n" +
-            $"Click the button below to join the lottery!\n" +
-            $"You have *{_workflowService.Options.LotteryJoinWindow.TotalMinutes:F0} minutes* to join.\n\n" +
-            $"One winner will be drawn to receive all the sats! 🎉",
-            parseMode: ParseMode.Markdown,
-            replyMarkup: keyboard,
-            cancellationToken: cancellationToken);
+            _workflowService.TryCloseSession(chatId);
+        }
+        else
+        {
+            // Draw winner immediately
+            var participants = session.LotteryParticipants.ToArray();
+            var winnerUserId = participants[Random.Shared.Next(participants.Length)];
+            
+            session.WinnerUserId = winnerUserId;
+            session.Phase = SessionPhase.WaitingForInvoice;
 
-        session.LotteryMessageId = msg.MessageId;
+            var winner = session.Participants[winnerUserId];
+
+            await MessageHelper.SendWinnerMessageAsync(session, botClient, _workflowService, cancellationToken);
+
+            _logger.LogInformation("Winner selected immediately for chat {ChatId}: user {UserId}", chatId, winnerUserId);
+        }
         
-        _logger.LogInformation("Lottery started in chat {ChatId}, total {TotalSats} sats", chatId, totalSats);
+        await MessageHelper.UpdatePinnedStatusAsync(session, botClient, _workflowService, _logger, cancellationToken);
     }
 
-    private async Task HandleCloseSessionAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
+    private async Task HandleCancelSessionAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
     {
-        var chatId = message.Chat.Id;
-        var userId = message.From!.Id;
+        var session = _workflowService.GetSessionByChat(chatId);
+        if (session is null)
+            return;
 
         // Check permissions
-        if (!_workflowService.Options.AllowNonAdminSessionClose)
+        if (session?.HasPayments == false)
+            ; // Skip (No need to check)
+        else if (!_workflowService.Options.AllowNonAdminSessionCancel)
         {
             if (!await IsUserAdminAsync(botClient, chatId, userId, cancellationToken))
             {
                 await botClient.SendMessage(chatId,
-                    "❌ Only group administrators can force-close a session.",
+                    "❌ Only group administrators can cancel a session.",
                     cancellationToken: cancellationToken);
                 return;
             }
@@ -328,10 +338,12 @@ public class UpdateHandler : IUpdateHandler
 
         if (_workflowService.TryCloseSession(chatId))
         {
+            await MessageHelper.UpdatePinnedStatusAsync(session!, botClient, _workflowService, _logger, cancellationToken);
+        
             await botClient.SendMessage(chatId,
-                "✅ Session has been closed and removed.",
+                "❌ Session has been cancelled and removed.",
                 cancellationToken: cancellationToken);
-            _logger.LogInformation("Session force-closed in chat {ChatId} by user {UserId}", chatId, userId);
+            _logger.LogInformation("Session cancelled in chat {ChatId} by user {UserId}", chatId, userId);
         }
         else
         {
@@ -344,7 +356,7 @@ public class UpdateHandler : IUpdateHandler
     private async Task HandleStatusAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
     {
         var chatId = message.Chat.Id;
-        var session = _workflowService.GetSession(chatId);
+        var session = _workflowService.GetSessionByChat(chatId);
 
         if (session is null)
         {
@@ -362,46 +374,6 @@ public class UpdateHandler : IUpdateHandler
     }
 
     // ==================== PAYMENT HANDLING ====================
-
-    private async Task HandlePaymentMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
-    {
-        var chatId = message.Chat.Id;
-        var chatTitle = message.Chat.Title;
-        var session = _workflowService.GetSession(chatId);
-
-        if (session is null || session.Phase != SessionPhase.AcceptingPayments)
-            return; // Silently ignore if no session or wrong phase
-
-        var text = message.Text?.Trim();
-        if (string.IsNullOrEmpty(text))
-            return;
-
-        // Try to parse as payment
-        if (!PaymentParser.TryParse(text, out var tokens, out var error))
-            return; // Not a payment message
-
-        var userId = message.From!.Id;
-        var displayName = message.From.GetDisplayName();
-
-        // Check if user has joined the session
-        if (!session.Participants.ContainsKey(userId))
-        {
-            await botClient.SendMessage(chatId,
-                $"❌ {displayName}, you must join the session first! Use the button on the pinned message.",
-                cancellationToken: cancellationToken);
-            return;
-        }
-
-        // Inform user to use private messages for payments
-        await botClient.SendMessage(chatId,
-            $"💬 {displayName}, please send your payment amounts to me in a private message!\n" +
-            $"Click here: @{(await botClient.GetMe(cancellationToken)).Username}",
-            cancellationToken: cancellationToken);
-        return;
-
-        // Payment processing is now handled in private messages only
-        // This method now just redirects users to private chat
-    }
 
     private async Task HandleDirectMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
     {
@@ -433,12 +405,30 @@ public class UpdateHandler : IUpdateHandler
         {
             // Find active session where this user is a participant
             var participantSession = _sessionManager.ActiveSessions
-                .FirstOrDefault(s => s.Phase == SessionPhase.AcceptingPayments && s.Participants.ContainsKey(userId));
+                .FirstOrDefault(s => s.Participants.ContainsKey(userId));
 
             if (participantSession is not null)
             {
-                await ProcessPrivatePaymentAsync(botClient, participantSession, userId, displayName, tokens, text, cancellationToken);
-                return;
+                if (participantSession.Phase == SessionPhase.WaitingForLotteryParticipants)
+                {
+                    await botClient.SendMessage(message.Chat.Id,
+                        "⚠️ Payments are blocked until someone enters the lottery!\n\n" +
+                        "Use the 🎰 Enter Lottery button in your welcome message or ask someone to enter the lottery first.",
+                        cancellationToken: cancellationToken);
+                    return;
+                }
+                else if (participantSession.Phase == SessionPhase.AcceptingPayments)
+                {
+                    await ProcessPrivatePaymentAsync(botClient, participantSession, userId, displayName, tokens, text, cancellationToken);
+                    return;
+                }
+                else
+                {
+                    await botClient.SendMessage(message.Chat.Id,
+                        $"⚠️ Payments are not available in current session phase: {participantSession.Phase}",
+                        cancellationToken: cancellationToken);
+                    return;
+                }
             }
             else
             {
@@ -462,18 +452,21 @@ public class UpdateHandler : IUpdateHandler
     private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, long userId, string displayName, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
     {
         // Process each token and create invoices
-        foreach (var token in tokens)
+        foreach (var tokenGrp in tokens.GroupBy(t => t.Currency))
         {
+            var grpAmount = (double)tokenGrp.Sum(tGrp => tGrp.Amount);
+            var grpCurrency = tokenGrp.Key;
             try
             {
-                var currency = token.Currency.GetDescription();
-                var invoice = await _lnbitsService.CreateInvoiceAsync((double)token.Amount, currency, // TODO: pass the enum here, not a string!
-                    $"{session.ChatTitle}/{displayName} zapped", cancellationToken);
+                var currencyName = grpCurrency.GetDescription();
+                var memo = $"{session.ChatTitle}/{displayName} zapped";
+                // TODO: pass the enum here, not a currency string! 
+                var invoice = await _lnbitsService.CreateInvoiceAsync(grpAmount, currencyName, memo, cancellationToken).ConfigureAwait(false);
 
                 if (invoice is null)
                 {
                     await botClient.SendMessage(userId,
-                        $"❌ Failed to create invoice for {token.Amount} {currency}",
+                        $"❌ Failed to create invoice for {grpAmount} {currencyName}",
                         cancellationToken: cancellationToken);
                     continue;
                 }
@@ -485,31 +478,24 @@ public class UpdateHandler : IUpdateHandler
                     PaymentRequest = invoice.PaymentRequest,
                     UserId = userId,
                     DisplayName = displayName,
-                    Amount = token.Amount,
-                    Currency = token.Currency,
+                    Amount = (decimal)grpAmount,
+                    Currency = grpCurrency,
                     InputExpression = inputExpression,
                     CreatedAt = DateTimeOffset.UtcNow
                 };
 
                 session.PendingPayments.TryAdd(invoice.PaymentHash, pending);
 
-                await botClient.SendMessage(userId,
-                    $"⚡ *Invoice Created*\n\n" +
-                    $"Amount: `{token.Amount} {currency}`\n\n" +
-                    $"`{invoice.PaymentRequest}`\n\n" +
-                    $"Pay this invoice to add your contribution to the session!",
-                    parseMode: ParseMode.Markdown,
-                    cancellationToken: cancellationToken);
+                var message = await MessageHelper.SendPaymentMessageAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
+                pending.MessageId = message.MessageId;
 
                 _logger.LogInformation("Created invoice for user {UserId} in session {ChatId}: {Amount} {Currency}",
-                    userId, session.ChatId, token.Amount, currency);
+                    userId, session.ChatId, grpAmount, grpCurrency);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error creating invoice for private payment");
-                await botClient.SendMessage(userId,
-                    $"❌ Error creating invoice for {token.Amount} {token.Currency.GetDescription()}. Please try again.",
-            cancellationToken: cancellationToken);
+                await botClient.SendMessage(userId, $"❌ Error creating invoice for {grpAmount} {grpCurrency}. Please try again.", cancellationToken: cancellationToken);
             }
         }
     }
@@ -544,12 +530,16 @@ public class UpdateHandler : IUpdateHandler
                     await HandleSubmitInvoiceCallbackAsync(botClient, chatId, userId, cancellationToken);
                     break;
 
-                case CallbackActions.VotePayout:
-                    await HandleVotePayoutAsync(botClient, chatId, userId, displayName, cancellationToken);
-                    break;
-
                 case CallbackActions.JoinSession:
                     await HandleJoinSessionAsync(botClient, chatId, userId, displayName, query.Message.MessageId, cancellationToken);
+                    break;
+
+                case CallbackActions.CloseSession:
+                    await HandleCloseSessionAsync(botClient, chatId, userId, cancellationToken);
+                    break;
+
+                case CallbackActions.CancelSession:
+                    await HandleCancelSessionAsync(botClient, chatId, userId, cancellationToken);
                     break;
             }
         }
@@ -561,8 +551,8 @@ public class UpdateHandler : IUpdateHandler
 
     private async Task HandleJoinSessionAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, int messageId, CancellationToken cancellationToken)
     {
-        var session = _workflowService.GetSession(chatId);
-        if (session is null || session.Phase != SessionPhase.AcceptingPayments)
+        var session = _workflowService.GetSessionByChat(chatId);
+        if (session is null || session.Phase > SessionPhase.AcceptingPayments)
         {
             await botClient.SendMessage(chatId, "⚠️ Session is not currently accepting new participants.", cancellationToken: cancellationToken);
             return;
@@ -585,14 +575,20 @@ public class UpdateHandler : IUpdateHandler
         {
             var chat = await botClient.GetChat(session.ChatId, cancellationToken);
 
+            var lotteryButton = new Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup(
+                Telegram.Bot.Types.ReplyMarkups.InlineKeyboardButton.WithCallbackData("🎰 Enter Lottery", CallbackActions.JoinLottery));
+
             await botClient.SendMessage(userId,
                 $"🎉 Welcome to the *{chat.Title}* Team Zaps session!\n\n" +
-                $"You can now make payments by sending amounts like:\n" +
+                $"💰 **Make payments** by sending amounts like:\n" +
                 $"• `1000` (sats)\n" +
                 $"• `5eur` or `5€`\n" +
-                $"• `2eur+1000sat`\n\n" +
-                $"I'll create Lightning invoices for you to pay. Once everyone is done, we'll start the lottery! 🎰",
+                $"• `2eur+1000sat`\n" +
+                $"I'll create Lightning invoices for you to pay.\n\n" +
+                $"🎰 Feel free to **enter the lottery** if you're willing to pay the fiat bill if you win. In return, you'll receive all the sats collected from everyone!\n\n" +
+                $"⚠️ **Payments are blocked** until someone enters the lottery first!",
                 parseMode: ParseMode.Markdown,
+                replyMarkup: lotteryButton,
                 cancellationToken: cancellationToken);
         }
         catch (Exception ex)
@@ -611,60 +607,68 @@ public class UpdateHandler : IUpdateHandler
 
     private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, int messageId, CancellationToken cancellationToken)
     {
-        var session = _workflowService.GetSession(chatId);
-        if (session is null || session.Phase != SessionPhase.LotteryOpen)
+        var session = _workflowService.GetSessionByUser(userId);
+        if (session is null)
         {
-            await botClient.SendMessage(chatId, "⚠️ Lottery is not currently open.", cancellationToken: cancellationToken);
+            await botClient.SendMessage(chatId, "⚠️ No active session found.", cancellationToken: cancellationToken);
             return;
         }
 
-        // Check if user made any payments
-        if (!session.Participants.ContainsKey(userId))
+        // Handle different phases
+        if (session.Phase == SessionPhase.WaitingForLotteryParticipants)
         {
-            await botClient.SendMessage(chatId,
-                $"❌ {displayName}, you must make a payment to join the lottery!",
-                cancellationToken: cancellationToken);
+            // First lottery participant - unlock payments
+            if (session.LotteryParticipants.Add(userId))
+            {
+                session.Phase = SessionPhase.AcceptingPayments;
+                
+                await botClient.SendMessage(chatId,
+                    $"🎉 {displayName} entered the lottery! Payments are now unlocked for everyone! 💰",
+                    cancellationToken: cancellationToken);
+
+                await MessageHelper.UpdatePinnedStatusAsync(session, botClient, _workflowService, _logger, cancellationToken);
+                
+                _logger.LogInformation("First lottery participant {UserId} in chat {ChatId}, payments unlocked", userId, chatId);
+            }
+            else
+            {
+                await botClient.SendMessage(chatId,
+                    $"ℹ️ {displayName}, you've already entered the lottery!",
+                    cancellationToken: cancellationToken);
+            }
+            return;
+        }
+        else if (session.Phase == SessionPhase.AcceptingPayments)
+        {
+            // More people can still join lottery during payment phase
+            if (session.LotteryParticipants.Add(userId))
+            {
+                await botClient.SendMessage(chatId,
+                    $"✅ {displayName} entered the lottery! 🎟️",
+                    cancellationToken: cancellationToken);
+
+                await MessageHelper.UpdatePinnedStatusAsync(session, botClient, _workflowService, _logger, cancellationToken);
+                
+                _logger.LogInformation("User {UserId} joined lottery in chat {ChatId}", userId, chatId);
+            }
+            else
+            {
+                await botClient.SendMessage(chatId,
+                    $"ℹ️ {displayName}, you've already entered the lottery!",
+                    cancellationToken: cancellationToken);
+            }
             return;
         }
 
-        // Add to lottery
-        if (session.LotteryParticipants.Add(userId))
-        {
-            await botClient.SendMessage(chatId,
-                $"✅ {displayName} joined the lottery! 🎟️",
-                cancellationToken: cancellationToken);
-
-            // Update the lottery message
-            var keyboard = _workflowService.BuildLotteryKeyboard(session, true);
-            var totalSats = _workflowService.TotalSats(session);
-            
-            await botClient.EditMessageText(
-                chatId: chatId,
-                messageId: messageId,
-                text: $"🎰 *Lottery Started!*\n\n" +
-                      $"Total pot: *{totalSats} sats*\n" +
-                      $"Participants: *{session.Participants.Count}*\n" +
-                      $"Lottery entries: *{session.LotteryParticipants.Count}*\n\n" +
-                      $"Click the button below to join the lottery!\n" +
-                      $"Time remaining: Check back soon!\n\n" +
-                      $"One winner will be drawn to receive all the sats! 🎉",
-                parseMode: ParseMode.Markdown,
-                replyMarkup: keyboard,
-                cancellationToken: cancellationToken);
-
-            _logger.LogInformation("User {UserId} joined lottery in chat {ChatId}", userId, chatId);
-        }
-        else
-        {
-            await botClient.SendMessage(chatId,
-                $"ℹ️ {displayName}, you've already joined the lottery!",
-                cancellationToken: cancellationToken);
-        }
+        // Phase not valid for lottery joining
+        await botClient.SendMessage(chatId, 
+            $"⚠️ Lottery joining is not available in current phase: {session.Phase}", 
+            cancellationToken: cancellationToken);
     }
 
     private async Task HandleViewStatusCallbackAsync(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken)
     {
-        var session = _workflowService.GetSession(chatId);
+        var session = _workflowService.GetSessionByChat(chatId);
         if (session is null)
         {
             await botClient.SendMessage(chatId, "⚠️ No active session.", cancellationToken: cancellationToken);
@@ -676,7 +680,7 @@ public class UpdateHandler : IUpdateHandler
 
     private async Task HandleSubmitInvoiceCallbackAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
     {
-        var session = _workflowService.GetSession(chatId);
+        var session = _workflowService.GetSessionByChat(chatId);
         if (session is null || session.WinnerUserId != userId)
         {
             await botClient.SendMessage(chatId, "⚠️ You are not the lottery winner.", cancellationToken: cancellationToken);
@@ -691,72 +695,21 @@ public class UpdateHandler : IUpdateHandler
             cancellationToken: cancellationToken);
     }
 
-    private async Task HandleVotePayoutAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, CancellationToken cancellationToken)
-    {
-        var session = _workflowService.GetSession(chatId);
-        if (session is null || session.Phase != SessionPhase.WaitingForPayout)
-        {
-            await botClient.SendMessage(chatId, "⚠️ No payout is pending.", cancellationToken: cancellationToken);
-            return;
-        }
 
-        // Check if user participated
-        if (!session.Participants.ContainsKey(userId))
-        {
-            await botClient.SendMessage(chatId, "❌ Only participants can vote.", cancellationToken: cancellationToken);
-            return;
-        }
-
-        if (session.PayoutVotes.Add(userId))
-        {
-            var totalVoters = session.Participants.Count;
-            var votesNeeded = (int)Math.Ceiling(totalVoters * _workflowService.Options.EarlyPayoutVoteThreshold);
-            var currentVotes = session.PayoutVotes.Count;
-
-            await botClient.SendMessage(chatId,
-                $"✅ {displayName} voted for immediate payout!\n\n" +
-                $"Votes: {currentVotes}/{votesNeeded}",
-                cancellationToken: cancellationToken);
-
-            // Check if threshold reached
-            if (currentVotes >= votesNeeded)
-            {
-                await ExecutePayoutAsync(botClient, session, cancellationToken);
-            }
-
-            _logger.LogInformation("User {UserId} voted for payout in chat {ChatId} ({CurrentVotes}/{VotesNeeded})",
-                userId, chatId, currentVotes, votesNeeded);
-        }
-        else
-        {
-            await botClient.SendMessage(chatId, "ℹ️ You've already voted!", cancellationToken: cancellationToken);
-        }
-    }
 
     private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, long userId, string bolt11, CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Winner invoice submitted for session in chat {ChatId}", session.ChatId);
+
         session.WinnerInvoiceBolt11 = bolt11;
         session.InvoiceSubmittedAt = DateTimeOffset.UtcNow;
-        session.Phase = SessionPhase.WaitingForPayout;
-        session.PayoutScheduledAt = DateTimeOffset.UtcNow.Add(_workflowService.Options.PayoutDelay);
 
         await botClient.SendMessage(userId,
-            "✅ Invoice received! The payout will be processed soon.",
+            "✅ Invoice received! Processing payout...",
             cancellationToken: cancellationToken);
 
-        var keyboard = _workflowService.BuildPayoutKeyboard(session, userId);
-        var msg = await botClient.SendMessage(session.ChatId,
-            $"🎉 *Winner submitted invoice!*\n\n" +
-            $"Payout scheduled for: *{session.PayoutScheduledAt:yyyy-MM-dd HH:mm} UTC*\n\n" +
-            $"Want to pay out now? Vote below!\n" +
-            $"Need {(int)(session.Participants.Count * _workflowService.Options.EarlyPayoutVoteThreshold)} votes.",
-            parseMode: ParseMode.Markdown,
-            replyMarkup: keyboard,
-            cancellationToken: cancellationToken);
-
-        session.CurrentPayoutActionMessageId = msg.MessageId;
-
-        _logger.LogInformation("Winner invoice submitted for session in chat {ChatId}", session.ChatId);
+        // Execute payout
+        await ExecutePayoutAsync(botClient, session, cancellationToken);
     }
 
     private async Task ExecutePayoutAsync(ITelegramBotClient botClient, SessionState session, CancellationToken cancellationToken)
@@ -770,17 +723,15 @@ public class UpdateHandler : IUpdateHandler
             
             if (paymentResult is not null)
             {
+                session.Phase = SessionPhase.Closed;
                 session.PayoutCompleted = true;
                 session.PayoutExecutedAt = DateTimeOffset.UtcNow;
 
-                await botClient.SendMessage(session.ChatId,
-                    $"⚡ *Payout Completed!*\n\n" +
-                    $"Amount: *{paymentResult.Amount} sats*\n" +
-                    $"Fee: *{paymentResult.Fee} sats*\n\n" +
-                    $"Thank you for using Team Zaps! 🎉",
-                    parseMode: ParseMode.Markdown,
-                    cancellationToken: cancellationToken);
+                await MessageHelper.UpdateWinnerMessageAsync(session, PaymentStatus.Paid, paymentResult, botClient, _workflowService, _logger, cancellationToken);
 
+                // Update the pinned status message
+                await MessageHelper.UpdatePinnedStatusAsync(session, botClient, _workflowService, _logger, cancellationToken);
+                
                 // Clean up session
                 _workflowService.TryCloseSession(session.ChatId);
 

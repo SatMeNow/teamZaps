@@ -11,8 +11,10 @@ public class SessionState
 
 
     public SessionPhase Phase { get; set; } = SessionPhase.AcceptingPayments;
+    public bool HasPayments => (ConfirmedPayments.Count > 0);
 
     public int? StatusMessageId { get; set; }
+    public int? StartMessageId { get; set; }
 
     public ConcurrentDictionary<long, ParticipantState> Participants { get; } = new();
     public ConcurrentDictionary<string, PendingPayment> PendingPayments { get; } = new();
@@ -23,17 +25,15 @@ public class SessionState
     public int? LotteryMessageId { get; set; }
     public HashSet<long> LotteryParticipants { get; } = new();
     public long? WinnerUserId { get; set; }
+    public int? WinnerMessageId { get; set; }
 
     public string? WinnerInvoiceBolt11 { get; set; }
     public string? WinnerInvoiceHash { get; set; }
     public int? WinnerInvoiceMessageId { get; set; }
     public DateTimeOffset? InvoiceSubmittedAt { get; set; }
 
-    public DateTimeOffset? PayoutScheduledAt { get; set; }
     public DateTimeOffset? PayoutExecutedAt { get; set; }
     public bool PayoutCompleted { get; set; }
-    public int? CurrentPayoutActionMessageId { get; set; }
-    public HashSet<long> PayoutVotes { get; } = new();
 }
 
 public class ParticipantState
@@ -71,13 +71,13 @@ public class PendingPayment
     public bool NotifiedPaid { get; set; }
     public long? SettledSats { get; set; }
     public DateTimeOffset? PaidAt { get; set; }
+    public int? MessageId { get; set; }
 }
 
 public enum SessionPhase
 {
+    WaitingForLotteryParticipants,
     AcceptingPayments,
-    LotteryOpen,
     WaitingForInvoice,
-    WaitingForPayout,
     Closed
 }

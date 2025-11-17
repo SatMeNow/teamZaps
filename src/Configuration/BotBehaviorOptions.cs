@@ -8,29 +8,14 @@ public class BotBehaviorOptions
     public bool AllowNonAdminSessionStart { get; set; } = false;
 
     /// <summary>
-    /// If false, only chat administrators can stop a session and start the lottery.
-    /// </summary>
-    public bool AllowNonAdminSessionStop { get; set; } = false;
-
-    /// <summary>
-    /// If false, only chat administrators can force-close a session.
+    /// If false, only chat administrators can close a session and start the lottery.
     /// </summary>
     public bool AllowNonAdminSessionClose { get; set; } = false;
 
     /// <summary>
-    /// Duration during which participants can join the lottery after a session is stopped.
+    /// If false, only chat administrators can cancel a session.
     /// </summary>
-    public TimeSpan LotteryJoinWindow { get; set; } = TimeSpan.FromMinutes(15);
-
-    /// <summary>
-    /// Delay between the winner submitting the invoice and the payout being executed.
-    /// </summary>
-    public TimeSpan PayoutDelay { get; set; } = TimeSpan.FromHours(1);
-
-    /// <summary>
-    /// Percentage (0-1) of payers required to fast-forward the payout by voting.
-    /// </summary>
-    public double EarlyPayoutVoteThreshold { get; set; } = 0.20d;
+    public bool AllowNonAdminSessionCancel { get; set; } = false;
 
     /// <summary>
     /// Default fiat currency code used when parsing payments (e.g. EUR).

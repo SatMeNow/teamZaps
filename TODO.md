@@ -5,7 +5,7 @@
 - [ ] Implement command workflow
   - [ ] /startsession command (admin-only configurable)
   - [ ] Payment command parsing (amount expressions like "1eur+1000sat") supporting sat/EUR/USD (no conversion, passed to LNbits)
-  - [ ] /stopsession command to trigger lottery
+  - [ ] /closesession command to trigger lottery
   - [ ] Lottery enrollment window logic with configurable duration, surfaced via inline keyboards
   - [ ] Winner selection and payout scheduling (with configurable delay)
   - [ ] Inline keyboard flows for lottery join, invoice submission, and payout voting
