@@ -44,7 +44,7 @@ public static class PaymentParser
             var currency = currencyRaw switch
             {
                 // TODO: switch/case ersetzen durch attribute in `PaymentCurrency`
-                "" => PaymentCurrency.Sat,
+                "" => PaymentCurrency.Eur,
                 "sat" or "sats" => PaymentCurrency.Sat,
                 "eur" or "€" => PaymentCurrency.Eur,
                 "usd" or "$" => PaymentCurrency.Usd,

@@ -53,7 +53,7 @@ public class PaymentMonitorService : BackgroundService
                         pending.NotifiedPaid = true;
                         pending.PaidAt = DateTimeOffset.UtcNow;
                         // [Workaround] The `status.Amount` field doen't seem to be valid :(
-                        pending.SettledSats = (long)pending.Amount;
+                        pending.SettledSats = (long)status.Details!.Amount;
 
                         // Update the payment message to show paid status
                         await MessageHelper.UpdatePaymentMessageAsync(pending, PaymentStatus.Paid, _botClient, _logger, cancellationToken);

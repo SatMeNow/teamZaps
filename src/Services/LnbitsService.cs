@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -73,6 +74,7 @@ public class LnbitsService
             var res = await RequestAsync<LnbitsPaymentResponse>(HttpMethod.Post, "/api/v1/payments", payRequest, cancellationToken).ConfigureAwait(false);
             {
                 res!.Amount = (res.Amount / 1000); // Convert msat to sat
+                res!.Fee = (res.Fee / 1000); // Convert msat to sat
             }
             return (res);
         }
@@ -88,7 +90,7 @@ public class LnbitsService
         {
             var res = await RequestAsync<LnbitsPaymentStatus>(HttpMethod.Get, $"/api/v1/payments/{paymentHash}", cancellationToken).ConfigureAwait(false);
             {
-                res!.Amount = (res.Amount / 1000); // Convert msat to sat
+                res!.Details!.Amount = (res.Details!.Amount / 1000); // Convert msat to sat
             }
             return (res);
         }
@@ -114,6 +116,7 @@ public class LnbitsService
         sendRsp.EnsureSuccessStatusCode();
 
         var readRsp = await sendRsp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        logger.LogDebug("Lnbits Response for {Method} '{RequestUri}': {Response}", method, requestUri, readRsp);
         return (JsonSerializer.Deserialize<T>(readRsp));
     }
     #endregion
@@ -174,9 +177,14 @@ public class LnbitsPaymentStatus
     [JsonPropertyName("paid")]
     public bool Paid { get; set; }
 
-    [JsonPropertyName("amount")]
-    public long Amount { get; set; }
+    [JsonPropertyName("details")]
+    public LnbitsPaymentDetails? Details { get; set; }
 
     [JsonPropertyName("preimage")]
     public string? Preimage { get; set; }
+}
+public class LnbitsPaymentDetails
+{
+    [JsonPropertyName("amount")]
+    public long Amount { get; set; }
 }

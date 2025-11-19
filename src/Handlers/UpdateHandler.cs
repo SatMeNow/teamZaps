@@ -130,8 +130,8 @@ public class UpdateHandler : IUpdateHandler
                         "*How it works:*\n" +
                         "1️⃣ Join the session using the button on the pinned message\n" +
                         "2️⃣ Send me payment amounts in *private chat*:\n" +
-                        "   • `1000` (sats)\n" +
-                        "   • `5eur` or `5€`\n" +
+                        "   • `3,99` (€ per default)\n" +
+                        "   • `5,50eur` or `5€`\n" +
                         "   • `2eur+1000sat`\n" +
                         "3️⃣ Pay the Lightning invoices I send you\n" +
                         "4️⃣ Join the lottery when payments close!\n\n" +
@@ -224,8 +224,8 @@ public class UpdateHandler : IUpdateHandler
                 $"🎯 *Session Started!*\n\n" +
                 $"Started by: {displayName}\n\n" +
                 $"Everyone can now make payments! Send amounts like:\n" +
-                $"• `1000` (sats)\n" +
-                $"• `5eur` or `5€`\n" + // TODO: no samples here
+                $"• `3,99` (€ per default)\n" +
+                $"• `5,50eur` or `5€`\n" + // TODO: no samples here
                 $"• `2eur+1000sat`\n\n" +
                 $"Use /closesession to close and start the lottery!",
                 parseMode: ParseMode.Markdown,
@@ -442,7 +442,7 @@ public class UpdateHandler : IUpdateHandler
         // Not a payment or invoice
         await botClient.SendMessage(message.Chat.Id,
             "Send me:\n" +
-            "• Payment amounts (like `1000`, `5eur`, `2eur+1000sat`) if you're in a session\n" +
+            "• Payment amounts (like `3,99`, `5,50eur`, `2eur+1000sat`) if you're in a session\n" +
             "• Lightning invoice (BOLT11) if you won the lottery\n" +
             "• Use /help for commands",
             parseMode: ParseMode.Markdown,
@@ -581,8 +581,8 @@ public class UpdateHandler : IUpdateHandler
             await botClient.SendMessage(userId,
                 $"🎉 Welcome to the *{chat.Title}* Team Zaps session!\n\n" +
                 $"💰 **Make payments** by sending amounts like:\n" +
-                $"• `1000` (sats)\n" +
-                $"• `5eur` or `5€`\n" +
+                $"• `3,99` (€ per default)\n" +
+                $"• `5,50eur` or `5€`\n" +
                 $"• `2eur+1000sat`\n" +
                 $"I'll create Lightning invoices for you to pay.\n\n" +
                 $"🎰 Feel free to **enter the lottery** if you're willing to pay the fiat bill if you win. In return, you'll receive all the sats collected from everyone!\n\n" +
