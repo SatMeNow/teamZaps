@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using teamZaps.Services;
 using teamZaps.Sessions;
 using teamZaps.Utils;
+using Telegram.Bot.Types.Payments;
 
 namespace teamZaps.Handlers;
 
@@ -413,9 +415,9 @@ public class UpdateHandler : IUpdateHandler
                 string.IsNullOrEmpty(session.WinnerInvoiceBolt11))
             {
                 // This looks like an invoice submission
-                if (text.StartsWith("ln", StringComparison.OrdinalIgnoreCase))
+                if (text.IsLightningInvoice(out var invoice))
                 {
-                    await ProcessWinnerInvoiceAsync(botClient, session, userId, text, cancellationToken);
+                    await ProcessWinnerInvoiceAsync(botClient, session, userId, invoice, cancellationToken);
                     return;
                 }
             }
@@ -895,5 +897,23 @@ internal static partial class Ext
             return (string.Join(' ', source.Skip(index)));
         else
             return (null);
+    }
+
+    public static bool IsLightningInvoice(this string source, out string parsedInvoice)
+    {
+        parsedInvoice = source
+            .ToLower()
+            .Replace("lightning:", "");
+        if (!parsedInvoice.StartsWith("ln"))
+            return (false);
+        if (parsedInvoice.Length < 50)
+            return (false);
+        if (!parsedInvoice
+            .Select(char.ToLowerInvariant)
+            .All(c => 'a' <= c && c <= 'z' ||
+                      '0' <= c && c <= '9'))
+            return (false);
+            
+        return (true);
     }
 }
