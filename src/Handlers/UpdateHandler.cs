@@ -111,12 +111,33 @@ public class UpdateHandler : IUpdateHandler
                         "I help groups split bills using Bitcoin Lightning!\n\n" +
                         "*How it works:*\n" +
                         "1️⃣ Someone starts a session in your group\n" +
-                        "2️⃣ Join the session using the button\n" +
-                        "3️⃣ Send me payment amounts privately\n" +
+                        "2️⃣ Join the session using the _Join_ button\n" +
+                        "3️⃣ Send me payments as direct message\n" +
                         "4️⃣ One random participant wins the pot!\n\n" +
-                        "Use /help for detailed instructions.", 
+                        "Use `/help` for detailed instructions.", 
                         parseMode: ParseMode.Markdown,
                         cancellationToken: cancellationToken);
+
+                    // Check if user has a pending session join
+                    foreach (var session in _sessionManager.ActiveSessions)
+                    {
+                        if (session.PendingJoins.TryRemove(userId, out var joinInfo))
+                        {
+                            // Delete the warning message that told user to start bot chat
+                            try
+                            {
+                                await botClient.DeleteMessage(joinInfo.ChatId, joinInfo.MessageId, cancellationToken);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to delete pending join message {MessageId} in chat {ChatId}", joinInfo.MessageId, joinInfo.ChatId);
+                            }
+                            
+                            await HandleJoinSessionAsync(botClient, joinInfo.ChatId, userId, message.From.GetDisplayName(), cancellationToken);
+                            break;
+                        }
+                    }
+
                     break;
 
                 case "/help":
@@ -531,7 +552,7 @@ public class UpdateHandler : IUpdateHandler
                     break;
 
                 case CallbackActions.JoinSession:
-                    await HandleJoinSessionAsync(botClient, chatId, userId, displayName, query.Message.MessageId, cancellationToken);
+                    await HandleJoinSessionAsync(botClient, chatId, userId, displayName, cancellationToken);
                     break;
 
                 case CallbackActions.CloseSession:
@@ -549,7 +570,7 @@ public class UpdateHandler : IUpdateHandler
         }
     }
 
-    private async Task HandleJoinSessionAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, int messageId, CancellationToken cancellationToken)
+    private async Task HandleJoinSessionAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, CancellationToken cancellationToken)
     {
         var session = _workflowService.GetSessionByChat(chatId);
         if (session is null || session.Phase > SessionPhase.AcceptingPayments)
@@ -566,9 +587,6 @@ public class UpdateHandler : IUpdateHandler
                 cancellationToken: cancellationToken);
             return;
         }
-
-        // Add user as participant
-        _workflowService.EnsureParticipant(session, userId, displayName);
 
         // Send private welcome message
         try
@@ -590,13 +608,21 @@ public class UpdateHandler : IUpdateHandler
                 parseMode: ParseMode.Markdown,
                 replyMarkup: lotteryButton,
                 cancellationToken: cancellationToken);
+                
+            // Add user as participant
+            _workflowService.EnsureParticipant(session, userId, displayName);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to send private welcome message to user {UserId}", userId);
-            await botClient.SendMessage(chatId,
+            var warningMessage = await botClient.SendMessage(chatId,
                 $"⚠️ {displayName}, please start a private chat with me first by clicking @{(await botClient.GetMe(cancellationToken)).Username}",
                 cancellationToken: cancellationToken);
+                
+            // Mark user as pending session join with message ID for later deletion
+            session.PendingJoins[userId] = (chatId, warningMessage.MessageId);
+
+            return;
         }
 
         // Update the pinned status message

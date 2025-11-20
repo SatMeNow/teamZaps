@@ -19,6 +19,7 @@ public class SessionState
     public ConcurrentDictionary<long, ParticipantState> Participants { get; } = new();
     public ConcurrentDictionary<string, PendingPayment> PendingPayments { get; } = new();
     public List<PaymentRecord> ConfirmedPayments { get; } = new();
+    public ConcurrentDictionary<long, (long ChatId, int MessageId)> PendingJoins { get; } = new();
 
     public DateTimeOffset? LotteryOpenedAt { get; set; }
     public DateTimeOffset? LotteryClosesAt { get; set; }
@@ -34,6 +35,13 @@ public class SessionState
 
     public DateTimeOffset? PayoutExecutedAt { get; set; }
     public bool PayoutCompleted { get; set; }
+
+
+    public void Close()
+    {
+        Phase = SessionPhase.Closed;
+        PendingJoins.Clear();
+    }
 }
 
 public class ParticipantState

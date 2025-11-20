@@ -51,7 +51,7 @@ public class SessionManager
 
             if (session is not null)
             {
-                session.Phase = SessionPhase.Closed;
+                session.Close();
                 
                 _lastSummaries[chatId] = new SessionSummary(
                     session.StartedAt,

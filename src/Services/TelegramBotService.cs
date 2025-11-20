@@ -19,10 +19,8 @@ public class TelegramBotService : BackgroundService
     {
         try
         {
-            _logger.LogInformation("Starting Team Zaps Telegram Bot...");
-
             User me = await _botClient.GetMe(stoppingToken);
-            _logger.LogInformation("Bot started successfully: @{BotUsername}", me.Username);
+            _logger.LogInformation("Bot initialized successfully: @{BotUsername}", me.Username);
 
             var receiverOptions = new ReceiverOptions { AllowedUpdates = Array.Empty<UpdateType>() };
             await _botClient.ReceiveAsync(_updateHandler, receiverOptions, stoppingToken);

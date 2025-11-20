@@ -41,6 +41,8 @@ public static class Program
                 hostingContext.HostingEnvironment.EnvironmentName = "Development";
                 #endif
 
+                Log.Information($"Starting {hostingContext.HostingEnvironment.ApplicationName} Telegram Bot in {hostingContext.HostingEnvironment.EnvironmentName.ToLower()} environment...");
+
                 config
                     .SetBasePath(Directory.GetCurrentDirectory())
                     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
