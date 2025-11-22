@@ -221,7 +221,7 @@ public class UpdateHandler : IUpdateHandler
 
         // Check if request was done for a group chat:
         var chat = await botClient.GetChat(chatId);
-        if (chat.Type != ChatType.Group)
+        if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
         {
             await botClient.SendMessage(chatId, 
                 "❌ Sessions can only be started in group chats.",
