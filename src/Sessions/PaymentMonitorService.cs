@@ -4,20 +4,15 @@ namespace teamZaps.Sessions;
 
 public class PaymentMonitorService : BackgroundService
 {
-    private readonly SessionManager _sessionManager;
-    private readonly LnbitsService _lnbitsService;
-    private readonly ITelegramBotClient _botClient;
-    private readonly ILogger<PaymentMonitorService> _logger;
-    private readonly SessionWorkflowService _workflowService;
-
     public PaymentMonitorService(SessionManager sessionManager, LnbitsService lnbitsService, ITelegramBotClient botClient, ILogger<PaymentMonitorService> logger, SessionWorkflowService workflowService)
     {
-        _sessionManager = sessionManager;
-        _lnbitsService = lnbitsService;
-        _botClient = botClient;
-        _logger = logger;
-        _workflowService = workflowService;
+        this.sessionManager = sessionManager;
+        this.lnbitsService = lnbitsService;
+        this.botClient = botClient;
+        this.logger = logger;
+        this.workflowService = workflowService;
     }
+
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -29,7 +24,7 @@ public class PaymentMonitorService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during payment monitoring loop");
+                logger.LogError(ex, "Error during payment monitoring loop");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
@@ -38,13 +33,13 @@ public class PaymentMonitorService : BackgroundService
 
     private async Task CheckPendingPaymentsAsync(CancellationToken cancellationToken)
     {
-        foreach (var session in _sessionManager.ActiveSessions)
+        foreach (var session in sessionManager.ActiveSessions)
         {
             foreach (var pending in session.PendingPayments.Values.ToList())
             {
                 try
                 {
-                    var status = await _lnbitsService.CheckPaymentStatusAsync(pending.PaymentHash, cancellationToken).ConfigureAwait(false);
+                    var status = await lnbitsService.CheckPaymentStatusAsync(pending.PaymentHash, cancellationToken).ConfigureAwait(false);
                     if (status is null)
                         continue;
 
@@ -56,7 +51,7 @@ public class PaymentMonitorService : BackgroundService
                         pending.SettledSats = (long)status.Details!.Amount;
 
                         // Update the payment message to show paid status
-                        await MessageHelper.UpdatePaymentMessageAsync(pending, PaymentStatus.Paid, _botClient, _logger, cancellationToken);
+                        await PaymentMessage.UpdateAsync(pending, PaymentStatus.Paid, botClient, logger, cancellationToken);
 
                         var paymentRecord = new PaymentRecord(
                             pending.UserId,
@@ -71,18 +66,25 @@ public class PaymentMonitorService : BackgroundService
                         session.PendingPayments.TryRemove(pending.PaymentHash, out _);
                         session.ConfirmedPayments.Add(paymentRecord);
 
-                        var participant = _sessionManager.GetOrAddParticipant(session, pending.UserId, pending.DisplayName);
+                        var participant = sessionManager.GetOrAddParticipant(session, pending.UserId, pending.DisplayName);
                         participant.Payments.Add(paymentRecord);
                         participant.TotalPaidSats += paymentRecord.AmountSats;
 
-                        await MessageHelper.UpdatePinnedStatusAsync(session, _botClient, _workflowService, _logger, cancellationToken);
+                        await StatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error checking payment status for {PaymentHash}", pending.PaymentHash);
+                    logger.LogError(ex, "Error checking payment status for {PaymentHash}", pending.PaymentHash);
                 }
             }
         }
     }
+
+
+    private readonly SessionManager sessionManager;
+    private readonly LnbitsService lnbitsService;
+    private readonly ITelegramBotClient botClient;
+    private readonly ILogger<PaymentMonitorService> logger;
+    private readonly SessionWorkflowService workflowService;
 }

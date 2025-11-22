@@ -5,7 +5,6 @@ public class LnbitsSettings
     public const string SectionName = "Lnbits";
 
     public string LndhubUrl { get; set; } = string.Empty;
-    public string WalletId { get; set; } = string.Empty;
     /// <summary>
     /// API-Key
     /// </summary>

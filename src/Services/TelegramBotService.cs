@@ -4,37 +4,38 @@ namespace teamZaps.Services;
 
 public class TelegramBotService : BackgroundService
 {
-    private readonly ILogger<TelegramBotService> _logger;
-    private readonly ITelegramBotClient _botClient;
-    private readonly UpdateHandler _updateHandler;
-
     public TelegramBotService(ILogger<TelegramBotService> logger, ITelegramBotClient botClient, UpdateHandler updateHandler)
     {
-        _logger = logger;
-        _botClient = botClient;
-        _updateHandler = updateHandler;
+        this.logger = logger;
+        this.botClient = botClient;
+        this.updateHandler = updateHandler;
     }
+
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
-            User me = await _botClient.GetMe(stoppingToken);
-            _logger.LogInformation("Bot initialized successfully: @{BotUsername}", me.Username);
+            User me = await botClient.GetMe(stoppingToken);
+            logger.LogInformation("Bot initialized successfully: @{BotUsername}", me.Username);
 
             var receiverOptions = new ReceiverOptions { AllowedUpdates = Array.Empty<UpdateType>() };
-            await _botClient.ReceiveAsync(_updateHandler, receiverOptions, stoppingToken);
+            await botClient.ReceiveAsync(updateHandler, receiverOptions, stoppingToken);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error starting bot");
+            logger.LogError(ex, "Error starting bot");
             throw;
         }
     }
-
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Stopping Team Zaps Telegram Bot...");
+        logger.LogInformation("Stopping Team Zaps Telegram Bot...");
         await base.StopAsync(cancellationToken);
     }
+
+
+    private readonly ILogger<TelegramBotService> logger;
+    private readonly ITelegramBotClient botClient;
+    private readonly UpdateHandler updateHandler;
 }

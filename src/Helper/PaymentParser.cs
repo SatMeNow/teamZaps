@@ -6,9 +6,8 @@ namespace teamZaps.Sessions;
 
 public static class PaymentParser
 {
-    private static readonly Regex TokenRegex = new(
-        pattern: @"(?<amount>[0-9]+(?:[\.,][0-9]+)?)\s*(?<currency>sat|sats|eur|€|usd|\$)?",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex TokenRegex = new(@"(?<amount>[0-9]+(?:[\.,][0-9]+)?)\s*(?<currency>sat|sats|eur|€|usd|\$)?", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
 
     public static bool TryParse(string input, out List<PaymentToken> tokens, out string? error)
     {

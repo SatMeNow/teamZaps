@@ -6,16 +6,16 @@ namespace teamZaps.Sessions;
 
 public class SessionManager
 {
-    private readonly ConcurrentDictionary<long, SessionState> _sessions = new();
-    private readonly ConcurrentDictionary<long, SessionSummary> _lastSummaries = new();
-    private readonly ILogger<SessionManager> _logger;
-    private readonly BotBehaviorOptions _options;
-
     public SessionManager(ILogger<SessionManager> logger, IOptions<BotBehaviorOptions> options)
     {
-        _logger = logger;
-        _options = options.Value;
+        this.logger = logger;
+        this.Options = options.Value;
     }
+
+
+    public BotBehaviorOptions Options { init; get; }
+
+
 
     public bool TryCreateSession(ChatFullInfo chat, long userId, string userDisplayName, out SessionState session)
     {
@@ -28,9 +28,9 @@ public class SessionManager
             Phase = SessionPhase.WaitingForLotteryParticipants
         };
 
-        if (_sessions.TryAdd(chat.Id, session))
+        if (sessions.TryAdd(chat.Id, session))
         {
-            _logger.LogInformation("Session created for chat {ChatId} by {UserId}", chat.Id, userId);
+            logger.LogInformation("Session created for chat {ChatId} by {UserId}", chat.Id, userId);
             return true;
         }
 
@@ -38,22 +38,22 @@ public class SessionManager
         return false;
     }
 
-    public SessionState? GetSessionByChat(long chatId) => _sessions.TryGetValue(chatId, out var session) ? session : null;
+    public SessionState? GetSessionByChat(long chatId) => sessions.TryGetValue(chatId, out var session) ? session : null;
     public SessionState? GetSessionByUser(long userId) => ActiveSessions
         .FirstOrDefault(s => s.Participants.ContainsKey(userId));
 
     public bool RemoveSession(long chatId)
     {
-        var removed = _sessions.TryRemove(chatId, out var session);
+        var removed = sessions.TryRemove(chatId, out var session);
         if (removed)
         {
-            _logger.LogInformation("Session removed for chat {ChatId}", chatId);
+            logger.LogInformation("Session removed for chat {ChatId}", chatId);
 
             if (session is not null)
             {
                 session.Close();
                 
-                _lastSummaries[chatId] = new SessionSummary(
+                lastSummaries[chatId] = new SessionSummary(
                     session.StartedAt,
                     DateTimeOffset.UtcNow,
                     GetTotalSats(session),
@@ -65,9 +65,6 @@ public class SessionManager
         }
         return removed;
     }
-
-    public BotBehaviorOptions Options => _options;
-
     public ParticipantState GetOrAddParticipant(SessionState session, long userId, string displayName)
     {
         return session.Participants.GetOrAdd(userId, uid => new ParticipantState
@@ -79,15 +76,20 @@ public class SessionManager
 
     public long GetTotalSats(SessionState session) => session.ConfirmedPayments.Sum(p => p.AmountSats);
 
-    public IReadOnlyCollection<SessionState> ActiveSessions => _sessions.Values.ToList().AsReadOnly();
+    public IReadOnlyCollection<SessionState> ActiveSessions => sessions.Values.ToList().AsReadOnly();
 
     public SessionSummary? GetLastSummary(long chatId)
     {
-        if (_lastSummaries.TryGetValue(chatId, out var summary))
+        if (lastSummaries.TryGetValue(chatId, out var summary))
             return summary;
 
         return null;
     }
+    
+
+    private readonly ConcurrentDictionary<long, SessionState> sessions = new();
+    private readonly ConcurrentDictionary<long, SessionSummary> lastSummaries = new();
+    private readonly ILogger<SessionManager> logger;
 }
 
 public record SessionSummary(
@@ -97,4 +99,5 @@ public record SessionSummary(
     int ParticipantCount,
     long? WinnerUserId,
     string? WinnerDisplayName,
-    bool PayoutCompleted);
+    bool PayoutCompleted
+);

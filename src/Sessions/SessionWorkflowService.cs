@@ -5,56 +5,32 @@ namespace teamZaps.Sessions;
 
 public class SessionWorkflowService
 {
-    private readonly SessionManager _sessionManager;
-    private readonly BotBehaviorOptions _options;
-
     public SessionWorkflowService(SessionManager sessionManager, IOptions<BotBehaviorOptions> options)
     {
-        _sessionManager = sessionManager;
-        _options = options.Value;
+        this.sessionManager = sessionManager;
+        this.Options = options.Value;
     }
 
-    public SessionState? GetSessionByChat(long chatId) => _sessionManager.GetSessionByChat(chatId);
-    public SessionState? GetSessionByUser(long userId) => _sessionManager.GetSessionByUser(userId);
+
+    public BotBehaviorOptions Options { init; get; }
+
+
+    public SessionState? GetSessionByChat(long chatId) => sessionManager.GetSessionByChat(chatId);
+    public SessionState? GetSessionByUser(long userId) => sessionManager.GetSessionByUser(userId);
 
     public bool TryStartSession(ChatFullInfo chat, long userId, string displayName, out SessionState session)
     {
-        return _sessionManager.TryCreateSession(chat, userId, displayName, out session);
+        return sessionManager.TryCreateSession(chat, userId, displayName, out session);
     }
 
-    public bool TryCloseSession(long chatId) => _sessionManager.RemoveSession(chatId);
+    public bool TryCloseSession(long chatId) => sessionManager.RemoveSession(chatId);
 
     public ParticipantState EnsureParticipant(SessionState session, long userId, string displayName)
     {
-        return _sessionManager.GetOrAddParticipant(session, userId, displayName);
+        return sessionManager.GetOrAddParticipant(session, userId, displayName);
     }
 
-    public ParticipantState AddPayment(SessionState session, long userId, string displayName, PaymentRecord payment)
-    {
-        var participant = _sessionManager.GetOrAddParticipant(session, userId, displayName);
-        participant.Payments.Add(payment);
-        participant.TotalPaidSats += payment.AmountSats;
-        session.ConfirmedPayments.Add(payment);
-        return participant;
-    }
-
-    public long TotalSats(SessionState session) => _sessionManager.GetTotalSats(session);
-
-    public InlineKeyboardMarkup BuildLotteryKeyboard(SessionState session, bool alreadyJoined)
-    {
-        var joinButton = InlineKeyboardButton.WithCallbackData(alreadyJoined ? "✅ Joined" : "🎟️ Join Lottery", CallbackActions.JoinLottery);
-        var infoButton = InlineKeyboardButton.WithCallbackData("ℹ️ Status", CallbackActions.ViewStatus);
-        return new InlineKeyboardMarkup(new[] { joinButton, infoButton });
-    }
-
-    public InlineKeyboardMarkup BuildWinnerInvoiceKeyboard(SessionState session)
-    {
-        var submitInvoice = InlineKeyboardButton.WithCallbackData("📤 Submit Invoice", CallbackActions.SubmitInvoice);
-        var viewStatus = InlineKeyboardButton.WithCallbackData("ℹ️ Status", CallbackActions.ViewStatus);
-        return new InlineKeyboardMarkup(new[] { submitInvoice, viewStatus });
-    }
-
-
+    public long TotalSats(SessionState session) => sessionManager.GetTotalSats(session);
 
     public InlineKeyboardMarkup? BuildSessionJoinKeyboard(SessionState session, long userId)
     {
@@ -73,16 +49,14 @@ public class SessionWorkflowService
         }
     }
 
-    public BotBehaviorOptions Options => _options;
 
-    public SessionSummary? GetLastSummary(long chatId) => _sessionManager.GetLastSummary(chatId);
+    private readonly SessionManager sessionManager;
 }
 
 public static class CallbackActions
 {
     public const string JoinLottery = "join_lottery";
     public const string ViewStatus = "view_status";
-    public const string SubmitInvoice = "submit_invoice";
     public const string JoinSession = "join_session";
     public const string CloseSession = "close_session";
     public const string CancelSession = "cancel_session";
