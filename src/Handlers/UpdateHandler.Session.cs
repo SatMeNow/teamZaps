@@ -122,8 +122,8 @@ public partial class UpdateHandler
             session.WinnerUserId = winnerUserId;
             session.Phase = SessionPhase.WaitingForInvoice;
 
-            var winner = session.Participants[winnerUserId];
-
+            await SummaryMessage.SendAsync(session, botClient, logger, cancellationToken);
+            
             await WinnerMessage.SendAsync(session, botClient, workflowService, cancellationToken);
 
             logger.LogInformation("Winner selected immediately for chat {ChatId}: user {UserId}", chatId, winnerUserId);

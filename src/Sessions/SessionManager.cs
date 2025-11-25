@@ -56,7 +56,8 @@ public class SessionManager
                 lastSummaries[chatId] = new SessionSummary(
                     session.StartedAt,
                     DateTimeOffset.UtcNow,
-                    GetTotalSats(session),
+                    session.SatsAmount,
+                    session.FiatAmount,
                     session.Participants.Count,
                     session.WinnerUserId,
                     session.WinnerUserId.HasValue ? session.Participants[session.WinnerUserId.Value].DisplayName : null,
@@ -73,8 +74,6 @@ public class SessionManager
             DisplayName = displayName
         });
     }
-
-    public long GetTotalSats(SessionState session) => session.ConfirmedPayments.Sum(p => p.AmountSats);
 
     public IReadOnlyCollection<SessionState> ActiveSessions => sessions.Values.ToList().AsReadOnly();
 
@@ -95,7 +94,8 @@ public class SessionManager
 public record SessionSummary(
     DateTimeOffset StartedAt,
     DateTimeOffset EndedAt,
-    long TotalCollectedSats,
+    long TotalSats,
+    double TotalFiat,
     int ParticipantCount,
     long? WinnerUserId,
     string? WinnerDisplayName,

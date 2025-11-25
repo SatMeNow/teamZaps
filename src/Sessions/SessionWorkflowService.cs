@@ -30,8 +30,6 @@ public class SessionWorkflowService
         return sessionManager.GetOrAddParticipant(session, userId, displayName);
     }
 
-    public long TotalSats(SessionState session) => sessionManager.GetTotalSats(session);
-
     public InlineKeyboardMarkup? BuildSessionJoinKeyboard(SessionState session, long userId)
     {
         if (session.Phase == SessionPhase.Closed)

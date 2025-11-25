@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using teamZaps.Configuration;
 using teamZaps.Services;
 
 namespace teamZaps.Sessions;
@@ -35,40 +37,41 @@ public class PaymentMonitorService : BackgroundService
     {
         foreach (var session in sessionManager.ActiveSessions)
         {
-            foreach (var pending in session.PendingPayments.Values.ToList())
+            foreach (var pending in session.PendingPayments.Values.ToArray())
             {
                 try
                 {
                     var status = await lnbitsService.CheckPaymentStatusAsync(pending.PaymentHash, cancellationToken).ConfigureAwait(false);
                     if (status is null)
                         continue;
-
                     if (status.Paid && !pending.NotifiedPaid)
                     {
+                        Debug.Assert(pending.FiatAmount == status.Details!.Extra!.FiatAmount);
+                        Debug.Assert(pending.Currency == BotBehaviorOptions.AcceptedFiatCurrency);
+
                         pending.NotifiedPaid = true;
                         pending.PaidAt = DateTimeOffset.UtcNow;
-                        // [Workaround] The `status.Amount` field doen't seem to be valid :(
-                        pending.SettledSats = (long)status.Details!.Amount;
 
                         // Update the payment message to show paid status
                         await PaymentMessage.UpdateAsync(pending, PaymentStatus.Paid, botClient, logger, cancellationToken);
 
-                        var paymentRecord = new PaymentRecord(
-                            pending.UserId,
-                            pending.DisplayName,
-                            pending.SettledSats ?? 0,
-                            pending.Currency.ToString().ToUpperInvariant(),
-                            pending.PaymentHash,
-                            pending.PaymentRequest,
-                            pending.InputExpression,
-                            pending.PaidAt ?? DateTimeOffset.UtcNow);
+                        var payment = new PaymentRecord()
+                        {
+                            UserId = pending.UserId,
+                            DisplayName = pending.DisplayName,
+                            PaymentHash = pending.PaymentHash,
+                            PaymentRequest = pending.PaymentRequest,
+                            Timestamp = pending.PaidAt ?? DateTimeOffset.UtcNow,
+                            Tokens = pending.Tokens,
+                            SatsAmount = status.Details!.Amount,
+                            FiatAmount = pending.FiatAmount,
+                            FiatRate = status.Details!.Extra!.FiatRate
+                        };
 
                         session.PendingPayments.TryRemove(pending.PaymentHash, out _);
-                        session.ConfirmedPayments.Add(paymentRecord);
 
                         var participant = sessionManager.GetOrAddParticipant(session, pending.UserId, pending.DisplayName);
-                        participant.Payments.Add(paymentRecord);
-                        participant.TotalPaidSats += paymentRecord.AmountSats;
+                        participant.Payments.Add(payment);
 
                         await StatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
                     }

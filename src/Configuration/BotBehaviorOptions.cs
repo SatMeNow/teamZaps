@@ -1,7 +1,14 @@
+using teamZaps.Sessions;
+
 namespace teamZaps.Configuration;
 
 public class BotBehaviorOptions
 {
+    /// <summary>
+    /// Accepted fiat currency used for payments.
+    /// </summary>
+    public const PaymentCurrency AcceptedFiatCurrency = PaymentCurrency.Euro;
+    
     /// <summary>
     /// If false, only chat administrators can start a session. Defaults to false.
     /// </summary>
@@ -16,9 +23,4 @@ public class BotBehaviorOptions
     /// If false, only chat administrators can cancel a session.
     /// </summary>
     public bool AllowNonAdminSessionCancel { get; set; } = false;
-
-    /// <summary>
-    /// Default fiat currency code used when parsing payments (e.g. EUR).
-    /// </summary>
-    public string DefaultFiatCurrency { get; set; } = "EUR";
 }

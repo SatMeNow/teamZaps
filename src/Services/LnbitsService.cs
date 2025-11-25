@@ -37,10 +37,10 @@ public class LnbitsService
             return (null);
         }
     }
-    public Task<LnbitsInvoice?> CreateInvoiceAsync(double amount, string unit, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
+    public Task<LnbitsInvoice?> CreateInvoiceAsync(double amount, string unitName, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
     {
         amount = amount,
-        unit = unit,
+        unit = unitName,
         memo = memo ?? "",
         @out = false
     }, cancellationToken);
@@ -187,4 +187,16 @@ public class LnbitsPaymentDetails
 {
     [JsonPropertyName("amount")]
     public long Amount { get; set; }
+    
+    [JsonPropertyName("extra")]
+    public LnbitsPaymentExtra? Extra { get; set; }
+}
+public class LnbitsPaymentExtra
+{
+    [JsonPropertyName("fiat_amount")]
+    public double FiatAmount { get; set; }
+    [JsonPropertyName("fiat_currency")]
+    public string? FiatCurrency { get; set; }
+    [JsonPropertyName("fiat_rate")]
+    public double FiatRate { get; set; }
 }

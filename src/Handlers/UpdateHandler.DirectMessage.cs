@@ -1,4 +1,5 @@
 using System.Text;
+using teamZaps.Configuration;
 using teamZaps.Services;
 using teamZaps.Sessions;
 using teamZaps.Utils;
@@ -82,52 +83,55 @@ public partial class UpdateHandler
     }
     private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, long userId, string displayName, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
     {
-        // Process each token and create invoices
-        foreach (var tokenGrp in tokens.GroupBy(t => t.Currency))
+        try
         {
-            var grpAmount = (double)tokenGrp.Sum(tGrp => tGrp.Amount);
-            var grpCurrency = tokenGrp.Key;
-            try
+            // Ensure invoice to be payed in Euro only
+            if (tokens.Any(t => t.Currency != BotBehaviorOptions.AcceptedFiatCurrency))
+                throw new NotSupportedException($"Only {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()} payments are supported.");
+
+            // Process each token and create invoices
+            foreach (var tokenGrp in tokens.GroupBy(t => t.Currency))
             {
-                var currencyName = grpCurrency.GetDescription();
+                var grpAmount = (double)tokenGrp.Sum(tGrp => tGrp.Amount);
+                var grpCurrency = tokenGrp.Key;
+                var unit = grpCurrency.ToUnitName();
                 var memo = $"{session.ChatTitle}/{displayName} zapped";
-                // TODO: pass the enum here, not a currency string! 
-                var invoice = await lnbitsService.CreateInvoiceAsync(grpAmount, currencyName, memo, cancellationToken).ConfigureAwait(false);
 
-                if (invoice is null)
+                try
                 {
-                    await botClient.SendMessage(userId,
-                        $"❌ Failed to create invoice for {grpAmount} {currencyName}",
-                        cancellationToken: cancellationToken);
-                    continue;
+                    // TODO: pass the enum here, not a currency string! 
+                    var invoice = await lnbitsService.CreateInvoiceAsync(grpAmount, unit, memo, cancellationToken).ConfigureAwait(false);
+                    // Store as pending payment
+                    var pending = new PendingPayment
+                    {
+                        PaymentHash = invoice!.PaymentHash,
+                        PaymentRequest = invoice.PaymentRequest,
+                        UserId = userId,
+                        DisplayName = displayName,
+                        Tokens = tokenGrp.ToArray(),
+                        FiatAmount = grpAmount,
+                        Currency = grpCurrency,
+                        CreatedAt = DateTimeOffset.UtcNow
+                    };
+
+                    session.PendingPayments.TryAdd(invoice.PaymentHash, pending);
+
+                    var message = await PaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
+                    pending.MessageId = message.MessageId;
+
+                    logger.LogInformation("Created invoice for user {UserId} in session {ChatId}: {Amount} {Currency}",
+                        userId, session.ChatId, grpAmount, grpCurrency);
                 }
-
-                // Store as pending payment
-                var pending = new PendingPayment
+                catch (Exception ex)
                 {
-                    PaymentHash = invoice.PaymentHash,
-                    PaymentRequest = invoice.PaymentRequest,
-                    UserId = userId,
-                    DisplayName = displayName,
-                    Amount = (decimal)grpAmount,
-                    Currency = grpCurrency,
-                    InputExpression = inputExpression,
-                    CreatedAt = DateTimeOffset.UtcNow
-                };
-
-                session.PendingPayments.TryAdd(invoice.PaymentHash, pending);
-
-                var message = await PaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
-                pending.MessageId = message.MessageId;
-
-                logger.LogInformation("Created invoice for user {UserId} in session {ChatId}: {Amount} {Currency}",
-                    userId, session.ChatId, grpAmount, grpCurrency);
+                    throw new Exception($"Failed to create invoice for {grpAmount} {unit}.", ex);
+                }
             }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error creating invoice for private payment");
-                await botClient.SendMessage(userId, $"❌ Error creating invoice for {grpAmount} {grpCurrency}. Please try again.", cancellationToken: cancellationToken);
-            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error creating invoice for private payment");
+            await botClient.SendMessage(userId, $"❌ {ex.Message}", cancellationToken: cancellationToken);
         }
     }
     private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, long userId, string bolt11, CancellationToken cancellationToken)
@@ -138,11 +142,15 @@ public partial class UpdateHandler
         session.InvoiceSubmittedAt = DateTimeOffset.UtcNow;
 
         await botClient.SendMessage(userId,
-            "✅ Invoice received! Processing payout...",
+            "✅ Invoice received!\n⏳ Processing payout...",
             cancellationToken: cancellationToken);
 
         // Execute payout
         await ExecutePayoutAsync(botClient, session, cancellationToken);
+        
+        await botClient.SendMessage(userId,
+            "✅ Payout completed.",
+            cancellationToken: cancellationToken);
     }
     private async Task ExecutePayoutAsync(ITelegramBotClient botClient, SessionState session, CancellationToken cancellationToken)
     {

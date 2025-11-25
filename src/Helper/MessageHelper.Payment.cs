@@ -52,7 +52,7 @@ internal static class PaymentMessage
     private static string Build(PendingPayment payment, PaymentStatus status)
     {
         return $"⚡ *Lightning invoice*\n\n" +
-               $"Amount: `{payment.Amount} {payment.Currency}`\n" +
+               $"Amount: *{payment.FiatAmount.Format()}*\n" +
                $"Status: *{status}*\n\n" +
                $"`{payment.PaymentRequest}`\n\n" +
                $"{status.GetIcon()} {status.GetDescription()}";

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using teamZaps.Services;
@@ -55,19 +56,22 @@ internal static class WinnerMessage
         if (!session.WinnerUserId.HasValue || !session.Participants.TryGetValue(session.WinnerUserId.Value, out var winner))
             throw new InvalidOperationException("Winner information not available");
 
-        var totalSats = workflowService.TotalSats(session);
+        var totalSats = session.SatsAmount;
         switch (status)
         {
             case PaymentStatus.Pending:
                 return ($"🎉🏆 *WINNER SELECTED!* 🏆🎉\n\n" +
                     $"Congratulations {winner.DisplayName}!\n\n" +
-                    $"You won to pay fiat for *{totalSats} sats*!\n\n" +
-                    $"⚡ Please create a *lightning invoice* for *{totalSats} sats* and send it to me in a private message.");
+                    $"You won to pay fiat for {session.FormatAmount()}!\n\n" +
+                    $"⚡ Please create a *lightning invoice* for *{totalSats.Format()}* and send it to me in a private message.");
             case PaymentStatus.Paid:
+                Debug.Assert(paymentResult is not null);    
+                var payed = (paymentResult!.Amount * -1);
+                Debug.Assert(payed == totalSats);
                 return ($"🎉🏆 *PAYOUT COMPLETED!* 🏆🎉\n\n" +
                     $"Congratulations {winner.DisplayName}!\n\n" +
-                    $"Amount: *{paymentResult?.Amount ?? totalSats} sats*\n" +
-                    (paymentResult != null ? $"Fee: *{paymentResult.Fee} sats*\n" : "") +
+                    $"Amount: *{payed.Format()}*\n" +
+                    ((paymentResult.Fee > 0) ? $"Fee: *{paymentResult.Fee.Format()}*\n" : "") +
                     $"\nThank you for using Team Zaps! 🎉");
 
             default:

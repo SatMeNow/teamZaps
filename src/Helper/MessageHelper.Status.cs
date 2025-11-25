@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using teamZaps.Configuration;
 using teamZaps.Services;
 using teamZaps.Utils;
 
@@ -8,7 +9,7 @@ namespace teamZaps.Sessions;
 
 
 /// <summary>
-/// Pinned status message.
+/// Pinned status message in group-chat.
 /// </summary>
 internal static class StatusMessage
 {
@@ -114,10 +115,10 @@ internal static class StatusMessage
         if (session.LotteryParticipants.Count > 0)
             sb.AppendLine($"🎟️ Lottery entries: *{session.LotteryParticipants.Count}*");
 
-        if (session.ConfirmedPayments.Count > 0)
+        if (session.HasPayments)
         {
-            sb.AppendLine($"💰 Total collected: *{workflowService.TotalSats(session)} sats*");
-            sb.AppendLine($"Payments: *{session.ConfirmedPayments.Count}*");
+            sb.AppendLine($"💰 Total: {session.FormatAmount()}");
+            sb.AppendLine($"Payments: *{session.Payments.Count()}*");
         }
 
         if (!session.Participants.IsEmpty)
@@ -126,8 +127,8 @@ internal static class StatusMessage
             foreach (var participant in session.Participants)
             {
                 var p = $"• {participant.Value.DisplayName}";
-                if (participant.Value.TotalPaidSats > 0)
-                    p += $": *{participant.Value.TotalPaidSats} sats*";
+                if (participant.Value.HasPayments)
+                    p += $": {participant.Value.FormatAmount()}";
                 sb.AppendLine(p);
             }
         }

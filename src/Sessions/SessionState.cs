@@ -1,8 +1,9 @@
 using System.Collections.Concurrent;
+using teamZaps.Utils;
 
 namespace teamZaps.Sessions;
 
-public class SessionState
+public class SessionState : IFormattableAmount
 {
     public required long ChatId { get; init; }
     public required string ChatTitle { get; init; }
@@ -11,15 +12,17 @@ public class SessionState
 
 
     public SessionPhase Phase { get; set; } = SessionPhase.AcceptingPayments;
-    public bool HasPayments => (ConfirmedPayments.Count > 0);
 
     public int? StatusMessageId { get; set; }
     public int? StartMessageId { get; set; }
 
+    public ConcurrentDictionary<long, (long ChatId, int MessageId)> PendingJoins { get; } = new();
     public ConcurrentDictionary<long, ParticipantState> Participants { get; } = new();
     public ConcurrentDictionary<string, PendingPayment> PendingPayments { get; } = new();
-    public List<PaymentRecord> ConfirmedPayments { get; } = new();
-    public ConcurrentDictionary<long, (long ChatId, int MessageId)> PendingJoins { get; } = new();
+    public IEnumerable<PaymentRecord> Payments => Participants.Values.SelectMany(p => p.Payments);
+    public bool HasPayments => !Payments.IsEmpty();
+    public long SatsAmount => Payments.Sum(p => p.SatsAmount);
+    public double FiatAmount => Payments.Sum(p => p.FiatAmount);
 
     public DateTimeOffset? LotteryOpenedAt { get; set; }
     public DateTimeOffset? LotteryClosesAt { get; set; }
@@ -44,42 +47,52 @@ public class SessionState
     }
 }
 
-public class ParticipantState
+public class ParticipantState : IFormattableAmount
 {
     public required long UserId { get; init; }
     public required string DisplayName { get; init; }
+
     public List<PaymentRecord> Payments { get; } = new();
-    public HashSet<string> PendingPaymentHashes { get; } = new();
-    public long TotalPaidSats { get; set; }
+    public bool HasPayments => (Payments.Count > 0);
+    public long SatsAmount => (HasPayments ? Payments.Sum(p => p.SatsAmount) : 0);
+    public double FiatAmount => (HasPayments ? Payments.Sum(p => p.FiatAmount) : 0.0F);
+
     public bool JoinedLottery { get; set; }
     public bool SubmittedInvoice { get; set; }
 }
 
-public record PaymentRecord(
-    long UserId,
-    string DisplayName,
-    long AmountSats,
-    string Currency,
-    string PaymentHash,
-    string PaymentRequest,
-    string InputExpression,
-    DateTimeOffset Timestamp
-);
+public record PaymentRecord() : IFormattableAmount
+{
+    public required long UserId;
+    public required string DisplayName;
+    public required string PaymentHash;
+    public required string PaymentRequest;
+    public required DateTimeOffset Timestamp;
+    
+    public required PaymentToken[] Tokens;
+    long IFormattableAmount.SatsAmount => this.SatsAmount;
+    public required long SatsAmount;
+    double IFormattableAmount.FiatAmount => this.FiatAmount;
+    public required double FiatAmount;
+    public required double FiatRate;
+}
 
-public class PendingPayment
+public class PendingPayment : IFormattableAmount
 {
     public required string PaymentHash { get; init; }
     public required string PaymentRequest { get; init; }
     public required long UserId { get; init; }
     public required string DisplayName { get; init; }
-    public required decimal Amount { get; init; }
-    public required PaymentCurrency Currency { get; init; }
-    public required string InputExpression { get; init; }
     public required DateTimeOffset CreatedAt { get; init; }
+
     public bool NotifiedPaid { get; set; }
-    public long? SettledSats { get; set; }
     public DateTimeOffset? PaidAt { get; set; }
     public int? MessageId { get; set; }
+    
+    public required PaymentToken[] Tokens { get; init; }
+    public required PaymentCurrency Currency { get; init; }
+    long IFormattableAmount.SatsAmount => 0;
+    public required double FiatAmount { get; init; }
 }
 
 public enum SessionPhase
