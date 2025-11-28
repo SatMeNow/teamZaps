@@ -11,10 +11,9 @@ internal static class WinnerMessage
 {
     public static async Task<Message> SendAsync(SessionState session, ITelegramBotClient botClient, SessionWorkflowService workflowService, CancellationToken cancellationToken)
     {
-        var messageText = Build(session, workflowService, PaymentStatus.Pending);
         var message = await botClient.SendMessage(
             chatId: session.ChatId,
-            text: messageText,
+            text: Build(session, workflowService, PaymentStatus.Pending),
             parseMode: ParseMode.Markdown,
             cancellationToken: cancellationToken);
 
@@ -23,16 +22,15 @@ internal static class WinnerMessage
     }
     public static async Task UpdateAsync<TLogger>(SessionState session, PaymentStatus status, LnbitsPaymentResponse? paymentResult, ITelegramBotClient botClient, SessionWorkflowService workflowService, ILogger<TLogger> logger, CancellationToken cancellationToken)
     {
-        if (!session.WinnerMessageId.HasValue)
+        if (session.WinnerMessageId is null)
             return;
 
         try
         {
-            var messageText = Build(session, workflowService, status, paymentResult);
             await botClient.EditMessageText(
                 chatId: session.ChatId,
                 messageId: session.WinnerMessageId.Value,
-                text: messageText,
+                text: Build(session, workflowService, status, paymentResult),
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
         }
@@ -53,7 +51,7 @@ internal static class WinnerMessage
     }
     private static string Build(SessionState session, SessionWorkflowService workflowService, PaymentStatus status, LnbitsPaymentResponse? paymentResult = null)
     {
-        if (!session.WinnerUserId.HasValue || !session.Participants.TryGetValue(session.WinnerUserId.Value, out var winner))
+        if (session.WinnerUserId is null || !session.Participants.TryGetValue(session.WinnerUserId.Value, out var winner))
             throw new InvalidOperationException("Winner information not available");
 
         var totalSats = session.SatsAmount;

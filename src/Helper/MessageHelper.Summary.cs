@@ -10,19 +10,18 @@ namespace teamZaps.Sessions;
 
 
 /// <summary>
-/// Summary message showing all payment tokens to the winner.
+/// Summary message showing all payment tokens within a session to the winner.
 /// </summary>
-internal static class SummaryMessage
+internal static class SessionSummaryMessage
 {
     public static async Task SendAsync(SessionState session, ITelegramBotClient botClient, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
     {
         try
         {
-            var summaryText = BuildSummary(session);
             await botClient.SendMessage(
                 session.WinnerUserId!,
-                summaryText,
-                ParseMode.Markdown,
+                text: BuildSummary(session),
+                parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
                 
             logger.LogDebug("Summary message sent to winner {WinnerUserId} for session {ChatId}", session.WinnerUserId!, session.ChatId);
@@ -45,11 +44,7 @@ internal static class SummaryMessage
         foreach (var participant in session.Participants.Values)
         {
             summary.AppendLine($"\n*{participant.DisplayName}:*");
-            foreach (var token in participant.Payments.SelectMany(p => p.Tokens))
-            {
-                var memo = string.IsNullOrWhiteSpace(token.Note) ? "" : $" - {token.Note}";
-                summary.AppendLine($"  • {token.FormatAmount()}{memo}");
-            }
+            summary.AppendPayments(participant.Payments);
         }
         summary.AppendLine();
         summary.AppendLine($"*Total:* {session.FormatAmount()}");

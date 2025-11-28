@@ -10,10 +10,9 @@ internal static class PaymentMessage
 {
     public static async Task<Message> SendAsync(PendingPayment payment, ITelegramBotClient botClient, CancellationToken cancellationToken)
     {
-        var messageText = Build(payment, PaymentStatus.Pending);
         var message = await botClient.SendMessage(
             chatId: payment.UserId,
-            text: messageText,
+            text: Build(payment, PaymentStatus.Pending),
             parseMode: ParseMode.Markdown,
             cancellationToken: cancellationToken);
 
@@ -21,16 +20,15 @@ internal static class PaymentMessage
     }
     public static async Task UpdateAsync<TLogger>( PendingPayment payment, PaymentStatus status, ITelegramBotClient botClient, ILogger<TLogger> logger, CancellationToken cancellationToken)
     {
-        if (!payment.MessageId.HasValue)
+        if (payment.MessageId is null)
             return;
 
         try
         {
-            var messageText = Build(payment, status);
             await botClient.EditMessageText(
                 chatId: payment.UserId,
                 messageId: payment.MessageId.Value,
-                text: messageText,
+                text: Build(payment, status),
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
         }
@@ -51,10 +49,23 @@ internal static class PaymentMessage
     }
     private static string Build(PendingPayment payment, PaymentStatus status)
     {
-        return $"⚡ *Lightning invoice*\n\n" +
-               $"Amount: *{payment.FiatAmount.Format()}*\n" +
-               $"Status: *{status}*\n\n" +
-               $"`{payment.PaymentRequest}`\n\n" +
-               $"{status.GetIcon()} {status.GetDescription()}";
+        var paymentReq = payment.PaymentRequest;
+        if (status == PaymentStatus.Paid)
+            paymentReq = paymentReq.ObfuscatePaymentRequest();
+            
+        var notes = payment.Tokens
+            .Select(t => t.Note)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .ToArray();
+            
+        var message = new StringBuilder();
+        message.AppendLine("⚡ *Lightning invoice*\n");
+        message.AppendLineIf("Notes: *{0}*", !notes.IsEmpty(), string.Join(", ", notes));
+        message.AppendLine($"Amount: *{payment.FiatAmount.Format()}*");
+        message.AppendLine($"Status: *{status}*\n");
+        message.AppendLine($"`{paymentReq}`\n");
+        message.AppendLine($"{status.GetIcon()} {status.GetDescription()}");
+        
+        return message.ToString();
     }
 }

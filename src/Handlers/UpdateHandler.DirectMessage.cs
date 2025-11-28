@@ -170,7 +170,13 @@ public partial class UpdateHandler
                 await WinnerMessage.UpdateAsync(session, PaymentStatus.Paid, paymentResult, botClient, workflowService, logger, cancellationToken);
 
                 // Update the pinned status message
-                await StatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+                await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+                
+                // Update user status messages for all participants
+                foreach (var participantId in session.Participants.Keys)
+                {
+                    await UserStatusMessage.UpdateAsync(session, participantId, botClient, workflowService, logger, cancellationToken);
+                }
                 
                 // Clean up session
                 workflowService.TryCloseSession(session.ChatId);

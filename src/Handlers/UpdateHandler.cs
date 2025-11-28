@@ -271,22 +271,4 @@ internal static partial class Ext
         else
             throw new InvalidOperationException("Failed to parse command from message!");
     }
-
-    public static bool IsLightningInvoice(this string source, out string parsedInvoice)
-    {
-        parsedInvoice = source
-            .ToLower()
-            .Replace("lightning:", "");
-        if (!parsedInvoice.StartsWith("ln"))
-            return (false);
-        if (parsedInvoice.Length < 50)
-            return (false);
-        if (!parsedInvoice
-            .Select(char.ToLowerInvariant)
-            .All(c => 'a' <= c && c <= 'z' ||
-                      '0' <= c && c <= '9'))
-            return (false);
-            
-        return (true);
-    }
 }

@@ -30,23 +30,6 @@ public class SessionWorkflowService
         return sessionManager.GetOrAddParticipant(session, userId, displayName);
     }
 
-    public InlineKeyboardMarkup? BuildSessionJoinKeyboard(SessionState session, long userId)
-    {
-        if (session.Phase == SessionPhase.Closed)
-            return null;
-        else
-        {
-            bool alreadyJoined = session.Participants.ContainsKey(userId);
-            var joinButton = InlineKeyboardButton.WithCallbackData(alreadyJoined ? "✅ Joined" : "🎯 Join", CallbackActions.JoinSession);
-            InlineKeyboardButton closeButton;
-            if (session.HasPayments)
-                closeButton = InlineKeyboardButton.WithCallbackData("🏆 Close", CallbackActions.CloseSession);
-            else
-                closeButton = InlineKeyboardButton.WithCallbackData("❌ Cancel", CallbackActions.CancelSession);
-            return new InlineKeyboardMarkup(new[] { joinButton, closeButton });
-        }
-    }
-
 
     private readonly SessionManager sessionManager;
 }

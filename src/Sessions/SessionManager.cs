@@ -23,7 +23,7 @@ public class SessionManager
         {
             ChatId = chat.Id,
             ChatTitle = (chat.Title ?? ""),
-            StartedByUserId = userId,
+            StartedByUser = userDisplayName,
             StartedAt = DateTimeOffset.UtcNow,
             Phase = SessionPhase.WaitingForLotteryParticipants
         };
@@ -60,7 +60,7 @@ public class SessionManager
                     session.FiatAmount,
                     session.Participants.Count,
                     session.WinnerUserId,
-                    session.WinnerUserId.HasValue ? session.Participants[session.WinnerUserId.Value].DisplayName : null,
+                    session.WinnerUserId is null ? null : session.Participants[session.WinnerUserId.Value].DisplayName,
                     session.PayoutCompleted);
             }
         }

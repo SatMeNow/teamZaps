@@ -152,4 +152,44 @@ public static partial class Extensions
         else
             return ($"{source:F2}{currency.ToSymbol()}");
     }
+
+    public static bool IsLightningInvoice(this string source, out string parsedInvoice)
+    {
+        parsedInvoice = source
+            .ToLower()
+            .Replace("lightning:", "");
+        if (!parsedInvoice.StartsWith("ln"))
+            return (false);
+        if (parsedInvoice.Length < 50)
+            return (false);
+        if (!parsedInvoice
+            .Select(char.ToLowerInvariant)
+            .All(c => 'a' <= c && c <= 'z' ||
+                      '0' <= c && c <= '9'))
+            return (false);
+            
+        return (true);
+    }
+    public static bool IsPaymentRequest(this string source)
+    {
+        source = source.ToLower();
+        if (!source.StartsWith("lnbc"))
+            return (false);
+        if (source.Length < 50)
+            return (false);
+        if (!source
+            .Select(char.ToLowerInvariant)
+            .All(c => 'a' <= c && c <= 'z' ||
+                      '0' <= c && c <= '9'))
+            return (false);
+            
+        return (true);
+    }
+    public static string ObfuscatePaymentRequest(this string source)
+    {
+        if (source.IsPaymentRequest())
+            return ($"{String.Concat(source.Take(18))}...{String.Concat(source.TakeLast(12))}");
+        else
+            return (source);
+    }
 }

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace teamZaps.Utils
@@ -180,6 +181,18 @@ namespace teamZaps.Utils
                 return (key);
             else
                 throw new NotImplementedException($"Failed to obtain key due to conditional missmatch!");
+        }
+    }
+    internal static partial class ExtStringBuilder
+    {
+        public static StringBuilder AppendLineIf(this StringBuilder source, string format, bool condition, string trueValue, string? falseValue = null)
+        {
+            if (condition)
+                source.AppendLine(string.Format(format, trueValue));
+            else if (falseValue is not null)
+                source.AppendLine(string.Format(format, falseValue));
+            
+            return (source);
         }
     }
     internal static partial class ExtRegEx

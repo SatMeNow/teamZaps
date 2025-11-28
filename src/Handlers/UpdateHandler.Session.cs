@@ -37,28 +37,8 @@ public partial class UpdateHandler
 
         if (workflowService.TryStartSession(chat, userId, displayName, out var session))
         {
-            var startMsg = await botClient.SendMessage(chatId,
-                $"🎯 *Session Started!*\n\n" +
-                $"Started by: {displayName}\n\n" +
-                $"Everyone can now make payments! Send amounts like:\n" +
-                $"• `3,99` (€ per default)\n" +
-                $"• `5,50eur` or `5€`\n" + // TODO: no samples here
-                $"• `2eur+1000sat`\n\n" +
-                $"Use /closesession to close and start the lottery!",
-                parseMode: ParseMode.Markdown,
-                cancellationToken: cancellationToken);
-            
-            session.StartMessageId = startMsg.MessageId;
-            
-            try
-            {
-                await StatusMessage.SendAsync(session, botClient, workflowService, cancellationToken);
-                logger.LogInformation("Session started in chat {ChatId} by user {UserId}", chatId, userId);
-            }
-            catch (Exception)
-            {
-                await botClient.DeleteMessage(chatId, startMsg.MessageId, cancellationToken);
-            }
+            await SessionStatusMessage.SendAsync(session, botClient, workflowService, cancellationToken);
+            logger.LogInformation("Session started in chat {ChatId} by user {UserId}", chatId, userId);
         }
         else
         {
@@ -122,14 +102,20 @@ public partial class UpdateHandler
             session.WinnerUserId = winnerUserId;
             session.Phase = SessionPhase.WaitingForInvoice;
 
-            await SummaryMessage.SendAsync(session, botClient, logger, cancellationToken);
+            await SessionSummaryMessage.SendAsync(session, botClient, logger, cancellationToken);
             
             await WinnerMessage.SendAsync(session, botClient, workflowService, cancellationToken);
 
             logger.LogInformation("Winner selected immediately for chat {ChatId}: user {UserId}", chatId, winnerUserId);
         }
         
-        await StatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+        
+        // Update user status messages for all participants
+        foreach (var participantId in session.Participants.Keys)
+        {
+            await UserStatusMessage.UpdateAsync(session, participantId, botClient, workflowService, logger, cancellationToken);
+        }
     }
     private async Task HandleCancelSessionAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
     {
@@ -153,7 +139,13 @@ public partial class UpdateHandler
 
         if (workflowService.TryCloseSession(chatId))
         {
-            await StatusMessage.UpdateAsync(session!, botClient, workflowService, logger, cancellationToken);
+            await SessionStatusMessage.UpdateAsync(session!, botClient, workflowService, logger, cancellationToken);
+            
+            // Update user status messages for all participants
+            foreach (var participantId in session!.Participants.Keys)
+            {
+                await UserStatusMessage.UpdateAsync(session, participantId, botClient, workflowService, logger, cancellationToken);
+            }
         
             await botClient.SendMessage(chatId,
                 "❌ Session has been cancelled and removed.",
@@ -185,33 +177,13 @@ public partial class UpdateHandler
             return;
         }
 
-        // Send private welcome message
+        // Send private status message
         try
         {
-            var chat = await botClient.GetChat(session.ChatId, cancellationToken);
-
-            var lotteryButton = new Telegram.Bot.Types.ReplyMarkups.InlineKeyboardMarkup(
-                Telegram.Bot.Types.ReplyMarkups.InlineKeyboardButton.WithCallbackData("🎰 Enter Lottery", CallbackActions.JoinLottery));
-
-            await botClient.SendMessage(userId,
-                $"🎉 Welcome to the *{chat.Title}* Team Zaps session!\n\n" +
-                $"💰 **Make payments** by sending amounts like:\n" +
-                $"• `3,99` (€ per default)\n" +
-                $"• `5,50eur` or `5€`\n" +
-                $"• `2eur+1000sat`\n" +
-                $"I'll create Lightning invoices for you to pay.\n\n" +
-                $"🎰 Feel free to **enter the lottery** if you're willing to pay the fiat bill if you win. In return, you'll receive all the sats collected from everyone!\n\n" +
-                $"⚠️ **Payments are blocked** until someone enters the lottery first!",
-                parseMode: ParseMode.Markdown,
-                replyMarkup: lotteryButton,
-                cancellationToken: cancellationToken);
-                
-            // Add user as participant
-            workflowService.EnsureParticipant(session, userId, displayName);
+            await UserStatusMessage.SendAsync(session, userId, displayName, botClient, workflowService, logger, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            logger.LogWarning(ex, "Failed to send private welcome message to user {UserId}", userId);
             var warningMessage = await botClient.SendMessage(chatId,
                 $"⚠️ {displayName}, please start a private chat with me first by clicking @{(await botClient.GetMe(cancellationToken)).Username}",
                 cancellationToken: cancellationToken);
@@ -223,7 +195,7 @@ public partial class UpdateHandler
         }
 
         // Update the pinned status message
-        await StatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
 
         logger.LogInformation("User {UserId} joined session in chat {ChatId}", userId, chatId);
     }
@@ -244,11 +216,16 @@ public partial class UpdateHandler
             {
                 session.Phase = SessionPhase.AcceptingPayments;
                 
-                await botClient.SendMessage(chatId,
-                    $"🎉 {displayName} entered the lottery! Payments are now unlocked for everyone! 💰",
-                    cancellationToken: cancellationToken);
+                await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+                
+                // Update user status messages for all participants
+                foreach (var participant in session.Participants.Values)
+                {
+                    if (participant.UserId == userId)
+                        participant.JoinedLottery = true;
 
-                await StatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+                    await UserStatusMessage.UpdateAsync(session, participant.UserId, botClient, workflowService, logger, cancellationToken);
+                }
                 
                 logger.LogInformation("First lottery participant {UserId} in chat {ChatId}, payments unlocked", userId, chatId);
             }
@@ -265,11 +242,7 @@ public partial class UpdateHandler
             // More people can still join lottery during payment phase
             if (session.LotteryParticipants.Add(userId))
             {
-                await botClient.SendMessage(chatId,
-                    $"✅ {displayName} entered the lottery! 🎟️",
-                    cancellationToken: cancellationToken);
-
-                await StatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+                await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
                 
                 logger.LogInformation("User {UserId} joined lottery in chat {ChatId}", userId, chatId);
             }
@@ -308,6 +281,6 @@ public partial class UpdateHandler
         if (session.StatusMessageId is not null)
             await botClient.DeleteMessage(chatId, session.StatusMessageId!.Value);
 
-        await StatusMessage.SendAsync(session, botClient, workflowService, cancellationToken);
+        await SessionStatusMessage.SendAsync(session, botClient, workflowService, cancellationToken);
     }
 }

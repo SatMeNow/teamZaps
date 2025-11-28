@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.ComponentModel;
+using System.Text;
 using teamZaps.Utils;
 
 namespace teamZaps.Sessions;
@@ -7,14 +9,13 @@ public class SessionState : IFormattableAmount
 {
     public required long ChatId { get; init; }
     public required string ChatTitle { get; init; }
-    public required long StartedByUserId { get; init; }
+    public required string StartedByUser { get; init; }
     public required DateTimeOffset StartedAt { get; init; }
 
 
     public SessionPhase Phase { get; set; } = SessionPhase.AcceptingPayments;
 
     public int? StatusMessageId { get; set; }
-    public int? StartMessageId { get; set; }
 
     public ConcurrentDictionary<long, (long ChatId, int MessageId)> PendingJoins { get; } = new();
     public ConcurrentDictionary<long, ParticipantState> Participants { get; } = new();
@@ -59,6 +60,7 @@ public class ParticipantState : IFormattableAmount
 
     public bool JoinedLottery { get; set; }
     public bool SubmittedInvoice { get; set; }
+    public int? StatusMessageId { get; set; }
 }
 
 public record PaymentRecord() : IFormattableAmount
@@ -97,8 +99,31 @@ public class PendingPayment : IFormattableAmount
 
 public enum SessionPhase
 {
+    [Description("⏳ Waiting for lottery entries")]
     WaitingForLotteryParticipants,
+    [Description("💰 Accepting payments")]
     AcceptingPayments,
+    [Description("⌛ Waiting for winner invoice submission")]
     WaitingForInvoice,
+    [Description("❌ Closed")]
     Closed
+}
+
+
+internal static partial class Ext
+{
+    public static void AppendPayments(this StringBuilder source, IEnumerable<PaymentRecord> payments)
+    {
+        foreach (var token in payments.SelectMany(p => p.Tokens))
+        {
+            var memo = string.IsNullOrWhiteSpace(token.Note) ? "" : $" - {token.Note}";
+            source.AppendLine($"  • {token.FormatAmount()}{memo}");
+        }
+    }
+    public static void AppendSessionState(this StringBuilder source, SessionState session)
+    {
+        source.AppendLine("📊 *Session Status*\n");
+        source.AppendLine($"Phase: *{session.Phase.GetDescription()}*");
+        source.AppendLine($"Started: {session.StartedAt:yyyy-MM-dd HH:mm} UTC");
+    }
 }

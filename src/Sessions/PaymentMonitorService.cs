@@ -73,7 +73,10 @@ public class PaymentMonitorService : BackgroundService
                         var participant = sessionManager.GetOrAddParticipant(session, pending.UserId, pending.DisplayName);
                         participant.Payments.Add(payment);
 
-                        await StatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+                        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+                        
+                        // Update user status messages for affected participant
+                        await UserStatusMessage.UpdateAsync(session, participant.UserId, botClient, workflowService, logger, cancellationToken);
                     }
                 }
                 catch (Exception ex)
