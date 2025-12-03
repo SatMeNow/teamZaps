@@ -41,4 +41,5 @@ public static class CallbackActions
     public const string JoinSession = "join_session";
     public const string CloseSession = "close_session";
     public const string CancelSession = "cancel_session";
+    public const string MakePayment = "make_payment";
 }

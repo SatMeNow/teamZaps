@@ -212,6 +212,16 @@ public partial class UpdateHandler : IUpdateHandler
                 case CallbackActions.CancelSession:
                     await HandleCancelSessionAsync(botClient, chatId, userId, cancellationToken);
                     break;
+                case CallbackActions.MakePayment:
+                    await botClient.SendMessage(chatId, 
+                        "💰 To make a payment, simply send me an amount like:\n\n" +
+                        "• `3,99` (€ per default)\n" +
+                        "• `5,50eur` or `5€`\n" +
+                        "• `2eur+1000sat`\n\n" +
+                        "I'll create Lightning invoices for you to pay!", 
+                        parseMode: ParseMode.Markdown,
+                        cancellationToken: cancellationToken);
+                    break;
             }
         }
         catch (Exception ex)

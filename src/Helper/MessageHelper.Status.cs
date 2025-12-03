@@ -269,9 +269,13 @@ internal static class UserStatusMessage
 
     private static InlineKeyboardMarkup? BuildKeyboard(SessionState session)
     {
-        if (session.Phase == SessionPhase.WaitingForLotteryParticipants)
-            return new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("🎰 Enter Lottery", CallbackActions.JoinLottery));
-        else
-            return null;
+        switch (session.Phase)
+        {
+            case SessionPhase.WaitingForLotteryParticipants:
+                return new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("🎰 Enter Lottery", CallbackActions.JoinLottery));
+            case SessionPhase.AcceptingPayments:
+                return new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("💰 Make Payment", CallbackActions.MakePayment));
+        }
+        return null;
     }
 }
