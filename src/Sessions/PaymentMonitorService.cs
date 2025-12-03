@@ -77,6 +77,18 @@ public class PaymentMonitorService : BackgroundService
                         
                         // Update user status messages for affected participant
                         await UserStatusMessage.UpdateAsync(session, participant.UserId, botClient, workflowService, logger, cancellationToken);
+                        
+                        // Delete payment help message if it exists
+                        if (participant.PaymentHelpMessageId is not null)
+                        {
+                            try
+                            {
+                                await botClient.DeleteMessage(participant.UserId, participant.PaymentHelpMessageId!.Value, cancellationToken);
+                            }
+                            catch (Exception) { }
+                            
+                            participant.PaymentHelpMessageId = null;
+                        }
                     }
                 }
                 catch (Exception ex)

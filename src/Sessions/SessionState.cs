@@ -41,9 +41,9 @@ public class SessionState : IFormattableAmount
     public bool PayoutCompleted { get; set; }
 
 
-    public void Close()
+    public void Close(bool cancel)
     {
-        Phase = SessionPhase.Closed;
+        Phase = (cancel ? SessionPhase.Canceled : SessionPhase.Completed);
         PendingJoins.Clear();
     }
 }
@@ -61,6 +61,7 @@ public class ParticipantState : IFormattableAmount
     public bool JoinedLottery { get; set; }
     public bool SubmittedInvoice { get; set; }
     public int? StatusMessageId { get; set; }
+    public int? PaymentHelpMessageId { get; set; }
 }
 
 public record PaymentRecord() : IFormattableAmount
@@ -105,8 +106,11 @@ public enum SessionPhase
     AcceptingPayments,
     [Description("⌛ Waiting for winner invoice submission")]
     WaitingForInvoice,
-    [Description("❌ Closed")]
-    Closed
+
+    [Description("❌ Canceled")]
+    Canceled,
+    [Description("✅ Completed")]
+    Completed
 }
 
 
@@ -126,4 +130,5 @@ internal static partial class Ext
         source.AppendLine($"Phase: *{session.Phase.GetDescription()}*");
         source.AppendLine($"Started: {session.StartedAt:yyyy-MM-dd HH:mm} UTC");
     }
+    public static bool IsClosed(this SessionPhase source) => ((source == SessionPhase.Canceled) || (source == SessionPhase.Completed));
 }

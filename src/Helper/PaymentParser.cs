@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.ComponentModel;
 using System.Globalization;
 using System.Numerics;
@@ -45,8 +46,9 @@ public record PaymentToken : IFormattableAmount
 
 public static class PaymentParser
 {
+    private static readonly string CurrencyAbbreviations = string.Join("|", PaymentCurrency.Euro.GetAbbreviations());
     private static readonly Regex TokenRegex = new(
-        @"(?<amount>[0-9]+(?:[\.,][0-9]+)?)\s*(?<currency>sat|sats|eur|€|usd|\$)?(?:\s+(?<note>[^+]+?))?(?=\s*\+|$)",
+        $@"(?<amount>[0-9]+(?:[\.,][0-9]+)?)\s*(?<currency>{CurrencyAbbreviations})?(?:\s+(?<note>[^+\r\n]+?))?(?=\s*[\+\r\n]|$)",
         (RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace)
     );
 
@@ -127,6 +129,13 @@ public static partial class Extensions
     }
     public static string ToSymbol(this PaymentCurrency source) => (CurrencyMap.TryGetValue(source, out var attr) ? attr.Symbol : "");
     public static string ToUnitName(this PaymentCurrency source) => (CurrencyMap.TryGetValue(source, out var attr) ? attr.UnitName : "");
+    public static IEnumerable<string> GetAbbreviations(this PaymentCurrency source)
+    {
+        if (CurrencyMap.TryGetValue(source, out var attr))
+            return (attr.Abbreviations.Prepend(attr.Symbol));
+        else
+            return (Enumerable.Empty<string>());
+    }
     public static string? FormatAmount(this IFormattableAmount source)
     {
         var sats = source.SatsAmount.Format();
@@ -135,7 +144,7 @@ public static partial class Extensions
         if ((sats is null) && (fiat is null))
             return (null);
         else if ((sats is not null) && (fiat is not null))
-            return ($"*{sats}* / {fiat}");
+            return ($"*{sats}* ({fiat})");
         else
             return (sats ?? fiat);
     }

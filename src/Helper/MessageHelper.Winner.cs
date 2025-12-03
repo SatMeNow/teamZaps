@@ -54,26 +54,29 @@ internal static class WinnerMessage
         if (session.WinnerUserId is null || !session.Participants.TryGetValue(session.WinnerUserId.Value, out var winner))
             throw new InvalidOperationException("Winner information not available");
 
-        var totalSats = session.SatsAmount;
+        var message = new StringBuilder();
         switch (status)
         {
             case PaymentStatus.Pending:
-                return ($"🎉🏆 *WINNER SELECTED!* 🏆🎉\n\n" +
-                    $"Congratulations {winner.DisplayName}!\n\n" +
-                    $"You won to pay fiat for {session.FormatAmount()}!\n\n" +
-                    $"⚡ Please create a *lightning invoice* for *{totalSats.Format()}* and send it to me in a private message.");
+                message.AppendLine("🎉🏆 *WINNER SELECTED!* 🏆🎉\n");
+                message.AppendLine($"Congratulations {winner.DisplayName}!\n");
+                message.Append("I sent you a message with the *payment summary* and a *lightning invoice*.");
+                break;
+
             case PaymentStatus.Paid:
                 Debug.Assert(paymentResult is not null);    
                 var payed = (paymentResult!.Amount * -1);
-                Debug.Assert(payed == totalSats);
-                return ($"🎉🏆 *PAYOUT COMPLETED!* 🏆🎉\n\n" +
-                    $"Congratulations {winner.DisplayName}!\n\n" +
-                    $"Amount: *{payed.Format()}*\n" +
-                    ((paymentResult.Fee > 0) ? $"Fee: *{paymentResult.Fee.Format()}*\n" : "") +
-                    $"\nThank you for using Team Zaps! 🎉");
+                Debug.Assert(payed == session.SatsAmount);
+
+                message.AppendLine("🎉🏆 *PAYOUT COMPLETED!* 🏆🎉\n");
+                message.AppendLine($"Congratulations {winner.DisplayName}!\n");
+                message.Append("*Thank you* for using Team Zaps! 🎉");
+                break;
 
             default:
                 throw new InvalidEnumArgumentException($"Invalid payment status '{status.GetDescription()}' for winner message");
         }
+
+        return message.ToString();
     }
 }

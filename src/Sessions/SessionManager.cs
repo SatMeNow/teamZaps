@@ -42,7 +42,7 @@ public class SessionManager
     public SessionState? GetSessionByUser(long userId) => ActiveSessions
         .FirstOrDefault(s => s.Participants.ContainsKey(userId));
 
-    public bool RemoveSession(long chatId)
+    public bool RemoveSession(long chatId, bool cancel)
     {
         var removed = sessions.TryRemove(chatId, out var session);
         if (removed)
@@ -51,7 +51,7 @@ public class SessionManager
 
             if (session is not null)
             {
-                session.Close();
+                session.Close(cancel);
                 
                 lastSummaries[chatId] = new SessionSummary(
                     session.StartedAt,

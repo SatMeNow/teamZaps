@@ -91,7 +91,7 @@ public partial class UpdateHandler
                 "❌ No one entered the lottery. Session cancelled.",
                 cancellationToken: cancellationToken);
 
-            workflowService.TryCloseSession(chatId);
+            workflowService.TryCloseSession(chatId, true);
         }
         else
         {
@@ -137,7 +137,7 @@ public partial class UpdateHandler
             }
         }
 
-        if (workflowService.TryCloseSession(chatId))
+        if (workflowService.TryCloseSession(chatId, true))
         {
             await SessionStatusMessage.UpdateAsync(session!, botClient, workflowService, logger, cancellationToken);
             

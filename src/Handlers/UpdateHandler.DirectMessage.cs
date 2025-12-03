@@ -74,10 +74,7 @@ public partial class UpdateHandler
 
         // Not a payment or invoice
         await botClient.SendMessage(message.Chat.Id,
-            "Send me:\n" +
-            "• Payment amounts (like `3,99`, `5,50eur`, `2eur+1000sat`) if you're in a session\n" +
-            "• Lightning invoice (BOLT11) if you won the lottery\n" +
-            "• Use /help for commands",
+            "Sorry, push the `payment` button for instructions or use `/help` for commands.",
             parseMode: ParseMode.Markdown,
             cancellationToken: cancellationToken);
     }
@@ -163,7 +160,7 @@ public partial class UpdateHandler
             
             if (paymentResult is not null)
             {
-                session.Phase = SessionPhase.Closed;
+                session.Phase = SessionPhase.Completed;
                 session.PayoutCompleted = true;
                 session.PayoutExecutedAt = DateTimeOffset.UtcNow;
 
@@ -179,7 +176,7 @@ public partial class UpdateHandler
                 }
                 
                 // Clean up session
-                workflowService.TryCloseSession(session.ChatId);
+                workflowService.TryCloseSession(session.ChatId, false);
 
                 logger.LogInformation("Payout executed successfully for chat {ChatId}", session.ChatId);
             }

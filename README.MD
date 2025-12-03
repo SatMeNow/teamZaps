@@ -1,131 +1,116 @@
-# Team Zaps - What is it?
+# Team Zaps 🎯⚡
 
-Your team meets up, have some food and drinks, but bitcoin is not accepted at your favored location?!
+> **Split bills with Bitcoin Lightning in Telegram groups!**
 
-Than try _team zaps_ to coordinate your lightning payments:
+Team Zaps helps groups coordinate Lightning payments for shared expenses. When Bitcoin isn't accepted at your favorite restaurant or bar, use Team Zaps to let everyone pay in sats while one person handles the fiat transaction.
 
-1. Create a _team event_.
+## 🎲 How It Works
 
-2. All participants fund the event while ordering their drinks.
+Your team meets up for food and drinks, but the venue doesn't accept Bitcoin? Here's how Team Zaps solves this:
 
-3. One of all participants will be drawn in the lottery to pay the bill for all participants, while receiving all spent funds.
+1. **Start a Session** - Someone creates a Team Zaps session in your Telegram group
+2. **Join & Pay** - Everyone joins the session and sends Lightning payments for their orders
+3. **Lottery Draw** - One participant is randomly selected to pay the bill in fiat  
+4. **Winner Takes All** - The selected person receives all the Lightning payments as compensation
 
-Finally we end up in this situation:
+### The Result 🎉
+- ✅ The venue gets their worthless fiat money
+- ✅ Everyone pays for their meal in Bitcoin
+- ✅ The winner effectively swaps fiat for sats at market rate
+- ✅ No one needs to deal with currency exchange
 
-✅ the host got his wortless fiat
+## 🚀 Getting Started
 
-✅ Every pleb paid his bill in sats
+### 1. Add Bot to Your Group
+1. Add `@TeamZapsBot` to your Telegram group (replace with your actual bot username)
+2. Grant the bot admin rights to pin messages
 
-✅ The drawn pleb, who paid the host, defacto swapped fiat in sats 😎
+### 2. Start Using Team Zaps
 
-
-# Use the bot in a telegram group
-
-- [ ] Add the `TeamZapsBot` into your group.
-
-- [ ] Grant the bot admin rights.
-
-# Project Summary
-
-## 🚀 Quick Commands
-
-### First Time Setup
-```bash
-cd src/teamZaps
-# Edit appsettings.json with your bot token
-dotnet restore
-dotnet build
+**In your group chat:**
+```
+/startsession - Start a new payment session
+/help - View all available commands
 ```
 
-### Run the Bot
-```bash
-# Option 1: Direct
-cd src/teamZaps && dotnet run
+**The bot will guide you through:**
+- Joining the session
+- Entering the lottery (who's willing to pay fiat)  
+- Making Lightning payments in private chat
+- Drawing the winner and executing the payout
 
-# Option 2: Using script
-./run.sh
+### 3. Payment Flow
+
+1. **Join Session** - Click the "🎯 Join" button on the pinned message
+2. **Enter Lottery** - Click "🎰 Enter Lottery" if you're willing to pay the bill
+3. **Send Payments** - In private chat with the bot, send amounts like:
+   - `5.99 beer`
+   - `12.50 pizza + 3.00 tip`
+   - Multiple lines also work!
+4. **Pay Invoices** - Pay the Lightning invoices the bot sends you
+5. **Wait for Draw** - When the group closes the session, a winner is drawn
+6. **Automatic Payout** - Winner submits Lightning invoice and receives all payments
+
+## ⚡ Payment Examples
+
+The bot accepts various payment formats:
+
+```
+5.99 beer                    # Euro amount with note
+12.50€ lunch                 # Explicit Euro symbol  
+3.00 + 2.50 tip             # Multiple amounts
+4.99 coffee
+1.50 cookie                  # Multiple lines
 ```
 
-### Development
-```bash
-# Watch mode (auto-reload on changes)
-cd src/teamZaps && dotnet watch run
+## 🎰 Lottery System
 
-# Build only
-dotnet build
+- Anyone can join the lottery by clicking "🎰 Enter Lottery"
+- Lottery participants agree to pay the fiat bill if selected
+- Winner is randomly chosen when session closes
+- Winner receives ALL Lightning payments as compensation
+- Fair and transparent - everyone has equal chances
 
-# Clean build
-dotnet clean && dotnet build
-```
+## 🔧 Bot Commands
 
-## 🔑 Configuration Required
+| Command | Description | Who Can Use |
+|---------|-------------|-------------|
+| `/startsession` | Start a new payment session | Admins (configurable) |
+| `/closesession` | Close payments and draw winner | Admins (configurable) |
+| `/cancelsession` | Cancel the current session | Admins |
+| `/status` | View current session status | Anyone |
+| `/help` | Show help information | Anyone |
 
-Before running, you **must** configure your Telegram bot token:
+## 🔒 Privacy & Security
 
-### Method 1: Edit appsettings.json
-```json
-{
-  "Telegram": {
-    "BotToken": "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
-  },
-  "Lnbits": {
-    "LndhubUrl": "https://myLnbits.org/lndhub/ext/",
-    "WalletId": "1234567890ABCdefGHIjklMNOpqrsTUV",
-    "ApiKey": "1234567890ABCdefGHIjklMNOpqrsTUV"
-  }
-}
-```
+- **Private Payments** - All payment amounts are handled in private chat
+- **No Custody** - Bot doesn't hold your Bitcoin, uses Lightning invoices
+- **Open Source** - Full source code available for audit
+- **Group Privacy** - Only final totals are shown in group chat
 
-### Method 2: Environment Variable
-```bash
-export Telegram__BotToken="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
-```
+## 🛠️ Self-Hosting
 
-**Get your token from:** [@BotFather](https://t.me/botfather) on Telegram
+Want to run your own Team Zaps bot? Check the [developer documentation](src/README.md) for setup instructions.
 
-## 🧪 Testing Your Bot
+### Requirements
+- .NET 9.0 SDK
+- Telegram Bot Token (from [@BotFather](https://t.me/botfather))
+- LNbits instance for Lightning payments
 
-1. Start the application
-2. Open Telegram
-3. Find your bot by username
-4. Send these commands:
-   - `/help` → Command list
-   - `/about` → Bot info
-   - Any text → Echo response
+## 🤝 Contributing
 
-## 🐛 Troubleshooting
+Contributions are welcome! Please read the [developer documentation](src/README.md) for technical details and contribution guidelines.
 
-### Build Fails
-```bash
-dotnet clean
-dotnet restore
-dotnet build
-```
+## 📞 Support
 
-### Bot Doesn't Respond
-- Check bot token is correct
-- Verify bot is not already running elsewhere
-- Check Telegram API status
-- Review application logs
+- 🐛 **Bug Reports**: Open an issue on GitHub
+- 💡 **Feature Requests**: Open an issue with the "enhancement" label
+- 📖 **Documentation**: Check the [developer docs](src/README.md)
 
-### Permission Issues
-```bash
-chmod +x run.sh
-```
+## 📄 License
 
-## 🔒 Security
+MIT License - see [LICENSE](LICENSE) file for details.
 
-**⚠️ Important: Never commit your bot token!**
+---
 
-- Use `.gitignore` (already configured)
-- Use environment variables in production
-- Consider using Azure Key Vault or similar for production
-
-## 📖 Resources
-
-- [Telegram Bot API](https://core.telegram.org/bots/api)
-- [Telegram.Bot Library](https://github.com/TelegramBots/Telegram.Bot)
-
-## 📝 License
-
-MIT
+**Made with ⚡ by Bitcoiners, for Bitcoiners** 🧡

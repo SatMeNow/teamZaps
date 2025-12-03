@@ -23,7 +23,7 @@ public class SessionWorkflowService
         return sessionManager.TryCreateSession(chat, userId, displayName, out session);
     }
 
-    public bool TryCloseSession(long chatId) => sessionManager.RemoveSession(chatId);
+    public bool TryCloseSession(long chatId, bool cancel) => sessionManager.RemoveSession(chatId, cancel);
 
     public ParticipantState EnsureParticipant(SessionState session, long userId, string displayName)
     {

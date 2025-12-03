@@ -59,23 +59,13 @@ internal static class SessionStatusMessage
             logger.LogWarning(ex, "Failed to update pinned status message for chat {ChatId}", session.ChatId);
         }
         
-        if ((session.Phase == SessionPhase.Closed) && (session.StatusMessageId is not null))
+        if ((session.Phase.IsClosed()) && (session.StatusMessageId is not null))
         {
             // Unpin status message
             await botClient.UnpinChatMessage(
                 chatId: session.ChatId,
                 messageId: session.StatusMessageId.Value,
                 cancellationToken: cancellationToken);
-
-            // Delete start message before closing session
-            try
-            {
-                await botClient.DeleteMessage(session.ChatId, session.StatusMessageId.Value, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to delete start message for cancelled session in chat {ChatId}", session.ChatId);
-            }
         }
     }
     private static async Task RecreateAsync<TLogger>(SessionState session, ITelegramBotClient botClient, SessionWorkflowService workflowService, ILogger<TLogger> logger, CancellationToken cancellationToken)
@@ -138,9 +128,7 @@ internal static class SessionStatusMessage
 
     private static InlineKeyboardMarkup? BuildKeyboard(SessionState session, long userId)
     {
-        if (session.Phase == SessionPhase.Closed)
-            return null;
-        else
+        if (session.Phase <= SessionPhase.AcceptingPayments)
         {
             bool alreadyJoined = session.Participants.ContainsKey(userId);
             var joinButton = InlineKeyboardButton.WithCallbackData(alreadyJoined ? "✅ Joined" : "🎯 Join", CallbackActions.JoinSession);
@@ -151,6 +139,8 @@ internal static class SessionStatusMessage
                 closeButton = InlineKeyboardButton.WithCallbackData("❌ Cancel", CallbackActions.CancelSession);
             return new InlineKeyboardMarkup(new[] { joinButton, closeButton });
         }
+        else
+            return (null);
     }
 }
 
@@ -243,24 +233,23 @@ internal static class UserStatusMessage
             status.AppendLineIf("Lottery: *{0}*", participant.JoinedLottery, "🎫 Joined", "🎟️ Not joined");
         status.AppendLine();
 
-        if (session.Phase == SessionPhase.WaitingForLotteryParticipants)
-        {
-            status.AppendLine("🎰 Feel free to *enter the lottery* if you're willing to pay the fiat bill if you win. In return, you'll receive all the sats collected from everyone!\n");
-            status.AppendLine("⚠️ *Payments are blocked* until someone enters the lottery first!");
-        }
-        else if (session.Phase == SessionPhase.AcceptingPayments)
-        {
-            status.AppendLine("*Make payments* by sending amounts like:");
-            status.AppendLine("• `3,99` (€ per default)");
-            status.AppendLine("• `5,50eur` or `5€`");
-            status.AppendLine("• `2eur+1000sat`");
-            status.AppendLine("I'll create Lightning invoices for you to pay.");
-        }
-
         if ((session.Phase >= SessionPhase.AcceptingPayments) && (participant?.HasPayments == true))
         {
             status.AppendLine("*Payments:*");
             status.AppendPayments(participant.Payments);
+            status.AppendLine();
+        }
+        
+        switch (session.Phase)
+        {
+            case SessionPhase.WaitingForLotteryParticipants:
+                status.AppendLine("🎰 Feel free to *enter the lottery* if you're willing to pay the fiat bill if you win. In return, you'll receive all the sats collected from everyone!\n");
+                status.AppendLine("⚠️ *Payments are blocked* until someone enters the lottery first!");
+                break;
+            case SessionPhase.AcceptingPayments:
+                status.AppendLine("Use the button below to *make payments*.");
+                status.AppendLine("I'll create Lightning invoices for you to pay.");
+                break;
         }
         
         return status.ToString();

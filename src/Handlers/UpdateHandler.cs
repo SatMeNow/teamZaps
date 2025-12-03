@@ -131,10 +131,7 @@ public partial class UpdateHandler : IUpdateHandler
                         "/status - View session details\n\n" +
                         "*How it works:*\n" +
                         "1️⃣ Join the session using the button on the pinned message\n" +
-                        "2️⃣ Send me payment amounts in *private chat*:\n" +
-                        "   • `3,99` (€ per default)\n" +
-                        "   • `5,50eur` or `5€`\n" +
-                        "   • `2eur+1000sat`\n" +
+                        "2️⃣ Send me payment amounts in *private chat*\n" +
                         "3️⃣ Pay the Lightning invoices I send you\n" +
                         "4️⃣ Join the lottery when payments close!\n\n" +
                         "💡 *All payments happen in private messages for privacy!*",
@@ -213,14 +210,23 @@ public partial class UpdateHandler : IUpdateHandler
                     await HandleCancelSessionAsync(botClient, chatId, userId, cancellationToken);
                     break;
                 case CallbackActions.MakePayment:
-                    await botClient.SendMessage(chatId, 
-                        "💰 To make a payment, simply send me an amount like:\n\n" +
-                        "• `3,99` (€ per default)\n" +
-                        "• `5,50eur` or `5€`\n" +
-                        "• `2eur+1000sat`\n\n" +
-                        "I'll create Lightning invoices for you to pay!", 
-                        parseMode: ParseMode.Markdown,
-                        cancellationToken: cancellationToken);
+                    var session = workflowService.GetSessionByUser(userId);
+                    if (session is not null && session.Participants.TryGetValue(userId, out var participant))
+                    {
+                        var message = await botClient.SendMessage(chatId, 
+                            "💰 To make payments, simply send me *euro denominated* amounts like:\n" +
+                            "`3,99` or `5,50eur` or `5€`\n\n" +
+                            "Add a *note* to improve your overview:\n" +
+                            "`3,99 Beer`\n\n" +
+                            "*Combine payments* with `+` or `newline`:\n" +
+                            "`4,50 Pizza + 2,50 Water`\n\n" +
+                            "⚡ I'll create Lightning invoices for you to pay!\n" +
+                            "ℹ️ You can also send amounts without using the `payment` button.", 
+                            parseMode: ParseMode.Markdown,
+                            cancellationToken: cancellationToken);
+
+                        participant.PaymentHelpMessageId = message.MessageId;
+                    }
                     break;
             }
         }

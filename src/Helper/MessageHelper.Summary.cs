@@ -40,6 +40,10 @@ internal static class SessionSummaryMessage
         var summary = new StringBuilder();
         summary.AppendLine("📋 *PAYMENT SUMMARY*\n");
         summary.AppendLine($"Session: *{session.ChatTitle}*\n");
+
+        summary.AppendLine($"You won to pay fiat for sats!\n");
+        summary.AppendLine($"⚡ Please create a *lightning invoice* for *{session.SatsAmount.Format()}* and send it to me now.\n");
+        
         summary.AppendLine("*Payments:*");
         foreach (var participant in session.Participants.Values)
         {
