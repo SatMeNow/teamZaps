@@ -20,7 +20,7 @@ public enum PaymentStatus
 }
 public enum PaymentCurrency
 {
-    [Description("Satoshis"), Currency("ⓢ", "sat", [ "s", "sat", "sats" ])] // Alternative signs: ⓢ ₛ 𝕤
+    [Description("Satoshis"), Currency("丰", "sat", [ "s", "sat", "sats" ])] // Alternative signs: ⓢ ₛ 𝕤 丰
     Sats,
     [Description("Euro"), Currency("€", "EUR", [ "eur", "euro" ])]
     Euro,

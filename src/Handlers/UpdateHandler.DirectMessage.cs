@@ -17,66 +17,61 @@ public partial class UpdateHandler
         if (string.IsNullOrEmpty(text))
             return;
 
-        // Check if this user is a winner waiting to submit an invoice
-        foreach (var session in sessionManager.ActiveSessions)
+        var session = sessionManager.GetSessionByUser(userId);
+        if (session is null)
         {
-            if (session.WinnerUserId == userId && 
-                session.Phase == SessionPhase.WaitingForInvoice &&
-                string.IsNullOrEmpty(session.WinnerInvoiceBolt11))
-            {
-                // This looks like an invoice submission
-                if (text.IsLightningInvoice(out var invoice))
-                {
-                    await ProcessWinnerInvoiceAsync(botClient, session, userId, invoice, cancellationToken);
-                    return;
-                }
-            }
+            await botClient.SendMessage(message.Chat.Id,
+                "Use `/help` for commands.",
+                parseMode: ParseMode.Markdown,
+                cancellationToken: cancellationToken);
         }
-
-        // Try to parse as payment from session participant
-        if (PaymentParser.TryParse(text, out var tokens, out var error))
+        else
         {
-            // Find active session where this user is a participant
-            var participantSession = sessionManager.ActiveSessions
-                .FirstOrDefault(s => s.Participants.ContainsKey(userId));
-
-            if (participantSession is not null)
+            switch (session.Phase)
             {
-                if (participantSession.Phase == SessionPhase.WaitingForLotteryParticipants)
-                {
+                case SessionPhase.WaitingForLotteryParticipants:
                     await botClient.SendMessage(message.Chat.Id,
                         "⚠️ Payments are blocked until someone enters the lottery!\n\n" +
                         "Use the 🎰 Enter Lottery button in your welcome message or ask someone to enter the lottery first.",
                         cancellationToken: cancellationToken);
                     return;
-                }
-                else if (participantSession.Phase == SessionPhase.AcceptingPayments)
-                {
-                    await ProcessPrivatePaymentAsync(botClient, participantSession, userId, displayName, tokens, text, cancellationToken);
-                    return;
-                }
-                else
-                {
+
+                case SessionPhase.AcceptingPayments:
+                    // Try to parse as payment from session participant
+                    if (PaymentParser.TryParse(text, out var tokens, out var error))
+                    {
+                        await ProcessPrivatePaymentAsync(botClient, session, userId, displayName, tokens, text, cancellationToken);
+                        return;
+                    }
+                    break;
+
+                case SessionPhase.WaitingForInvoice:
+                    // Check if this user is a winner waiting to submit an invoice
+                    var winnerUser = session.GetWinnerUser(userId);
+                    if (winnerUser?.SubmittedInvoice == false)
+                    {
+                        // This looks like an invoice submission
+                        if (text.IsLightningInvoice(out var invoice))
+                        {
+                            await ProcessWinnerInvoiceAsync(botClient, session, userId, invoice, cancellationToken);
+                            return;
+                        }
+                    }
+                    break;
+
+                default:
                     await botClient.SendMessage(message.Chat.Id,
-                        $"⚠️ Payments are not available in current session phase: {participantSession.Phase}",
+                        $"⚠️ Payments are not available in current session phase: {session.Phase}",
                         cancellationToken: cancellationToken);
                     return;
-                }
             }
-            else
-            {
-                await botClient.SendMessage(message.Chat.Id,
-                    "❌ You're not part of any active session. Join a session in a group first!",
-                    cancellationToken: cancellationToken);
-                return;
-            }
+            
+            // Not a payment or invoice
+            await botClient.SendMessage(message.Chat.Id,
+                "Sorry, push the `payment` button for instructions or use `/help` for commands.",
+                parseMode: ParseMode.Markdown,
+                cancellationToken: cancellationToken);
         }
-
-        // Not a payment or invoice
-        await botClient.SendMessage(message.Chat.Id,
-            "Sorry, push the `payment` button for instructions or use `/help` for commands.",
-            parseMode: ParseMode.Markdown,
-            cancellationToken: cancellationToken);
     }
     private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, long userId, string displayName, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
     {
@@ -85,6 +80,21 @@ public partial class UpdateHandler
             // Ensure invoice to be payed in Euro only
             if (tokens.Any(t => t.Currency != BotBehaviorOptions.AcceptedFiatCurrency))
                 throw new NotSupportedException($"Only {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()} payments are supported.");
+
+            // Calculate total amount for this payment
+            var totalPaymentAmount = (double)tokens.Sum(t => t.Amount);
+            // Calculate session amounts
+            var totalFiatAmount = (session.FiatAmount + session.PendingPayments.Values.Sum(p => p.FiatAmount));
+            var remainingFiatAmount = (session.Budget - totalFiatAmount);
+
+            // Check if this payment would exceed the sessions's remaining budget
+            if (totalPaymentAmount > remainingFiatAmount)
+            {
+                throw new InvalidOperationException($"💸 Payment rejected!\n\n" +
+                    $"Your payment of {totalPaymentAmount.Format()} would exceed the session's total budget.\n\n" +
+                    $"Available budget: {remainingFiatAmount.Format()}")
+                    .AddLogLevel(LogLevel.Warning);
+            }
 
             // Process each token and create invoices
             foreach (var tokenGrp in tokens.GroupBy(t => t.Currency))
@@ -128,57 +138,45 @@ public partial class UpdateHandler
         catch (Exception ex)
         {
             logger.LogError(ex, "Error creating invoice for private payment");
-            await botClient.SendMessage(userId, $"❌ {ex.Message}", cancellationToken: cancellationToken);
+            await botClient.SendException(userId, ex, cancellationToken);
         }
     }
     private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, long userId, string bolt11, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Winner invoice submitted for session in chat {ChatId}", session.ChatId);
+        logger.LogInformation("Winner invoice submitted by {UserId} for session in chat {ChatId}", userId, session.ChatId);
 
-        session.WinnerInvoiceBolt11 = bolt11;
-        session.InvoiceSubmittedAt = DateTimeOffset.UtcNow;
+        session.GetWinnerUser(userId)!.SubmittedInvoice = true;
 
         await botClient.SendMessage(userId,
             "✅ Invoice received!\n⏳ Processing payout...",
             cancellationToken: cancellationToken);
 
-        // Execute payout
-        await ExecutePayoutAsync(botClient, session, cancellationToken);
-        
-        await botClient.SendMessage(userId,
-            "✅ Payout completed.",
-            cancellationToken: cancellationToken);
-    }
-    private async Task ExecutePayoutAsync(ITelegramBotClient botClient, SessionState session, CancellationToken cancellationToken)
-    {
-        if (session.PayoutCompleted)
-            return;
-
         try
         {
-            var paymentResult = await lnbitsService.PayInvoiceAsync(session.WinnerInvoiceBolt11!, cancellationToken);
-            
+            var paymentResult = await lnbitsService.PayInvoiceAsync(bolt11!, cancellationToken);
             if (paymentResult is not null)
             {
-                session.Phase = SessionPhase.Completed;
-                session.PayoutCompleted = true;
-                session.PayoutExecutedAt = DateTimeOffset.UtcNow;
+                if (session.PayoutCompleted)
+                {
+                    session.Phase = SessionPhase.Completed;
 
-                await WinnerMessage.UpdateAsync(session, PaymentStatus.Paid, paymentResult, botClient, workflowService, logger, cancellationToken);
+                    await WinnerMessage.UpdateAsync(session, PaymentStatus.Paid, paymentResult, botClient, workflowService, logger, cancellationToken);
+                }
 
                 // Update the pinned status message
                 await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
                 
                 // Update user status messages for all participants
                 foreach (var participantId in session.Participants.Keys)
-                {
                     await UserStatusMessage.UpdateAsync(session, participantId, botClient, workflowService, logger, cancellationToken);
-                }
                 
-                // Clean up session
-                workflowService.TryCloseSession(session.ChatId, false);
+                if (session.Phase.IsClosed())
+                {
+                    // Clean up session
+                    workflowService.TryCloseSession(session.ChatId, false);
 
-                logger.LogInformation("Payout executed successfully for chat {ChatId}", session.ChatId);
+                    logger.LogInformation("Payout executed successfully by {UserId} for chat {ChatId}", userId, session.ChatId);
+                }
             }
             else
             {
@@ -189,10 +187,14 @@ public partial class UpdateHandler
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error executing payout for chat {ChatId}", session.ChatId);
+            logger.LogError(ex, "Error executing payout by {UserId} for chat {ChatId}", userId, session.ChatId);
             await botClient.SendMessage(session.ChatId,
                 "❌ Error during payout. Please contact support.",
                 cancellationToken: cancellationToken);
         }
+        
+        await botClient.SendMessage(userId,
+            "✅ Payout completed.",
+            cancellationToken: cancellationToken);
     }
 }

@@ -36,10 +36,11 @@ public class SessionWorkflowService
 
 public static class CallbackActions
 {
-    public const string JoinLottery = "join_lottery";
-    public const string ViewStatus = "view_status";
-    public const string JoinSession = "join_session";
-    public const string CloseSession = "close_session";
-    public const string CancelSession = "cancel_session";
-    public const string MakePayment = "make_payment";
+    public const string JoinLottery = "joinLottery";
+    public const string ViewStatus = "viewStatus";
+    public const string JoinSession = "joinSession";
+    public const string CloseSession = "closeSession";
+    public const string CancelSession = "cancelSession";
+    public const string MakePayment = "makePayment";
+    public const string SelectBudget = "budget";
 }

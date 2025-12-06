@@ -16,43 +16,62 @@ internal static class SessionSummaryMessage
 {
     public static async Task SendAsync(SessionState session, ITelegramBotClient botClient, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
     {
-        try
+        foreach (var winner in session.Winners)
         {
-            await botClient.SendMessage(
-                session.WinnerUserId!,
-                text: BuildSummary(session),
-                parseMode: ParseMode.Markdown,
-                cancellationToken: cancellationToken);
-                
-            logger.LogDebug("Summary message sent to winner {WinnerUserId} for session {ChatId}", session.WinnerUserId!, session.ChatId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to send summary message to winner {WinnerUserId} for session {ChatId}", session.WinnerUserId!, session.ChatId);
+            try
+            {
+                await botClient.SendMessage(
+                    winner.Key,
+                    text: BuildSummary(session, winner.Key, winner.Value),
+                    parseMode: ParseMode.Markdown,
+                    cancellationToken: cancellationToken);
+                    
+                logger.LogDebug("Summary message sent to winner {WinnerId} for session {ChatId}", winner.Key, session.ChatId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to send summary message to winner {WinnerId} for session {ChatId}", winner.Key, session.ChatId);
+            }
         }
     }
 
-    private static string BuildSummary(SessionState session)
+    private static string BuildSummary(SessionState session, long winnerId, double fiatAmount)
     {
-        Debug.Assert(session.WinnerUserId is not null);
+        Debug.Assert(session.Winners.Count > 0);
         Debug.Assert(session.HasPayments);
 
         var summary = new StringBuilder();
         summary.AppendLine("📋 *PAYMENT SUMMARY*\n");
         summary.AppendLine($"Session: *{session.ChatTitle}*\n");
 
-        summary.AppendLine($"You won to pay fiat for sats!\n");
-        summary.AppendLine($"⚡ Please create a *lightning invoice* for *{session.SatsAmount.Format()}* and send it to me now.\n");
+        if (session.Winners.Count > 1)
+        {
+            summary.AppendLine($"🎰 *Multiple winners selected!* You're one of {session.Winners.Count} winners.\n");
+            summary.AppendLine($"💰 Your share: *{fiatAmount:F2}€*\n");
+            summary.AppendLine($"⚡ Please create a *lightning invoice* for *{CalculateWinnerSats(session, fiatAmount).Format()}* and send it to me now.\n");
+        }
+        else
+        {
+            summary.AppendLine($"🏆 You won to pay fiat for sats!\n");
+            summary.AppendLine($"⚡ Please create a *lightning invoice* for *{session.SatsAmount.Format()}* and send it to me now.\n");
+        }
         
         summary.AppendLine("*Payments:*");
         foreach (var participant in session.Participants.Values)
         {
-            summary.AppendLine($"\n*{participant.DisplayName}:*");
+            summary.AppendLine($"\n*{participant}:*");
             summary.AppendPayments(participant.Payments);
         }
         summary.AppendLine();
         summary.AppendLine($"*Total:* {session.FormatAmount()}");
         
         return summary.ToString();
+    }
+
+    private static long CalculateWinnerSats(SessionState session, double fiatAmount)
+    {
+        var totalFiat = session.FiatAmount;
+        var totalSats = session.SatsAmount;
+        return (long)(totalSats * (fiatAmount / totalFiat));
     }
 }

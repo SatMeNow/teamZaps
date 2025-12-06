@@ -205,5 +205,24 @@ namespace teamZaps.Utils
                 return (null);
         }
     }
+    internal static partial class ExtException
+    {
+        public static T AddData<T>(this T source, object key, object? value)
+            where T : Exception
+        {
+            source.Data.Add(key, value);
+            return (source);
+        }
+        public static T AddHelp<T>(this T source, object? value)
+            where T : Exception
+        {
+            return (AddData<T>(source, "help", value));
+        }
+        public static T AddLogLevel<T>(this T source, LogLevel level)
+            where T : Exception
+        {
+            return (source.AddData<T>(nameof(LogLevel), level));
+        }
+    }
     #endregion
 }

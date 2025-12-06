@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using teamZaps.Utils;
 
@@ -24,21 +25,20 @@ public class SessionState : IFormattableAmount
     public bool HasPayments => !Payments.IsEmpty();
     public long SatsAmount => Payments.Sum(p => p.SatsAmount);
     public double FiatAmount => Payments.Sum(p => p.FiatAmount);
+    /// <summary>
+    /// Max. budget, based on lottery participants' budgets.
+    /// </summary>
+    public double Budget => LotteryParticipants.Values.Sum();
 
     public DateTimeOffset? LotteryOpenedAt { get; set; }
     public DateTimeOffset? LotteryClosesAt { get; set; }
     public int? LotteryMessageId { get; set; }
-    public HashSet<long> LotteryParticipants { get; } = new();
-    public long? WinnerUserId { get; set; }
+    public Dictionary<long, double> LotteryParticipants { get; } = new(); // UserId -> MaxBudget
+    public Dictionary<long, double> Winners { get; } = new(); // UserId -> Amount to pay
+    public IEnumerable<ParticipantState> WinnerUsers => Winners.Keys.Select(id => Participants[id]);
+    public ParticipantState? WinnerUser => WinnerUsers.FirstOrDefault();
+    public bool PayoutCompleted => WinnerUsers.All(u => u.SubmittedInvoice);
     public int? WinnerMessageId { get; set; }
-
-    public string? WinnerInvoiceBolt11 { get; set; }
-    public string? WinnerInvoiceHash { get; set; }
-    public int? WinnerInvoiceMessageId { get; set; }
-    public DateTimeOffset? InvoiceSubmittedAt { get; set; }
-
-    public DateTimeOffset? PayoutExecutedAt { get; set; }
-    public bool PayoutCompleted { get; set; }
 
 
     public void Close(bool cancel)
@@ -46,6 +46,7 @@ public class SessionState : IFormattableAmount
         Phase = (cancel ? SessionPhase.Canceled : SessionPhase.Completed);
         PendingJoins.Clear();
     }
+    public ParticipantState? GetWinnerUser(long userId) => WinnerUsers.FirstOrDefault(u => u.UserId.Equals(userId));
 }
 
 public class ParticipantState : IFormattableAmount
@@ -58,10 +59,16 @@ public class ParticipantState : IFormattableAmount
     public long SatsAmount => (HasPayments ? Payments.Sum(p => p.SatsAmount) : 0);
     public double FiatAmount => (HasPayments ? Payments.Sum(p => p.FiatAmount) : 0.0F);
 
-    public bool JoinedLottery { get; set; }
     public bool SubmittedInvoice { get; set; }
     public int? StatusMessageId { get; set; }
     public int? PaymentHelpMessageId { get; set; }
+    public int? BudgetSelectionMessageId { get; set; }
+
+
+    public override string ToString() => DisplayName;
+
+
+    public bool JoinedLottery(SessionState session) => session.LotteryParticipants.ContainsKey(UserId);
 }
 
 public record PaymentRecord() : IFormattableAmount
@@ -104,7 +111,7 @@ public enum SessionPhase
     WaitingForLotteryParticipants,
     [Description("💰 Accepting payments")]
     AcceptingPayments,
-    [Description("⌛ Waiting for winner invoice submission")]
+    [Description("⌛ Waiting for winner invoice")]
     WaitingForInvoice,
 
     [Description("❌ Canceled")]

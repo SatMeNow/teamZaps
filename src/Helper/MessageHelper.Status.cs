@@ -89,13 +89,16 @@ internal static class SessionStatusMessage
         
         status.AppendSessionState(session);
 
-        // Show lottery entries
+        // Show lottery entries with budgets
         if (session.LotteryParticipants.Count > 0)
+        {
             status.AppendLine($"🎫 Lottery entries: *{session.LotteryParticipants.Count}*");
+            status.AppendLine($"💰 Total budget: *{session.Budget.Format()}*");
+        }
 
         if (session.HasPayments)
         {
-            status.AppendLine($"💰 Total: {session.FormatAmount()}");
+            status.AppendLine($"💶 Total consumed: {session.FormatAmount()}");
             status.AppendLine($"Payments: *{session.Payments.Count()}*");
         }
 
@@ -104,7 +107,10 @@ internal static class SessionStatusMessage
             status.AppendLine($"\n*{session.Participants.Count}* Participant(s):");
             foreach (var participant in session.Participants)
             {
-                var p = $"• {participant.Value.DisplayName}";
+                var joinedLottery = "";
+                if (session.LotteryParticipants.ContainsKey(participant.Key))
+                    joinedLottery = "🎫 ";
+                var p = $"• {joinedLottery}{participant.Value}";
                 if (participant.Value.HasPayments)
                     p += $": {participant.Value.FormatAmount()}";
                 status.AppendLine(p);
@@ -117,10 +123,20 @@ internal static class SessionStatusMessage
             status.AppendLine("\n⚠️ *Payments are blocked* until someone enters the lottery first!");
         }
 
-        if (session.WinnerUserId is not null)
+        if (session.Winners.Count == 1)
         {
-            var winner = session.Participants[session.WinnerUserId.Value];
-            status.AppendLine($"\n🏆 Winner: *{winner.DisplayName}*");
+            var winner = session.WinnerUser!;
+            status.AppendLine($"\n🏆 Winner: *{winner}* ({session.Winners[winner.UserId].Format()})");
+        }
+        else if (session.Winners.Count > 1)
+        {
+            status.AppendLine($"\n🏆 {session.Winners.Count} winners:");
+            foreach (var winnerEntry in session.Winners)
+            {
+                var winner = session.Participants[winnerEntry.Key];
+                var invoiceState = (winner.SubmittedInvoice ? "✅" : "⏳");
+                status.AppendLine($"• {invoiceState} *{winner}* ({winnerEntry.Value.Format()})");
+            }
         }
 
         return status.ToString();
@@ -188,7 +204,7 @@ internal static class UserStatusMessage
                 messageId: messageId,
                 text: Build(session, participant, chat.Title ?? "Unknown Chat"),
                 parseMode: ParseMode.Markdown,
-                replyMarkup: BuildKeyboard(session),
+                replyMarkup: BuildKeyboard(session, participant),
                 cancellationToken: cancellationToken);
         }
         catch (ApiRequestException ex) when (ex.ErrorCode == 400 && 
@@ -230,7 +246,12 @@ internal static class UserStatusMessage
 
         status.AppendSessionState(session);
         if (participant is not null)
-            status.AppendLineIf("Lottery: *{0}*", participant.JoinedLottery, "🎫 Joined", "🎟️ Not joined");
+        {
+            if (session.LotteryParticipants.TryGetValue(participant.UserId, out var budget))
+                status.AppendLine($"Lottery: 🎫 *Joined* (personal budget: {budget.Format()})");
+            else
+                status.AppendLine("Lottery: 🎟️ *Not joined*");
+        }
         status.AppendLine();
 
         if ((session.Phase >= SessionPhase.AcceptingPayments) && (participant?.HasPayments == true))
@@ -243,7 +264,7 @@ internal static class UserStatusMessage
         switch (session.Phase)
         {
             case SessionPhase.WaitingForLotteryParticipants:
-                status.AppendLine("🎰 Feel free to *enter the lottery* if you're willing to pay the fiat bill if you win. In return, you'll receive all the sats collected from everyone!\n");
+                status.AppendLine("🎰 *Enter the lottery* if you're willing to pay fiat! Set your maximum budget.\n");
                 status.AppendLine("⚠️ *Payments are blocked* until someone enters the lottery first!");
                 break;
             case SessionPhase.AcceptingPayments:
@@ -256,15 +277,13 @@ internal static class UserStatusMessage
     }
 
 
-    private static InlineKeyboardMarkup? BuildKeyboard(SessionState session)
+    private static InlineKeyboardMarkup? BuildKeyboard(SessionState session, ParticipantState? participant = null)
     {
-        switch (session.Phase)
-        {
-            case SessionPhase.WaitingForLotteryParticipants:
-                return new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("🎰 Enter Lottery", CallbackActions.JoinLottery));
-            case SessionPhase.AcceptingPayments:
-                return new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("💰 Make Payment", CallbackActions.MakePayment));
-        }
-        return null;
+        var buttons = new List<InlineKeyboardButton>();
+        if ((session.Phase <= SessionPhase.AcceptingPayments) && (participant?.JoinedLottery(session) != true))
+            buttons.Add(InlineKeyboardButton.WithCallbackData("🎰 Enter Lottery", CallbackActions.JoinLottery));
+        if (session.Phase == SessionPhase.AcceptingPayments)
+            buttons.Add(InlineKeyboardButton.WithCallbackData("💰 Make Payment", CallbackActions.MakePayment));
+        return (new InlineKeyboardMarkup(buttons));
     }
 }

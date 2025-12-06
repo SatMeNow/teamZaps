@@ -51,25 +51,49 @@ internal static class WinnerMessage
     }
     private static string Build(SessionState session, SessionWorkflowService workflowService, PaymentStatus status, LnbitsPaymentResponse? paymentResult = null)
     {
-        if (session.WinnerUserId is null || !session.Participants.TryGetValue(session.WinnerUserId.Value, out var winner))
-            throw new InvalidOperationException("Winner information not available");
+        if (session.Winners.Count == 0)
+            throw new InvalidOperationException("No winners available");
 
         var message = new StringBuilder();
         switch (status)
         {
             case PaymentStatus.Pending:
-                message.AppendLine("🎉🏆 *WINNER SELECTED!* 🏆🎉\n");
-                message.AppendLine($"Congratulations {winner.DisplayName}!\n");
-                message.Append("I sent you a message with the *payment summary* and a *lightning invoice*.");
+                if (session.Winners.Count == 1)
+                {
+                    message.AppendLine("🎉🏆 *WINNER SELECTED!* 🏆🎉\n");
+                
+                    message.AppendLine($"Congratulations {session.WinnerUser}!\n");
+                    message.Append("I sent you a message with the *payment summary* and a *lightning invoice*.");
+                }
+                else
+                {
+                    message.AppendLine("🎉🏆 *WINNERS SELECTED!* 🏆🎉\n");
+                
+                    message.AppendLine($"🎰 We have *{session.Winners.Count} winners* to share the cost:\n");
+                    foreach (var winner in session.Winners)
+                    {
+                        var winnerUser = session.Participants[winner.Key];
+                        message.AppendLine($"• {winnerUser}: *{winner.Value:F2}€*");
+                    }
+                    message.AppendLine("\nI sent each winner a message with their *payment summary* and *lightning invoice*.");
+                }
                 break;
 
             case PaymentStatus.Paid:
                 Debug.Assert(paymentResult is not null);    
-                var payed = (paymentResult!.Amount * -1);
-                Debug.Assert(payed == session.SatsAmount);
-
                 message.AppendLine("🎉🏆 *PAYOUT COMPLETED!* 🏆🎉\n");
-                message.AppendLine($"Congratulations {winner.DisplayName}!\n");
+                
+                if (session.Winners.Count == 1)
+                {
+                    var firstWinner = session.Winners.First();
+                    var winner = session.Participants[firstWinner.Key];
+                    message.AppendLine($"Congratulations {winner}!\n");
+                }
+                else
+                {
+                    message.AppendLine("All winners have been paid!\n");
+                }
+                
                 message.Append("*Thank you* for using Team Zaps! 🎉");
                 break;
 

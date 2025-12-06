@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using teamZaps.Services;
 using teamZaps.Sessions;
@@ -95,18 +96,16 @@ public partial class UpdateHandler
         }
         else
         {
-            // Draw winner immediately
-            var participants = session.LotteryParticipants.ToArray();
-            var winnerUserId = participants[Random.Shared.Next(participants.Length)];
-            
-            session.WinnerUserId = winnerUserId;
+            // Draw winners based on budget limits
+            SelectWinners(session);
             session.Phase = SessionPhase.WaitingForInvoice;
 
             await SessionSummaryMessage.SendAsync(session, botClient, logger, cancellationToken);
             
             await WinnerMessage.SendAsync(session, botClient, workflowService, cancellationToken);
 
-            logger.LogInformation("Winner selected immediately for chat {ChatId}: user {UserId}", chatId, winnerUserId);
+            logger.LogInformation("Winners selected for chat {ChatId}: {Winners}", chatId, 
+                string.Join(", ", session.Winners.Select(w => $"{w.Key}({w.Value:F2}€)")));
         }
         
         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
@@ -199,7 +198,34 @@ public partial class UpdateHandler
 
         logger.LogInformation("User {UserId} joined session in chat {ChatId}", userId, chatId);
     }
-    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, int messageId, CancellationToken cancellationToken)
+
+    private int SelectWinners(SessionState session)
+    {
+        Debug.Assert(session.Winners.IsEmpty());
+
+        var totalFiatAmount = session.FiatAmount;
+        var lotteryParticipants = session.LotteryParticipants.ToList();
+        var winners = new List<(long UserId, double Amount)>();
+        var remainingAmount = totalFiatAmount;
+
+        // Shuffle participants for fair random selection
+        var random = new Random();
+        lotteryParticipants = lotteryParticipants.OrderBy(_ => random.Next()).ToList();
+
+        foreach (var (userId, maxBudget) in lotteryParticipants)
+        {
+            if (remainingAmount <= 0)
+                break;
+
+            var amountToPay = Math.Min(maxBudget, remainingAmount);
+            session.Winners[userId] = amountToPay;
+
+            remainingAmount -= amountToPay;
+        }
+
+        return (session.Winners.Count);
+    }
+    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, double budget, CancellationToken cancellationToken)
     {
         var session = workflowService.GetSessionByUser(userId);
         if (session is null)
@@ -208,57 +234,36 @@ public partial class UpdateHandler
             return;
         }
 
-        // Handle different phases
+        // Check if user already joined
+        if (session.LotteryParticipants.ContainsKey(userId))
+        {
+            await botClient.SendMessage(chatId,
+                $"ℹ️ {displayName}, you've already entered the lottery!",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        // Add user to lottery with budget
+        session.LotteryParticipants[userId] = budget;
+
+        // Handle first lottery participant - unlock payments
         if (session.Phase == SessionPhase.WaitingForLotteryParticipants)
         {
-            // First lottery participant - unlock payments
-            if (session.LotteryParticipants.Add(userId))
-            {
-                session.Phase = SessionPhase.AcceptingPayments;
-                
-                await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
-                
-                // Update user status messages for all participants
-                foreach (var participant in session.Participants.Values)
-                {
-                    if (participant.UserId == userId)
-                        participant.JoinedLottery = true;
-
-                    await UserStatusMessage.UpdateAsync(session, participant.UserId, botClient, workflowService, logger, cancellationToken);
-                }
-                
-                logger.LogInformation("First lottery participant {UserId} in chat {ChatId}, payments unlocked", userId, chatId);
-            }
-            else
-            {
-                await botClient.SendMessage(chatId,
-                    $"ℹ️ {displayName}, you've already entered the lottery!",
-                    cancellationToken: cancellationToken);
-            }
-            return;
+            session.Phase = SessionPhase.AcceptingPayments;
+            logger.LogInformation("First lottery participant {UserId} in chat {ChatId}, payments unlocked", userId, chatId);
         }
-        else if (session.Phase == SessionPhase.AcceptingPayments)
+        else
         {
-            // More people can still join lottery during payment phase
-            if (session.LotteryParticipants.Add(userId))
-            {
-                await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
-                
-                logger.LogInformation("User {UserId} joined lottery in chat {ChatId}", userId, chatId);
-            }
-            else
-            {
-                await botClient.SendMessage(chatId,
-                    $"ℹ️ {displayName}, you've already entered the lottery!",
-                    cancellationToken: cancellationToken);
-            }
-            return;
+            logger.LogInformation("User {UserId} joined lottery in chat {ChatId} with {Budget}€ budget", userId, chatId, budget);
         }
-
-        // Phase not valid for lottery joining
-        await botClient.SendMessage(chatId, 
-            $"⚠️ Lottery joining is not available in current phase: {session.Phase}", 
-            cancellationToken: cancellationToken);
+        
+        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+        
+        // Update user status messages for all participants
+        foreach (var p in session.Participants.Values)
+        {
+            await UserStatusMessage.UpdateAsync(session, p.UserId, botClient, workflowService, logger, cancellationToken);
+        }
     }
     /// <summary>
     /// Views the current session status.

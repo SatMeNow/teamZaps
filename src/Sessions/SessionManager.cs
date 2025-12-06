@@ -59,8 +59,8 @@ public class SessionManager
                     session.SatsAmount,
                     session.FiatAmount,
                     session.Participants.Count,
-                    session.WinnerUserId,
-                    session.WinnerUserId is null ? null : session.Participants[session.WinnerUserId.Value].DisplayName,
+                    session.WinnerUser?.UserId,
+                    session.WinnerUser?.DisplayName,
                     session.PayoutCompleted);
             }
         }

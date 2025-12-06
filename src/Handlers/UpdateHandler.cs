@@ -1,15 +1,18 @@
 using System.Text;
+using teamZaps.Configuration;
 using teamZaps.Services;
 using teamZaps.Sessions;
 using teamZaps.Utils;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace teamZaps.Handlers;
 
 public partial class UpdateHandler : IUpdateHandler
 {
-    public UpdateHandler(ILogger<UpdateHandler> logger,  LnbitsService lnbitsService, SessionManager sessionManager, SessionWorkflowService workflowService)
+    public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour, LnbitsService lnbitsService, SessionManager sessionManager, SessionWorkflowService workflowService)
     {
         this.logger = logger;
+        this.botBehaviour = botBehaviour.Value;
         this.lnbitsService = lnbitsService;
         this.sessionManager = sessionManager;
         this.workflowService = workflowService;
@@ -182,18 +185,23 @@ public partial class UpdateHandler : IUpdateHandler
         {
             await botClient.AnswerCallbackQuery(query.Id, cancellationToken: cancellationToken);
 
-            var data = query.Data;
-            if (string.IsNullOrEmpty(data))
+            if (string.IsNullOrEmpty(query.Data))
                 return;
 
             var chatId = query.Message!.Chat.Id;
             var userId = query.From.Id;
             var displayName = query.From.GetDisplayName();
 
-            switch (data)
+            var data = query.Data.Split("_");
+            switch (data.First())
             {
                 case CallbackActions.JoinLottery:
-                    await HandleJoinLotteryAsync(botClient, chatId, userId, displayName, query.Message.MessageId, cancellationToken);
+                    await HandleJoinLotteryAsync(botClient, chatId, userId, displayName, cancellationToken);
+                    break;
+
+                case CallbackActions.SelectBudget when (data.Length == 2):
+                    var budget = double.Parse(data[1]);
+                    await HandleJoinLotteryWithBudgetAsync(botClient, chatId, userId, displayName, budget, cancellationToken);
                     break;
 
                 case CallbackActions.ViewStatus:
@@ -238,6 +246,70 @@ public partial class UpdateHandler : IUpdateHandler
     
 
     #region Helper
+    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, CancellationToken cancellationToken)
+    {
+        var session = workflowService.GetSessionByUser(userId);
+        if (session is null)
+        {
+            await botClient.SendMessage(chatId, "⚠️ No active session found.", cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (session.LotteryParticipants.ContainsKey(userId))
+        {
+            await botClient.SendMessage(chatId, $"ℹ️ {displayName}, you've already entered the lottery!", cancellationToken: cancellationToken);
+            return;
+        }
+
+        var participant = session.Participants[userId];
+
+        // Delete previous budget selection message if any
+        await DeleteBudgetSelectionMessageAsync(botClient, chatId, participant, cancellationToken);
+
+        var keyboard = botBehaviour.BudgetChoices
+            .Select(c => InlineKeyboardButton.WithCallbackData($"{c}{BotBehaviorOptions.AcceptedFiatCurrency.ToSymbol()}", $"{CallbackActions.SelectBudget}_{c}"))
+            .Chunk(4)
+            .ToArray();
+
+        var budgetMessage = await botClient.SendMessage(chatId, 
+            "🎰 *Enter Lottery* 🎰\n\n" +
+            "How much are you willing to pay in fiat at maximum?\n\n" +
+            "💡 *Multiple winners possible!* If total payments exceed your budget, " +
+            "we'll select multiple winners to share the cost.", 
+            parseMode: ParseMode.Markdown,
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken);
+
+        participant.BudgetSelectionMessageId = budgetMessage.MessageId;
+    }
+
+    private async Task HandleJoinLotteryWithBudgetAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, double budget, CancellationToken cancellationToken)
+    {
+        var session = workflowService.GetSessionByUser(userId);
+
+        if (session?.Participants.TryGetValue(userId, out var participant) == true)
+            await DeleteBudgetSelectionMessageAsync(botClient, chatId, participant, cancellationToken);
+
+        // Now process the lottery join
+        await HandleJoinLotteryAsync(botClient, chatId, userId, displayName, budget, cancellationToken);
+    }
+
+    private async Task DeleteBudgetSelectionMessageAsync(ITelegramBotClient botClient, long chatId,ParticipantState participant, CancellationToken cancellationToken)
+    {
+        if (participant.BudgetSelectionMessageId is null)
+            return;
+            
+        try
+        {
+            await botClient.DeleteMessage(chatId, participant.BudgetSelectionMessageId.Value, cancellationToken);
+            participant.BudgetSelectionMessageId = null; // Clear the stored ID
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to delete budget selection message {MessageId} for user {UserId}", participant.BudgetSelectionMessageId, participant.UserId);
+        }
+    }
+
     private async Task<bool> IsUserAdminAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
     {
         try
@@ -254,6 +326,7 @@ public partial class UpdateHandler : IUpdateHandler
 
 
     private readonly ILogger<UpdateHandler> logger;
+    private readonly BotBehaviorOptions botBehaviour;
     private readonly LnbitsService lnbitsService;
     private readonly SessionManager sessionManager;
     private readonly SessionWorkflowService workflowService;
@@ -287,4 +360,26 @@ internal static partial class Ext
         else
             throw new InvalidOperationException("Failed to parse command from message!");
     }
+    
+    public static Task SendException(this ITelegramBotClient source, long userId, Exception exception, CancellationToken cancellationToken)
+    {
+        if (exception.Data.Contains(nameof(LogLevel)))
+        {
+            switch ((LogLevel)exception.Data[nameof(LogLevel)]!)
+            {
+                case LogLevel.Warning:
+                    return SendWarning(source, userId, exception.Message, cancellationToken);
+                case LogLevel.Error:
+                case LogLevel.Critical:
+                    break;
+
+                default:
+                    throw new NotSupportedException("Failed to send message due to not supported log level!");
+            }
+        }
+        return SendError(source, userId, exception.Message, cancellationToken);
+    }
+    public static Task SendWarning(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "⚠️", message, cancellationToken);
+    public static Task SendError(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "❌", message, cancellationToken);
+    private static Task Send(this ITelegramBotClient source, long userId, string icon, string message, CancellationToken cancellationToken) => source.SendMessage(userId, $"{icon} {message}", cancellationToken: cancellationToken);
 }
