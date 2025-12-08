@@ -54,6 +54,7 @@ public static class Program
                 services.Configure<BotBehaviorOptions>(hostContext.Configuration.GetSection(BotBehaviorOptions.SectionName));
                 services.Configure<TelegramSettings>(hostContext.Configuration.GetSection(TelegramSettings.SectionName));
                 services.Configure<LnbitsSettings>(hostContext.Configuration.GetSection(LnbitsSettings.SectionName));
+                services.Configure<DebugSettings>(hostContext.Configuration.GetSection(DebugSettings.SectionName));
 
                 services.AddSingleton<LnbitsService>();
                 services.AddSingleton<SessionManager>();

@@ -27,7 +27,8 @@ src/
 ├── Configuration/                 # Configuration models and settings
 │   ├── TelegramSettings.cs       # Bot token configuration
 │   ├── LnbitsSettings.cs         # Lightning service configuration  
-│   └── BotBehaviorOptions.cs     # Runtime behavior settings
+│   ├── BotBehaviorOptions.cs     # Runtime behavior settings
+│   └── DebugSettings.cs          # Debug-only configuration (DEBUG builds)
 ├── Handlers/                     # Telegram update processing
 │   ├── UpdateHandler.cs          # Main update router (partial class)
 │   ├── UpdateHandler.DirectMessage.cs    # Private message handling
@@ -93,6 +94,9 @@ Create `appsettings.Development.json`:
     "AllowNonAdminSessionStart": false,
     "AllowNonAdminSessionClose": false, 
     "AllowNonAdminSessionCancel": false
+  },
+  "Debug": {
+    "FixBudget": 5.0
   }
 }
 ```
@@ -245,6 +249,39 @@ internal static class YourMessageHelper
 ```
 
 ## 🔍 Debugging & Troubleshooting
+
+### Debug Configuration
+
+The `DebugSettings` class provides development-time configuration options that are only available in DEBUG builds:
+
+```csharp
+// Configuration/DebugSettings.cs
+public class DebugSettings
+{
+    public const string SectionName = "Debug";
+
+#if DEBUG
+    /// <summary>
+    /// Pre-configured budget for users when joining the lottery.
+    /// </summary>
+    public double? FixBudget { get; set; }
+#endif
+}
+```
+
+All debug settings will apply when set in `appsettings.Development.json`.
+
+#### Debug.FixBudget
+
+This automatically assigns a default budget to users joining the lottery, bypassing the budget selection UI:
+
+```json
+{
+  "Debug": {
+    "FixBudget": 5.0  // Users get 100€ budget automatically
+  }
+}
+```
 
 ### Common Issues
 

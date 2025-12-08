@@ -9,9 +9,10 @@ namespace teamZaps.Handlers;
 
 public partial class UpdateHandler : IUpdateHandler
 {
-    public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour, LnbitsService lnbitsService, SessionManager sessionManager, SessionWorkflowService workflowService)
+    public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, LnbitsService lnbitsService, SessionManager sessionManager, SessionWorkflowService workflowService)
     {
         this.logger = logger;
+        this.debugSettings = debugSettings.Value;
         this.botBehaviour = botBehaviour.Value;
         this.lnbitsService = lnbitsService;
         this.sessionManager = sessionManager;
@@ -196,6 +197,15 @@ public partial class UpdateHandler : IUpdateHandler
             switch (data.First())
             {
                 case CallbackActions.JoinLottery:
+                    #if DEBUG
+                    // [Debug] Join lottery instant with fix budget
+                    if (debugSettings.FixBudget is not null)
+                    {
+                        await HandleJoinLotteryWithBudgetAsync(botClient, chatId, userId, displayName, debugSettings.FixBudget.Value, cancellationToken);
+                        return;
+                    }
+                    #endif
+
                     await HandleJoinLotteryAsync(botClient, chatId, userId, displayName, cancellationToken);
                     break;
 
@@ -326,6 +336,7 @@ public partial class UpdateHandler : IUpdateHandler
 
 
     private readonly ILogger<UpdateHandler> logger;
+    private readonly DebugSettings debugSettings;
     private readonly BotBehaviorOptions botBehaviour;
     private readonly LnbitsService lnbitsService;
     private readonly SessionManager sessionManager;
