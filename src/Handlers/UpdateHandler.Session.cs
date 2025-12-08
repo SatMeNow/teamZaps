@@ -167,11 +167,24 @@ public partial class UpdateHandler
             return;
         }
 
-        // Check if user is already a participant
+        // Check if user is already a participant in this session
         if (session.Participants.ContainsKey(userId))
         {
             await botClient.SendMessage(chatId,
                 $"ℹ️ {displayName}, you're already part of this session!",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        // Check if user is already participating in another session
+        var existingSession = workflowService.GetSessionByUser(userId);
+        if (existingSession is not null && existingSession.ChatId != chatId)
+        {
+            var existingChat = await botClient.GetChat(existingSession.ChatId, cancellationToken);
+            await botClient.SendMessage(chatId,
+                $"⚠️ {displayName}, you're already participating in a session in *{existingChat.Title}*!\n\n" +
+                "You can only join one session at a time. Please complete your current session first.",
+                parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
             return;
         }
