@@ -14,7 +14,10 @@ public class SessionManager
 
 
     public BotBehaviorOptions Options { init; get; }
-
+    public double ConsumedServerBudget => ActiveSessions
+        .SelectMany(s => s.LotteryParticipants.Values)
+        .Sum();
+    public double? AvailableServerBudget => (Options.MaxBudget - ConsumedServerBudget);
 
 
     public bool TryCreateSession(ChatFullInfo chat, long userId, string userDisplayName, out SessionState session)

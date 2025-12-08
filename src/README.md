@@ -93,7 +93,9 @@ Create `appsettings.Development.json`:
   "BotBehaviorOptions": {
     "AllowNonAdminSessionStart": false,
     "AllowNonAdminSessionClose": false, 
-    "AllowNonAdminSessionCancel": false
+    "AllowNonAdminSessionCancel": false,
+    "BudgetChoices": [50, 100, 150, 200, 250, 300],
+    "MaxBudget": 10000.0
   },
   "Debug": {
     "FixBudget": 5.0
@@ -111,6 +113,26 @@ dotnet watch run
 
 # With specific environment
 ASPNETCORE_ENVIRONMENT=Development dotnet run
+```
+
+## 🔧 Configuration
+
+### Bot Behavior Options
+
+The `BotBehaviorOptions` section controls various aspects of bot behavior:
+
+#### MaxBudget
+Controls the maximum total budget (in Euro) across all active sessions.
+- **Default**: `disabled`
+
+When the limit is reached, new users cannot join lotteries until existing sessions complete or are cancelled.
+
+```json
+{
+  "BotBehaviorOptions": {
+    "MaxBudget": 5000.0
+  }
+}
 ```
 
 ## 🧠 Core Concepts

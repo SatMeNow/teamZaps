@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using teamZaps.Configuration;
 using teamZaps.Services;
 using teamZaps.Sessions;
 using teamZaps.Utils;
@@ -256,6 +257,21 @@ public partial class UpdateHandler
             return;
         }
 
+        // Check server-wide budget limit
+        if (!CheckServerBudgetLimit(budget))
+        {
+            var availBudget = sessionManager.AvailableServerBudget!.Value;
+            var minBudget = botBehaviour.BudgetChoices.Min();
+            var message = $"⚠️💸 Sorry {displayName}, your budget of {budget.Format()} would exceed the server-wide limit!\n\n" +
+                $"Available at this time: {availBudget.Format()}\n\n";
+            if (minBudget <= availBudget)
+                message += $"Please choose a lower budget and try again.";
+            else
+                message += $"Currently, no budgets are available to join the lottery. Please try again later.";
+            await botClient.SendMessage(chatId, message, cancellationToken: cancellationToken);
+            return;
+        }
+
         // Add user to lottery with budget
         session.LotteryParticipants[userId] = budget;
 
@@ -300,5 +316,13 @@ public partial class UpdateHandler
             await botClient.DeleteMessage(chatId, session.StatusMessageId!.Value);
 
         await SessionStatusMessage.SendAsync(session, botClient, workflowService, cancellationToken);
+    }
+
+    private bool CheckServerBudgetLimit(double requestedBudget)
+    {
+        if (botBehaviour.MaxBudget is null)
+            return (true);
+        else
+            return ((sessionManager.ConsumedServerBudget + requestedBudget) <= botBehaviour.MaxBudget.Value);
     }
 }
