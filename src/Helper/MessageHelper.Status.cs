@@ -126,7 +126,7 @@ internal static class SessionStatusMessage
         if (session.Winners.Count == 1)
         {
             var winner = session.WinnerUser!;
-            status.AppendLine($"\n🏆 Winner: *{winner}* ({session.Winners[winner.UserId].Format()})");
+            status.AppendLine($"\n🏆 Winner: *{winner}* ({session.Winners[winner.UserId].FiatAmount.Format()})");
         }
         else if (session.Winners.Count > 1)
         {
@@ -135,7 +135,7 @@ internal static class SessionStatusMessage
             {
                 var winner = session.Participants[winnerEntry.Key];
                 var invoiceState = (winner.SubmittedInvoice ? "✅" : "⏳");
-                status.AppendLine($"• {invoiceState} *{winner}* ({winnerEntry.Value.Format()})");
+                status.AppendLine($"• {invoiceState} *{winner}* ({winnerEntry.Value.FiatAmount.Format()})");
             }
         }
 

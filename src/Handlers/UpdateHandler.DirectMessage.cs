@@ -149,7 +149,32 @@ public partial class UpdateHandler
     {
         logger.LogInformation("Winner invoice submitted by {UserId} for session in chat {ChatId}", userId, session.ChatId);
 
-        session.GetWinnerUser(userId)!.SubmittedInvoice = true;
+        var winnerUser = session.GetWinnerUser(userId);
+        var winnerInfo = session.Winners[userId];
+
+        // Decode and validate the invoice amount
+        var decodedInvoice = await lnbitsService.DecodeInvoiceAsync(bolt11, cancellationToken);
+        if (decodedInvoice is null)
+        {
+            await botClient.SendMessage(userId, "❌ Invalid invoice! Please provide a valid Lightning invoice.", cancellationToken: cancellationToken);
+            return;
+        }
+
+        // Validate invoice amount
+        var expectedSats = winnerInfo.SatsAmount;
+        var invoiceSats = decodedInvoice.Amount;
+        if (invoiceSats != expectedSats)
+        {
+            await botClient.SendMessage(userId,
+                $"❌ Invoice amount mismatch!\n\n" +
+                $"Expected: {winnerInfo.SatsAmount.Format()}\n" +
+                $"Your invoice: {invoiceSats.Format()}\n" +
+                "Please create a new invoice with the correct amount.",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        winnerUser!.SubmittedInvoice = true;
 
         await botClient.SendMessage(userId,
             "✅ Invoice received!\n⏳ Processing payout...",

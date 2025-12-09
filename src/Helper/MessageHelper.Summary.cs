@@ -35,7 +35,7 @@ internal static class SessionSummaryMessage
         }
     }
 
-    private static string BuildSummary(SessionState session, long winnerId, double fiatAmount)
+    private static string BuildSummary(SessionState session, long winnerId, WinnerInfo winnerInfo)
     {
         Debug.Assert(session.Winners.Count > 0);
         Debug.Assert(session.HasPayments);
@@ -44,17 +44,15 @@ internal static class SessionSummaryMessage
         summary.AppendLine("📋 *PAYMENT SUMMARY*\n");
         summary.AppendLine($"Session: *{session.ChatTitle}*\n");
 
-        long winnerSats;
+        long winnerSats = winnerInfo.SatsAmount;
         if (session.Winners.Count > 1)
         {
             summary.AppendLine($"🎰 *Multiple winners selected!* You're one of {session.Winners.Count} winners.\n");
-            summary.AppendLine($"Your share: 💰 *{fiatAmount:F2}€*");
-            winnerSats = CalculateWinnerSats(session, fiatAmount);
+            summary.AppendLine($"Your share: 💰 *{winnerInfo.FiatAmount.Format()}*");
         }
         else
         {
             summary.AppendLine($"🏆 You won to *pay fiat for sats*!");
-            winnerSats = session.SatsAmount;
         }
         summary.AppendLine();
 
@@ -72,12 +70,5 @@ internal static class SessionSummaryMessage
         summary.AppendLine($"⚡ Please create a *lightning invoice* for *{winnerSats.Format()}* and send it to me now.");
         
         return (summary.ToString());
-    }
-
-    private static long CalculateWinnerSats(SessionState session, double fiatAmount)
-    {
-        var totalFiat = session.FiatAmount;
-        var totalSats = session.SatsAmount;
-        return (long)(totalSats * (fiatAmount / totalFiat));
     }
 }

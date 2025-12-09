@@ -217,28 +217,32 @@ public partial class UpdateHandler
     {
         Debug.Assert(session.Winners.IsEmpty());
 
-        var lotteryParticipants = session.LotteryParticipants.ToList();
         var remainingAmount = ((ITipableAmount)session).TotalFiatAmount;
 
         // Shuffle participants for fair random selection
         var random = new Random();
-        lotteryParticipants = lotteryParticipants
+        var lotteryParticipants = session.LotteryParticipants
             .OrderBy(_ => random.Next())
-            .ToList();
+            .ToArray();
 
-        foreach (var (userId, maxBudget) in lotteryParticipants)
+        foreach (var participant in lotteryParticipants)
         {
             if (remainingAmount <= 0)
                 break;
 
-            var amountToPay = Math.Min(maxBudget, remainingAmount);
-            session.Winners[userId] = amountToPay;
+            var userId = participant.Key;
+            var budget = participant.Value;
+            var amountToPay = Math.Min(budget, remainingAmount);
+            var satsAmount = CalculateWinnerSats(session, amountToPay);
+            
+            session.Winners[userId] = new WinnerInfo(amountToPay, satsAmount);
 
             remainingAmount -= amountToPay;
         }
 
         return (session.Winners.Count);
     }
+
     private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, double budget, CancellationToken cancellationToken)
     {
         var session = workflowService.GetSessionByUser(userId);
@@ -318,6 +322,8 @@ public partial class UpdateHandler
         await SessionStatusMessage.SendAsync(session, botClient, workflowService, cancellationToken);
     }
 
+
+    #region Helper
     private bool CheckServerBudgetLimit(double requestedBudget)
     {
         if (botBehaviour.MaxBudget is null)
@@ -325,4 +331,13 @@ public partial class UpdateHandler
         else
             return ((sessionManager.ConsumedServerBudget + requestedBudget) <= botBehaviour.MaxBudget.Value);
     }
+    private static long CalculateWinnerSats(SessionState session, double fiatAmount)
+    {
+        // Don't use any exchange rate here!
+        // > Just calculate proportionally to the total fiat and sats amounts.
+        var totalFiat = ((ITipableAmount)session).TotalFiatAmount;
+        var totalSats = session.SatsAmount;
+        return (long)(totalSats * (fiatAmount / totalFiat));
+    }
+    #endregion
 }

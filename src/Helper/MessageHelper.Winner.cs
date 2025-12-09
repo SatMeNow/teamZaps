@@ -73,7 +73,7 @@ internal static class WinnerMessage
                     foreach (var winner in session.Winners)
                     {
                         var winnerUser = session.Participants[winner.Key];
-                        message.AppendLine($"• {winnerUser}: *{winner.Value:F2}€*");
+                        message.AppendLine($"• {winnerUser}: *{winner.Value.FiatAmount.Format()}*");
                     }
                     message.AppendLine("\nI sent each winner a message with their *payment summary* and *lightning invoice*.");
                 }

@@ -35,7 +35,7 @@ public class SessionState : ITipableAmount
     public DateTimeOffset? LotteryClosesAt { get; set; }
     public int? LotteryMessageId { get; set; }
     public Dictionary<long, double> LotteryParticipants { get; } = new(); // UserId -> MaxBudget
-    public Dictionary<long, double> Winners { get; } = new(); // UserId -> Amount to pay
+    public Dictionary<long, WinnerInfo> Winners { get; } = new(); // UserId -> Winner info
     public IEnumerable<ParticipantState> WinnerUsers => Winners.Keys.Select(id => Participants[id]);
     public ParticipantState? WinnerUser => WinnerUsers.FirstOrDefault();
     public bool PayoutCompleted => WinnerUsers.All(u => u.SubmittedInvoice);
@@ -74,6 +74,8 @@ public class ParticipantState : ITipableAmount
 
     public bool JoinedLottery(SessionState session) => session.LotteryParticipants.ContainsKey(UserId);
 }
+
+public record WinnerInfo(double FiatAmount, long SatsAmount);
 
 public record PaymentRecord() : ITipableAmount
 {
