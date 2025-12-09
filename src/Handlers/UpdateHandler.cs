@@ -227,6 +227,7 @@ public partial class UpdateHandler : IUpdateHandler
                 case CallbackActions.CancelSession:
                     await HandleCancelSessionAsync(botClient, chatId, userId, cancellationToken);
                     break;
+
                 case CallbackActions.MakePayment:
                     var session = workflowService.GetSessionByUser(userId);
                     if (session is not null && session.Participants.TryGetValue(userId, out var participant))
@@ -246,6 +247,13 @@ public partial class UpdateHandler : IUpdateHandler
                         participant.PaymentHelpMessageId = message.MessageId;
                     }
                     break;
+                case CallbackActions.SetTip:
+                    await HandleTipSelectionAsync(botClient, chatId, userId, displayName, cancellationToken);
+                    break;
+                case CallbackActions.SelectTip when (data.Length == 2):
+                    var tip = int.Parse(data[1]);
+                    await HandleSetTipAsync(botClient, chatId, userId, displayName, tip, cancellationToken);
+                    break;
             }
         }
         catch (Exception ex)
@@ -264,17 +272,15 @@ public partial class UpdateHandler : IUpdateHandler
             await botClient.SendMessage(chatId, "⚠️ No active session found.", cancellationToken: cancellationToken);
             return;
         }
-
         if (session.LotteryParticipants.ContainsKey(userId))
         {
             await botClient.SendMessage(chatId, $"ℹ️ {displayName}, you've already entered the lottery!", cancellationToken: cancellationToken);
             return;
         }
-
         var participant = session.Participants[userId];
 
-        // Delete previous budget selection message if any
-        await DeleteBudgetSelectionMessageAsync(botClient, chatId, participant, cancellationToken);
+        if (await DeleteMessageAsync(botClient, chatId, participant.BudgetSelectionMessageId, cancellationToken))
+            participant.BudgetSelectionMessageId = null;
 
         var keyboard = botBehaviour.BudgetChoices
             .Select(c => InlineKeyboardButton.WithCallbackData($"{c}{BotBehaviorOptions.AcceptedFiatCurrency.ToSymbol()}", $"{CallbackActions.SelectBudget}_{c}"))
@@ -295,29 +301,32 @@ public partial class UpdateHandler : IUpdateHandler
 
     private async Task HandleJoinLotteryWithBudgetAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, double budget, CancellationToken cancellationToken)
     {
-        var session = workflowService.GetSessionByUser(userId);
+        if (workflowService.TryGetSessionByUser(userId, out var session))
+        {
+            var participant = session.Participants[userId];
 
-        if (session?.Participants.TryGetValue(userId, out var participant) == true)
-            await DeleteBudgetSelectionMessageAsync(botClient, chatId, participant, cancellationToken);
-
-        // Now process the lottery join
-        await HandleJoinLotteryAsync(botClient, chatId, userId, displayName, budget, cancellationToken);
+            if (await DeleteMessageAsync(botClient, chatId, participant.BudgetSelectionMessageId, cancellationToken))
+                participant.BudgetSelectionMessageId = null;
+                
+            // Now process the lottery join
+            await HandleJoinLotteryAsync(botClient, chatId, userId, displayName, budget, cancellationToken);
+        }
     }
 
-    private async Task DeleteBudgetSelectionMessageAsync(ITelegramBotClient botClient, long chatId,ParticipantState participant, CancellationToken cancellationToken)
+    private async Task<bool> DeleteMessageAsync(ITelegramBotClient botClient, long chatId, int? messageId, CancellationToken cancellationToken)
     {
-        if (participant.BudgetSelectionMessageId is null)
-            return;
+        if (messageId is null)
+            return false;
             
         try
         {
-            await botClient.DeleteMessage(chatId, participant.BudgetSelectionMessageId.Value, cancellationToken);
-            participant.BudgetSelectionMessageId = null; // Clear the stored ID
+            await botClient.DeleteMessage(chatId, messageId.Value, cancellationToken);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to delete budget selection message {MessageId} for user {UserId}", participant.BudgetSelectionMessageId, participant.UserId);
+            logger.LogWarning(ex, "Failed to delete message {MessageId}", messageId);
         }
+        return (true);
     }
 
     private async Task<bool> IsUserAdminAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
@@ -331,6 +340,57 @@ public partial class UpdateHandler : IUpdateHandler
         {
             return false;
         }
+    }
+
+    private async Task HandleTipSelectionAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, CancellationToken cancellationToken)
+    {
+        var session = workflowService.GetSessionByUser(userId);
+        if (session is null)
+        {
+            await botClient.SendMessage(chatId, "⚠️ No active session found.", cancellationToken: cancellationToken);
+            return;
+        }
+        
+        var keyboard = new InlineKeyboardMarkup(botBehaviour.TipChoices
+            .Prepend((byte)0)
+            .Select(t => InlineKeyboardButton.WithCallbackData(t.FormatTip(), $"{CallbackActions.SelectTip}_{t}"))
+            .Chunk(4)
+            .ToArray());
+
+        var tipMessage = await botClient.SendMessage(chatId, 
+            "🎩 *Setup Tip*\n\n" +
+            "Choose your *tip percentage* to be added to each payment:\n\n",
+            //"💭 Tips help support Lightning Network infrastructure and development!"
+            parseMode: ParseMode.Markdown,
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken);
+
+        // Store the tip selection message ID for cleanup
+        if (session.Participants.TryGetValue(userId, out var participant))
+        {
+            participant.TipSelectionMessageId = tipMessage.MessageId;
+        }
+    }
+
+    private async Task HandleSetTipAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, int tip, CancellationToken cancellationToken)
+    {
+        var session = workflowService.GetSessionByUser(userId);
+        if (session is null)
+        {
+            await botClient.SendMessage(chatId, $"⚠️ No active session found for user {displayName}.", cancellationToken: cancellationToken);
+            return;
+        }
+        var participant = session.Participants[userId];
+        
+        // Delete the tip selection message
+        if (await DeleteMessageAsync(botClient, chatId, participant.TipSelectionMessageId, cancellationToken))
+            participant.TipSelectionMessageId = null;
+
+        // Set the user's tip
+        participant.Tip = (tip == 0) ? null : (byte)tip;
+        // Update the user's status message to reflect the new tip
+        await UserStatusMessage.UpdateAsync(session, userId, botClient, workflowService, logger, cancellationToken);
+
     }
     #endregion
 

@@ -6,18 +6,17 @@ namespace teamZaps.Sessions;
 
 public class SessionManager
 {
-    public SessionManager(ILogger<SessionManager> logger, IOptions<BotBehaviorOptions> options)
+    public SessionManager(ILogger<SessionManager> logger, IOptions<BotBehaviorOptions> botBehaviour)
     {
         this.logger = logger;
-        this.Options = options.Value;
+        this.botBehaviour = botBehaviour.Value;
     }
 
 
-    public BotBehaviorOptions Options { init; get; }
     public double ConsumedServerBudget => ActiveSessions
         .SelectMany(s => s.LotteryParticipants.Values)
         .Sum();
-    public double? AvailableServerBudget => (Options.MaxBudget - ConsumedServerBudget);
+    public double? AvailableServerBudget => (botBehaviour.MaxBudget - ConsumedServerBudget);
 
 
     public bool TryCreateSession(ChatFullInfo chat, long userId, string userDisplayName, out SessionState session)
@@ -74,7 +73,8 @@ public class SessionManager
         return session.Participants.GetOrAdd(userId, uid => new ParticipantState
         {
             UserId = uid,
-            DisplayName = displayName
+            DisplayName = displayName,
+            Tip = botBehaviour.TipChoices.Min() // Default to the lowest tip choice
         });
     }
 
@@ -91,6 +91,7 @@ public class SessionManager
 
     private readonly ConcurrentDictionary<long, SessionState> sessions = new();
     private readonly ConcurrentDictionary<long, SessionSummary> lastSummaries = new();
+    private readonly BotBehaviorOptions botBehaviour;
     private readonly ILogger<SessionManager> logger;
 }
 

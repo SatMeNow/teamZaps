@@ -46,7 +46,7 @@ public class PaymentMonitorService : BackgroundService
                         continue;
                     if (status.Paid && !pending.NotifiedPaid)
                     {
-                        Debug.Assert(pending.FiatAmount == status.Details!.Extra!.FiatAmount);
+                        Debug.Assert(((ITipableAmount)pending).TotalFiatAmount == status.Details!.Extra!.FiatAmount);
                         Debug.Assert(pending.Currency == BotBehaviorOptions.AcceptedFiatCurrency);
 
                         pending.NotifiedPaid = true;
@@ -65,6 +65,7 @@ public class PaymentMonitorService : BackgroundService
                             Tokens = pending.Tokens,
                             SatsAmount = status.Details!.Amount,
                             FiatAmount = pending.FiatAmount,
+                            TipAmount = pending.TipAmount,
                             FiatRate = status.Details!.Extra!.FiatRate
                         };
 

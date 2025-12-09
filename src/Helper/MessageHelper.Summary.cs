@@ -44,28 +44,34 @@ internal static class SessionSummaryMessage
         summary.AppendLine("📋 *PAYMENT SUMMARY*\n");
         summary.AppendLine($"Session: *{session.ChatTitle}*\n");
 
+        long winnerSats;
         if (session.Winners.Count > 1)
         {
             summary.AppendLine($"🎰 *Multiple winners selected!* You're one of {session.Winners.Count} winners.\n");
-            summary.AppendLine($"💰 Your share: *{fiatAmount:F2}€*\n");
-            summary.AppendLine($"⚡ Please create a *lightning invoice* for *{CalculateWinnerSats(session, fiatAmount).Format()}* and send it to me now.\n");
+            summary.AppendLine($"Your share: 💰 *{fiatAmount:F2}€*");
+            winnerSats = CalculateWinnerSats(session, fiatAmount);
         }
         else
         {
-            summary.AppendLine($"🏆 You won to pay fiat for sats!\n");
-            summary.AppendLine($"⚡ Please create a *lightning invoice* for *{session.SatsAmount.Format()}* and send it to me now.\n");
+            summary.AppendLine($"🏆 You won to *pay fiat for sats*!");
+            winnerSats = session.SatsAmount;
         }
-        
+        summary.AppendLine();
+
         summary.AppendLine("*Payments:*");
         foreach (var participant in session.Participants.Values)
         {
-            summary.AppendLine($"\n*{participant}:*");
+            summary.AppendLine($"*{participant}:*");
             summary.AppendPayments(participant.Payments);
         }
         summary.AppendLine();
-        summary.AppendLine($"*Total:* {session.FormatAmount()}");
         
-        return summary.ToString();
+        summary.AppendLine($"Total: 💶 {session.FormatTotalFiatAmount()}");
+        summary.AppendLine();
+        
+        summary.AppendLine($"⚡ Please create a *lightning invoice* for *{winnerSats.Format()}* and send it to me now.");
+        
+        return (summary.ToString());
     }
 
     private static long CalculateWinnerSats(SessionState session, double fiatAmount)

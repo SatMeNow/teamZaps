@@ -1,22 +1,25 @@
 using Telegram.Bot.Types.ReplyMarkups;
 using teamZaps.Configuration;
+using System.Diagnostics.CodeAnalysis;
 
 namespace teamZaps.Sessions;
 
 public class SessionWorkflowService
 {
-    public SessionWorkflowService(SessionManager sessionManager, IOptions<BotBehaviorOptions> options)
+    public SessionWorkflowService(SessionManager sessionManager, IOptions<BotBehaviorOptions> botBehaviour)
     {
         this.sessionManager = sessionManager;
-        this.Options = options.Value;
+        this.botBehaviour = botBehaviour.Value;
     }
-
-
-    public BotBehaviorOptions Options { init; get; }
 
 
     public SessionState? GetSessionByChat(long chatId) => sessionManager.GetSessionByChat(chatId);
     public SessionState? GetSessionByUser(long userId) => sessionManager.GetSessionByUser(userId);
+    public bool TryGetSessionByUser(long userId, [NotNullWhen(true)] out SessionState? session)
+    {
+        session = sessionManager.GetSessionByUser(userId);
+        return (session is not null);
+    }
 
     public bool TryStartSession(ChatFullInfo chat, long userId, string displayName, out SessionState session)
     {
@@ -32,6 +35,7 @@ public class SessionWorkflowService
 
 
     private readonly SessionManager sessionManager;
+    private readonly BotBehaviorOptions botBehaviour;
 }
 
 public static class CallbackActions
@@ -42,5 +46,7 @@ public static class CallbackActions
     public const string CloseSession = "closeSession";
     public const string CancelSession = "cancelSession";
     public const string MakePayment = "makePayment";
-    public const string SelectBudget = "budget";
+    public const string SelectBudget = "selectBudget";
+    public const string SetTip = "setTip";
+    public const string SelectTip = "selectTip";
 }

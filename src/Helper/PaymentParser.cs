@@ -11,11 +11,11 @@ namespace teamZaps.Sessions;
 
 public enum PaymentStatus
 {
-    [Icon("⏳"), Description("Pay this invoice to add your contribution to the session!")]
+    [Icon("⏳"), Description("*Pay this invoice* to add your contribution to the session!")]
     Pending,
-    [Icon("✅"), Description("Thank you! Your payment has been confirmed.")]
+    [Icon("✅"), Description("*Thank you!* Your payment has been confirmed.")]
     Paid,
-    [Icon("❌"), Description("This invoice has expired.")]
+    [Icon("❌"), Description("This invoice has *expired*.")]
     Expired
 }
 public enum PaymentCurrency
@@ -32,6 +32,11 @@ public interface IFormattableAmount
 {
     long SatsAmount { get; }
     double FiatAmount { get; }
+}
+public interface ITipableAmount : IFormattableAmount
+{
+    double TipAmount { get; }
+    double TotalFiatAmount => (TipAmount + FiatAmount);
 }
 
 public record PaymentToken : IFormattableAmount
@@ -136,10 +141,26 @@ public static partial class Extensions
         else
             return (Enumerable.Empty<string>());
     }
+
+    public static string FormatTip(this byte? source) => FormatTip(source ?? 0);
+    public static string FormatTip(this byte source) => (source <= 0) ? "🚫 None" : $"{source}%";
+
+    public static string? FormatTotalFiatAmount(this ITipableAmount source)
+    {
+        var amount = $"*{source.TotalFiatAmount.Format()}*";
+        var tipAmount = source.TipAmount;
+        if (tipAmount > 0.01)
+            amount += $" (inkl. {tipAmount.Format()} tip)";
+        return (amount);
+    }
     public static string? FormatAmount(this IFormattableAmount source)
     {
         var sats = source.SatsAmount.Format();
-        var fiat = source.FiatAmount.Format();
+        string? fiat;
+        if (source is ITipableAmount tip)
+            fiat = tip.TotalFiatAmount.Format();
+        else
+            fiat = source.FiatAmount.Format();
 
         if ((sats is null) && (fiat is null))
             return (null);

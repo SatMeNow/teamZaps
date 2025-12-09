@@ -84,15 +84,9 @@ internal static class WinnerMessage
                 message.AppendLine("🎉🏆 *PAYOUT COMPLETED!* 🏆🎉\n");
                 
                 if (session.Winners.Count == 1)
-                {
-                    var firstWinner = session.Winners.First();
-                    var winner = session.Participants[firstWinner.Key];
-                    message.AppendLine($"Congratulations {winner}!\n");
-                }
+                    message.AppendLine($"Congratulations {session.WinnerUser}!\n");
                 else
-                {
                     message.AppendLine("All winners have been paid!\n");
-                }
                 
                 message.Append("*Thank you* for using Team Zaps! 🎉");
                 break;

@@ -6,7 +6,7 @@ using teamZaps.Utils;
 
 namespace teamZaps.Sessions;
 
-public class SessionState : IFormattableAmount
+public class SessionState : ITipableAmount
 {
     public required long ChatId { get; init; }
     public required string ChatTitle { get; init; }
@@ -25,6 +25,7 @@ public class SessionState : IFormattableAmount
     public bool HasPayments => !Payments.IsEmpty();
     public long SatsAmount => Payments.Sum(p => p.SatsAmount);
     public double FiatAmount => Payments.Sum(p => p.FiatAmount);
+    public double TipAmount => Payments.Sum(p => p.TipAmount);
     /// <summary>
     /// Max. budget, based on lottery participants' budgets.
     /// </summary>
@@ -49,20 +50,23 @@ public class SessionState : IFormattableAmount
     public ParticipantState? GetWinnerUser(long userId) => WinnerUsers.FirstOrDefault(u => u.UserId.Equals(userId));
 }
 
-public class ParticipantState : IFormattableAmount
+public class ParticipantState : ITipableAmount
 {
     public required long UserId { get; init; }
     public required string DisplayName { get; init; }
 
+    public byte? Tip { get; set; }
     public List<PaymentRecord> Payments { get; } = new();
     public bool HasPayments => (Payments.Count > 0);
     public long SatsAmount => (HasPayments ? Payments.Sum(p => p.SatsAmount) : 0);
+    public double TipAmount => (HasPayments ? Payments.Sum(p => p.TipAmount) : 0.0);
     public double FiatAmount => (HasPayments ? Payments.Sum(p => p.FiatAmount) : 0.0F);
 
     public bool SubmittedInvoice { get; set; }
     public int? StatusMessageId { get; set; }
     public int? PaymentHelpMessageId { get; set; }
     public int? BudgetSelectionMessageId { get; set; }
+    public int? TipSelectionMessageId { get; set; }
 
 
     public override string ToString() => DisplayName;
@@ -71,7 +75,7 @@ public class ParticipantState : IFormattableAmount
     public bool JoinedLottery(SessionState session) => session.LotteryParticipants.ContainsKey(UserId);
 }
 
-public record PaymentRecord() : IFormattableAmount
+public record PaymentRecord() : ITipableAmount
 {
     public required long UserId;
     public required string DisplayName;
@@ -83,11 +87,13 @@ public record PaymentRecord() : IFormattableAmount
     long IFormattableAmount.SatsAmount => this.SatsAmount;
     public required long SatsAmount;
     double IFormattableAmount.FiatAmount => this.FiatAmount;
-    public required double FiatAmount;
     public required double FiatRate;
+    double ITipableAmount.TipAmount => this.TipAmount;
+    public required double TipAmount;
+    public required double FiatAmount;
 }
 
-public class PendingPayment : IFormattableAmount
+public class PendingPayment : ITipableAmount
 {
     public required string PaymentHash { get; init; }
     public required string PaymentRequest { get; init; }
@@ -102,6 +108,7 @@ public class PendingPayment : IFormattableAmount
     public required PaymentToken[] Tokens { get; init; }
     public required PaymentCurrency Currency { get; init; }
     long IFormattableAmount.SatsAmount => 0;
+    public required double TipAmount { get; init; }
     public required double FiatAmount { get; init; }
 }
 
@@ -134,8 +141,8 @@ internal static partial class Ext
     public static void AppendSessionState(this StringBuilder source, SessionState session)
     {
         source.AppendLine("📊 *Session Status*\n");
-        source.AppendLine($"Phase: *{session.Phase.GetDescription()}*");
-        source.AppendLine($"Started: {session.StartedAt:yyyy-MM-dd HH:mm} UTC");
+        source.AppendLine($"• Phase: *{session.Phase.GetDescription()}*");
+        source.AppendLine($"• Started: {session.StartedAt:yyyy-MM-dd HH:mm} UTC");
     }
     public static bool IsClosed(this SessionPhase source) => ((source == SessionPhase.Canceled) || (source == SessionPhase.Completed));
 }

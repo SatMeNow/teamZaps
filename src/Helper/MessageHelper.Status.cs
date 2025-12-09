@@ -92,14 +92,14 @@ internal static class SessionStatusMessage
         // Show lottery entries with budgets
         if (session.LotteryParticipants.Count > 0)
         {
-            status.AppendLine($"🎫 Lottery entries: *{session.LotteryParticipants.Count}*");
-            status.AppendLine($"💰 Total budget: *{session.Budget.Format()}*");
+            status.AppendLine($"• Lottery entries: 🎫 *{session.LotteryParticipants.Count}*");
+            status.AppendLine($"• Total budget: 💰 *{session.Budget.Format()}*");
         }
 
         if (session.HasPayments)
         {
-            status.AppendLine($"💶 Total consumed: {session.FormatAmount()}");
-            status.AppendLine($"Payments: *{session.Payments.Count()}*");
+            status.AppendLine($"• Payments: *{session.Payments.Count()}*");
+            status.AppendLine($"• Total: 💶 {session.FormatTotalFiatAmount()}");
         }
 
         if (!session.Participants.IsEmpty)
@@ -248,9 +248,17 @@ internal static class UserStatusMessage
         if (participant is not null)
         {
             if (session.LotteryParticipants.TryGetValue(participant.UserId, out var budget))
-                status.AppendLine($"Lottery: 🎫 *Joined* (personal budget: {budget.Format()})");
+                status.AppendLine($"• Lottery: 🎫 *Joined* (budget: {budget.Format()})");
             else
-                status.AppendLine("Lottery: 🎟️ *Not joined*");
+                status.AppendLine("• Lottery: 🎟️ *Not joined*");
+            
+            if (session.Phase >= SessionPhase.AcceptingPayments)
+            {
+                var tip = participant.Tip.FormatTip();
+                if (participant.Tip > 0)
+                    tip = $"🎩 *{tip}* per payment";
+                status.AppendLine($"• Tip: {tip}");
+            }
         }
         status.AppendLine();
 
@@ -258,6 +266,9 @@ internal static class UserStatusMessage
         {
             status.AppendLine("*Payments:*");
             status.AppendPayments(participant.Payments);
+            status.AppendLine();
+            
+            status.AppendLine($"💶 Total: {participant.FormatTotalFiatAmount()}");
             status.AppendLine();
         }
         
@@ -283,7 +294,10 @@ internal static class UserStatusMessage
         if ((session.Phase <= SessionPhase.AcceptingPayments) && (participant?.JoinedLottery(session) != true))
             buttons.Add(InlineKeyboardButton.WithCallbackData("🎰 Enter Lottery", CallbackActions.JoinLottery));
         if (session.Phase == SessionPhase.AcceptingPayments)
+        {
+            buttons.Add(InlineKeyboardButton.WithCallbackData("🎩 Set tip", CallbackActions.SetTip));
             buttons.Add(InlineKeyboardButton.WithCallbackData("💰 Make Payment", CallbackActions.MakePayment));
+        }
         return (new InlineKeyboardMarkup(buttons));
     }
 }

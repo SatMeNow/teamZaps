@@ -26,7 +26,7 @@ public partial class UpdateHandler
         }
 
         // Check if only admins can start sessions
-        if (!workflowService.Options.AllowNonAdminSessionStart)
+        if (!botBehaviour.AllowNonAdminSessionStart)
         {
             if (!await IsUserAdminAsync(botClient, chatId, userId, cancellationToken))
             {
@@ -52,7 +52,7 @@ public partial class UpdateHandler
     private async Task HandleCloseSessionAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
     {
         // Check permissions
-        if (!workflowService.Options.AllowNonAdminSessionClose)
+        if (!botBehaviour.AllowNonAdminSessionClose)
         {
             if (!await IsUserAdminAsync(botClient, chatId, userId, cancellationToken))
             {
@@ -126,7 +126,7 @@ public partial class UpdateHandler
         // Check permissions
         if (session?.HasPayments == false)
             ; // Skip (No need to check)
-        else if (!workflowService.Options.AllowNonAdminSessionCancel)
+        else if (!botBehaviour.AllowNonAdminSessionCancel)
         {
             if (!await IsUserAdminAsync(botClient, chatId, userId, cancellationToken))
             {
@@ -217,14 +217,14 @@ public partial class UpdateHandler
     {
         Debug.Assert(session.Winners.IsEmpty());
 
-        var totalFiatAmount = session.FiatAmount;
         var lotteryParticipants = session.LotteryParticipants.ToList();
-        var winners = new List<(long UserId, double Amount)>();
-        var remainingAmount = totalFiatAmount;
+        var remainingAmount = ((ITipableAmount)session).TotalFiatAmount;
 
         // Shuffle participants for fair random selection
         var random = new Random();
-        lotteryParticipants = lotteryParticipants.OrderBy(_ => random.Next()).ToList();
+        lotteryParticipants = lotteryParticipants
+            .OrderBy(_ => random.Next())
+            .ToList();
 
         foreach (var (userId, maxBudget) in lotteryParticipants)
         {

@@ -59,11 +59,14 @@ internal static class PaymentMessage
             .ToArray();
             
         var message = new StringBuilder();
-        message.AppendLine("⚡ *Lightning invoice*\n");
-        message.AppendLineIf("Notes: *{0}*", !notes.IsEmpty(), string.Join(", ", notes));
-        message.AppendLine($"Amount: *{payment.FiatAmount.Format()}*");
-        message.AppendLine($"Status: *{status}*\n");
-        message.AppendLine($"`{paymentReq}`\n");
+        message.AppendLine("⚡ *Lightning invoice*");
+        message.AppendLine();
+        message.AppendLineIf("• Notes: *{0}*", !notes.IsEmpty(), string.Join(", ", notes));
+        message.AppendLine($"• Amount: {payment.FormatTotalFiatAmount()}");
+        message.AppendLine($"• Status: *{status}*");
+        message.AppendLine();
+        message.AppendLine($"`{paymentReq}`");
+        message.AppendLine();
         message.AppendLine($"{status.GetIcon()} {status.GetDescription()}");
         
         return message.ToString();

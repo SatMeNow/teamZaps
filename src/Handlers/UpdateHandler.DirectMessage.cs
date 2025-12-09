@@ -75,39 +75,42 @@ public partial class UpdateHandler
     }
     private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, long userId, string displayName, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
     {
+        var participant = session.Participants[userId];
+
         try
         {
-            // Ensure invoice to be payed in Euro only
-            if (tokens.Any(t => t.Currency != BotBehaviorOptions.AcceptedFiatCurrency))
-                throw new NotSupportedException($"Only {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()} payments are supported.");
-
-            // Calculate total amount for this payment
-            var totalPaymentAmount = (double)tokens.Sum(t => t.Amount);
-            // Calculate session amounts
-            var totalFiatAmount = (session.FiatAmount + session.PendingPayments.Values.Sum(p => p.FiatAmount));
-            var remainingFiatAmount = (session.Budget - totalFiatAmount);
-
-            // Check if this payment would exceed the sessions's remaining budget
-            if (totalPaymentAmount > remainingFiatAmount)
-            {
-                throw new InvalidOperationException($"💸 Payment rejected!\n\n" +
-                    $"Your payment of {totalPaymentAmount.Format()} would exceed the session's total budget.\n\n" +
-                    $"Available budget: {remainingFiatAmount.Format()}")
-                    .AddLogLevel(LogLevel.Warning);
-            }
-
             // Process each token and create invoices
             foreach (var tokenGrp in tokens.GroupBy(t => t.Currency))
             {
-                var grpAmount = (double)tokenGrp.Sum(tGrp => tGrp.Amount);
                 var grpCurrency = tokenGrp.Key;
                 var unit = grpCurrency.ToUnitName();
                 var memo = $"{session.ChatTitle}/{displayName} zapped";
 
+                // Ensure invoice to be payed in Euro only
+                if (grpCurrency != BotBehaviorOptions.AcceptedFiatCurrency)
+                    throw new NotSupportedException($"Only {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()} payments are supported.");
+
+                var grpAmount = (double)tokenGrp.Sum(tGrp => tGrp.Amount);
+                var tipAmount = 0.0;
+                if (participant.Tip > 0)
+                    tipAmount = ((grpAmount * participant.Tip!.Value) / 100.0);
+                var invoiceAmount = (grpAmount + tipAmount);
+
+                // Check if this payment would exceed the sessions's remaining budget
+                var totalFiatAmount = (session.FiatAmount + session.PendingPayments.Values
+                    .Cast<ITipableAmount>()
+                    .Sum(p => p.TotalFiatAmount));
+                var remainingFiatAmount = (session.Budget - totalFiatAmount);
+                if (invoiceAmount > remainingFiatAmount)
+                    throw new InvalidOperationException($"💸 Payment rejected!\n\n" +
+                        $"Your payment of {invoiceAmount.Format()} would exceed the session's total budget.\n\n" +
+                        $"Available budget: {remainingFiatAmount.Format()}")
+                        .AddLogLevel(LogLevel.Warning);
+
                 try
                 {
                     // TODO: pass the enum here, not a currency string! 
-                    var invoice = await lnbitsService.CreateInvoiceAsync(grpAmount, unit, memo, cancellationToken).ConfigureAwait(false);
+                    var invoice = await lnbitsService.CreateInvoiceAsync(invoiceAmount, unit, memo, cancellationToken).ConfigureAwait(false);
                     // Store as pending payment
                     var pending = new PendingPayment
                     {
@@ -117,6 +120,7 @@ public partial class UpdateHandler
                         DisplayName = displayName,
                         Tokens = tokenGrp.ToArray(),
                         FiatAmount = grpAmount,
+                        TipAmount = tipAmount,
                         Currency = grpCurrency,
                         CreatedAt = DateTimeOffset.UtcNow
                     };
@@ -126,12 +130,12 @@ public partial class UpdateHandler
                     var message = await PaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
                     pending.MessageId = message.MessageId;
 
-                    logger.LogInformation("Created invoice for user {UserId} in session {ChatId}: {Amount} {Currency}",
-                        userId, session.ChatId, grpAmount, grpCurrency);
+                    logger.LogInformation("Created invoice for user {UserId} in session {ChatId}: {InvoiceAmount} {Currency}",
+                        userId, session.ChatId, invoiceAmount, grpCurrency);
                 }
                 catch (Exception ex)
                 {
-                    throw new Exception($"Failed to create invoice for {grpAmount} {unit}.", ex);
+                    throw new Exception($"Failed to create invoice for {invoiceAmount} {unit}.", ex);
                 }
             }
         }
