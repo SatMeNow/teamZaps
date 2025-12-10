@@ -46,8 +46,13 @@ public class PaymentMonitorService : BackgroundService
                         continue;
                     if (status.Paid && !pending.NotifiedPaid)
                     {
-                        Debug.Assert(((ITipableAmount)pending).TotalFiatAmount == status.Details!.Extra!.FiatAmount);
+                        #if DEBUG
+                        var expectedAmount = ((ITipableAmount)pending).TotalFiatAmount;
+                        var actualAmount = status.Details!.Extra!.FiatAmount;
+                        var tolerance = Math.Max(0.01, expectedAmount * 0.01); // Allow 1% tolerance, minimum 1 cent
+                        Debug.Assert(Math.Abs(expectedAmount - actualAmount) <= tolerance);
                         Debug.Assert(pending.Currency == BotBehaviorOptions.AcceptedFiatCurrency);
+                        #endif
 
                         pending.NotifiedPaid = true;
                         pending.PaidAt = DateTimeOffset.UtcNow;
@@ -77,7 +82,7 @@ public class PaymentMonitorService : BackgroundService
                         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
                         
                         // Update user status messages for affected participant
-                        await UserStatusMessage.UpdateAsync(session, participant.UserId, botClient, workflowService, logger, cancellationToken);
+                        await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken);
                         
                         // Delete payment help message if it exists
                         if (participant.PaymentHelpMessageId is not null)

@@ -53,7 +53,7 @@ public partial class UpdateHandler
                         // This looks like an invoice submission
                         if (text.IsLightningInvoice(out var invoice))
                         {
-                            await ProcessWinnerInvoiceAsync(botClient, session, userId, invoice, cancellationToken);
+                            await ProcessWinnerInvoiceAsync(botClient, session, winnerUser, invoice, cancellationToken);
                             return;
                         }
                     }
@@ -75,10 +75,10 @@ public partial class UpdateHandler
     }
     private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, long userId, string displayName, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
     {
-        var participant = session.Participants[userId];
-
         try
         {
+            var participant = session.Participants[userId];
+
             // Process each token and create invoices
             foreach (var tokenGrp in tokens.GroupBy(t => t.Currency))
             {
@@ -145,18 +145,17 @@ public partial class UpdateHandler
             await botClient.SendException(userId, ex, cancellationToken);
         }
     }
-    private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, long userId, string bolt11, CancellationToken cancellationToken)
+    private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, ParticipantState winnerUser, string bolt11, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Winner invoice submitted by {UserId} for session in chat {ChatId}", userId, session.ChatId);
+        logger.LogInformation("Winner invoice submitted by {UserId} for session in chat {ChatId}", winnerUser.UserId, session.ChatId);
 
-        var winnerUser = session.GetWinnerUser(userId);
-        var winnerInfo = session.Winners[userId];
+        var winnerInfo = session.Winners[winnerUser.UserId];
 
         // Decode and validate the invoice amount
         var decodedInvoice = await lnbitsService.DecodeInvoiceAsync(bolt11, cancellationToken);
         if (decodedInvoice is null)
         {
-            await botClient.SendMessage(userId, "❌ Invalid invoice! Please provide a valid Lightning invoice.", cancellationToken: cancellationToken);
+            await botClient.SendMessage(winnerUser.UserId, "❌ Invalid invoice! Please provide a valid Lightning invoice.", cancellationToken: cancellationToken);
             return;
         }
 
@@ -165,7 +164,7 @@ public partial class UpdateHandler
         var invoiceSats = decodedInvoice.Amount;
         if (invoiceSats != expectedSats)
         {
-            await botClient.SendMessage(userId,
+            await botClient.SendMessage(winnerUser.UserId,
                 $"❌ Invoice amount mismatch!\n\n" +
                 $"Expected: {winnerInfo.SatsAmount.Format()}\n" +
                 $"Your invoice: {invoiceSats.Format()}\n" +
@@ -176,7 +175,7 @@ public partial class UpdateHandler
 
         winnerUser!.SubmittedInvoice = true;
 
-        await botClient.SendMessage(userId,
+        await botClient.SendMessage(winnerUser.UserId,
             "✅ Invoice received!\n⏳ Processing payout...",
             cancellationToken: cancellationToken);
 
@@ -196,15 +195,17 @@ public partial class UpdateHandler
                 await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
                 
                 // Update user status messages for all participants
-                foreach (var participantId in session.Participants.Keys)
-                    await UserStatusMessage.UpdateAsync(session, participantId, botClient, workflowService, logger, cancellationToken);
+                foreach (var participant in session.Participants.Values)
+                {
+                    await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken);
+                }
                 
                 if (session.Phase.IsClosed())
                 {
                     // Clean up session
                     workflowService.TryCloseSession(session.ChatId, false);
 
-                    logger.LogInformation("Payout executed successfully by {UserId} for chat {ChatId}", userId, session.ChatId);
+                    logger.LogInformation("Payout executed successfully by {UserId} for chat {ChatId}", winnerUser.UserId, session.ChatId);
                 }
             }
             else
@@ -216,13 +217,13 @@ public partial class UpdateHandler
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error executing payout by {UserId} for chat {ChatId}", userId, session.ChatId);
+            logger.LogError(ex, "Error executing payout by {UserId} for chat {ChatId}", winnerUser.UserId, session.ChatId);
             await botClient.SendMessage(session.ChatId,
                 "❌ Error during payout. Please contact support.",
                 cancellationToken: cancellationToken);
         }
         
-        await botClient.SendMessage(userId,
+        await botClient.SendMessage(winnerUser.UserId,
             "✅ Payout completed.",
             cancellationToken: cancellationToken);
     }

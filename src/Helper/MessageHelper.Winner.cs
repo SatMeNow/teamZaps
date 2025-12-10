@@ -62,7 +62,7 @@ internal static class WinnerMessage
                 {
                     message.AppendLine("🎉🏆 *WINNER SELECTED!* 🏆🎉\n");
                 
-                    message.AppendLine($"Congratulations {session.WinnerUser}!\n");
+                    message.AppendLine($"Congratulations {session.WinnerUser!.ToMarkdownUserName()}!\n");
                     message.Append("I sent you a message with the *payment summary* and a *lightning invoice*.");
                 }
                 else
@@ -73,7 +73,7 @@ internal static class WinnerMessage
                     foreach (var winner in session.Winners)
                     {
                         var winnerUser = session.Participants[winner.Key];
-                        message.AppendLine($"• {winnerUser}: *{winner.Value.FiatAmount.Format()}*");
+                        message.AppendLine($"• {winnerUser.ToMarkdownUserName()}: *{winner.Value.FiatAmount.Format()}*");
                     }
                     message.AppendLine("\nI sent each winner a message with their *payment summary* and *lightning invoice*.");
                 }
@@ -84,7 +84,7 @@ internal static class WinnerMessage
                 message.AppendLine("🎉🏆 *PAYOUT COMPLETED!* 🏆🎉\n");
                 
                 if (session.Winners.Count == 1)
-                    message.AppendLine($"Congratulations {session.WinnerUser}!\n");
+                    message.AppendLine($"Congratulations {session.WinnerUser!.ToMarkdownUserName()}!\n");
                 else
                     message.AppendLine("All winners have been paid!\n");
                 

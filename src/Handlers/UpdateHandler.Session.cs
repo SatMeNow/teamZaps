@@ -106,15 +106,15 @@ public partial class UpdateHandler
             await WinnerMessage.SendAsync(session, botClient, workflowService, cancellationToken);
 
             logger.LogInformation("Winners selected for chat {ChatId}: {Winners}", chatId, 
-                string.Join(", ", session.Winners.Select(w => $"{w.Key}({w.Value:F2}€)")));
+                string.Join(", ", session.Winners.Select(w => $"{w.Key} ({w.Value.FiatAmount.Format()})")));
         }
         
         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
         
         // Update user status messages for all participants
-        foreach (var participantId in session.Participants.Keys)
+        foreach (var participant in session.Participants.Values)
         {
-            await UserStatusMessage.UpdateAsync(session, participantId, botClient, workflowService, logger, cancellationToken);
+            await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken);
         }
     }
     private async Task HandleCancelSessionAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
@@ -142,9 +142,9 @@ public partial class UpdateHandler
             await SessionStatusMessage.UpdateAsync(session!, botClient, workflowService, logger, cancellationToken);
             
             // Update user status messages for all participants
-            foreach (var participantId in session!.Participants.Keys)
+            foreach (var participant in session!.Participants.Values)
             {
-                await UserStatusMessage.UpdateAsync(session, participantId, botClient, workflowService, logger, cancellationToken);
+                await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken);
             }
         
             await botClient.SendMessage(chatId,
@@ -172,7 +172,8 @@ public partial class UpdateHandler
         if (session.Participants.ContainsKey(userId))
         {
             await botClient.SendMessage(chatId,
-                $"ℹ️ {displayName}, you're already part of this session!",
+                $"ℹ️ {displayName.ToMarkdownString()}, you're already part of this session!",
+                parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
             return;
         }
@@ -183,7 +184,7 @@ public partial class UpdateHandler
         {
             var existingChat = await botClient.GetChat(existingSession.ChatId, cancellationToken);
             await botClient.SendMessage(chatId,
-                $"⚠️ {displayName}, you're already participating in a session in *{existingChat.Title}*!\n\n" +
+                $"⚠️ {displayName.ToMarkdownString()}, you're already participating in a session in *{existingChat.Title}*!\n\n" +
                 "You can only join one session at a time. Please complete your current session first.",
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
@@ -193,12 +194,14 @@ public partial class UpdateHandler
         // Send private status message
         try
         {
-            await UserStatusMessage.SendAsync(session, userId, displayName, botClient, workflowService, logger, cancellationToken);
+            var participant = workflowService.EnsureParticipant(session, userId, displayName);
+            await UserStatusMessage.SendAsync(session, participant, botClient, workflowService, logger, cancellationToken);
         }
         catch (Exception)
         {
             var warningMessage = await botClient.SendMessage(chatId,
-                $"⚠️ {displayName}, please start a private chat with me first by clicking @{(await botClient.GetMe(cancellationToken)).Username}",
+                $"⚠️ {displayName.ToMarkdownString()}, please start a private chat with me first by clicking @{(await botClient.GetMe(cancellationToken)).Username}",
+                parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
                 
             // Mark user as pending session join with message ID for later deletion
@@ -251,12 +254,14 @@ public partial class UpdateHandler
             await botClient.SendMessage(chatId, "⚠️ No active session found.", cancellationToken: cancellationToken);
             return;
         }
+        var participant = session.Participants[userId];
 
         // Check if user already joined
         if (session.LotteryParticipants.ContainsKey(userId))
         {
             await botClient.SendMessage(chatId,
-                $"ℹ️ {displayName}, you've already entered the lottery!",
+                $"ℹ️ {participant.ToMarkdownUserName()}, you've already entered the lottery!",
+                parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
             return;
         }
@@ -266,7 +271,7 @@ public partial class UpdateHandler
         {
             var availBudget = sessionManager.AvailableServerBudget!.Value;
             var minBudget = botBehaviour.BudgetChoices.Min();
-            var message = $"⚠️💸 Sorry {displayName}, your budget of {budget.Format()} would exceed the server-wide limit!\n\n" +
+            var message = $"⚠️💸 Sorry {participant.ToMarkdownUserName()}, your budget of {budget.Format()} would exceed the server-wide limit!\n\n" +
                 $"Available at this time: {availBudget.Format()}\n\n";
             if (minBudget <= availBudget)
                 message += $"Please choose a lower budget and try again.";
@@ -295,7 +300,7 @@ public partial class UpdateHandler
         // Update user status messages for all participants
         foreach (var p in session.Participants.Values)
         {
-            await UserStatusMessage.UpdateAsync(session, p.UserId, botClient, workflowService, logger, cancellationToken);
+            await UserStatusMessage.UpdateAsync(session, p, botClient, workflowService, logger, cancellationToken);
         }
     }
     /// <summary>

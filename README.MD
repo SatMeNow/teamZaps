@@ -111,6 +111,11 @@ Contributions are welcome! Please read the [developer documentation](src/README.
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
+## Docs
+
+- [Telegram Bot API](https://core.telegram.org/bots/api)
+  - [Markdown samples](https://core.telegram.org/bots/api#markdownv2-style)
+
 ---
 
 **Made with ⚡ by Bitcoiners, for Bitcoiners** 🧡

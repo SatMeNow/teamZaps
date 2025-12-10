@@ -10,7 +10,7 @@ public class SessionState : ITipableAmount
 {
     public required long ChatId { get; init; }
     public required string ChatTitle { get; init; }
-    public required string StartedByUser { get; init; }
+    public required ParticipantState StartedByUser { get; init; }
     public required DateTimeOffset StartedAt { get; init; }
 
 
@@ -42,6 +42,9 @@ public class SessionState : ITipableAmount
     public int? WinnerMessageId { get; set; }
 
 
+    public override string ToString() => ChatTitle;
+
+
     public void Close(bool cancel)
     {
         Phase = (cancel ? SessionPhase.Canceled : SessionPhase.Completed);
@@ -70,6 +73,7 @@ public class ParticipantState : ITipableAmount
 
 
     public override string ToString() => DisplayName;
+    public string ToMarkdownUserName() => $"[{DisplayName}](tg://user?id={UserId})";
 
 
     public bool JoinedLottery(SessionState session) => session.LotteryParticipants.ContainsKey(UserId);

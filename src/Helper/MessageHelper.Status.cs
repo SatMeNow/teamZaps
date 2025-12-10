@@ -110,7 +110,7 @@ internal static class SessionStatusMessage
                 var joinedLottery = "";
                 if (session.LotteryParticipants.ContainsKey(participant.Key))
                     joinedLottery = "🎫 ";
-                var p = $"• {joinedLottery}{participant.Value}";
+                var p = $"• {joinedLottery}{participant.Value.ToMarkdownUserName()}";
                 if (participant.Value.HasPayments)
                     p += $": {participant.Value.FormatAmount()}";
                 status.AppendLine(p);
@@ -119,14 +119,14 @@ internal static class SessionStatusMessage
         
         if (session.Phase == SessionPhase.WaitingForLotteryParticipants)
         {
-            status.AppendLine($"\n🎯 *New session* started by {session.StartedByUser}!");
+            status.AppendLine($"\n🎯 *New session* started by {session.StartedByUser.ToMarkdownUserName()}!");
             status.AppendLine("\n⚠️ *Payments are blocked* until someone enters the lottery first!");
         }
 
         if (session.Winners.Count == 1)
         {
             var winner = session.WinnerUser!;
-            status.AppendLine($"\n🏆 Winner: *{winner}* ({session.Winners[winner.UserId].FiatAmount.Format()})");
+            status.AppendLine($"\n🏆 Winner: {winner.ToMarkdownUserName()} ({session.Winners[winner.UserId].FiatAmount.Format()})");
         }
         else if (session.Winners.Count > 1)
         {
@@ -135,7 +135,7 @@ internal static class SessionStatusMessage
             {
                 var winner = session.Participants[winnerEntry.Key];
                 var invoiceState = (winner.SubmittedInvoice ? "✅" : "⏳");
-                status.AppendLine($"• {invoiceState} *{winner}* ({winnerEntry.Value.FiatAmount.Format()})");
+                status.AppendLine($"• {invoiceState} {winner.ToMarkdownUserName()} ({winnerEntry.Value.FiatAmount.Format()})");
             }
         }
 
@@ -166,32 +166,30 @@ internal static class SessionStatusMessage
 /// </summary>
 internal static class UserStatusMessage
 {
-    public static async Task SendAsync(SessionState session, long userId, string displayName, ITelegramBotClient botClient, SessionWorkflowService workflowService, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
+    public static async Task SendAsync(SessionState session, ParticipantState participant, ITelegramBotClient botClient, SessionWorkflowService workflowService, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
     {
         try
         {
-            var chat = await botClient.GetChat(session.ChatId, cancellationToken);
-            var message = await botClient.SendMessage(userId,
-                text: Build(session, null, chat.Title ?? "Unknown Chat"),
+            var message = await botClient.SendMessage(participant.UserId,
+                text: Build(session),
                 parseMode: ParseMode.Markdown,
                 replyMarkup: BuildKeyboard(session),
                 cancellationToken: cancellationToken);
 
             await botClient.PinChatMessage(message.Chat.Id, message.MessageId, cancellationToken: cancellationToken);
                 
-            // Add user as participant and store message ID
-            var participant = workflowService.EnsureParticipant(session, userId, displayName);
+            // Store message ID
             participant.StatusMessageId = message.MessageId;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to send private status message to user {UserId}", userId);
+            logger.LogWarning(ex, "Failed to send private status message to user {UserId}", participant.UserId);
             throw; // Re-throw to allow caller to handle fallback
         }
     }
-    public static async Task UpdateAsync(SessionState session, long userId, ITelegramBotClient botClient, SessionWorkflowService workflowService, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
+    public static async Task UpdateAsync(SessionState session, ParticipantState participant, ITelegramBotClient botClient, SessionWorkflowService workflowService, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
     {
-        if (!session.Participants.TryGetValue(userId, out var participant) || participant.StatusMessageId is null)
+        if (participant.StatusMessageId is null)
             return;
         
         var messageId = participant.StatusMessageId.Value;
@@ -200,9 +198,9 @@ internal static class UserStatusMessage
         {
             var chat = await botClient.GetChat(session.ChatId, cancellationToken);
             await botClient.EditMessageText(
-                chatId: userId,
+                chatId: participant.UserId,
                 messageId: messageId,
-                text: Build(session, participant, chat.Title ?? "Unknown Chat"),
+                text: Build(session, participant),
                 parseMode: ParseMode.Markdown,
                 replyMarkup: BuildKeyboard(session, participant),
                 cancellationToken: cancellationToken);
@@ -211,8 +209,8 @@ internal static class UserStatusMessage
             (ex.Message.Contains("message to edit not found") || ex.Message.Contains("message can't be edited")))
         {
             // Message was deleted, recreate it
-            logger.LogInformation("User status message deleted for user {UserId}, recreating...", userId);
-            await RecreateAsync(session, userId, participant.DisplayName, botClient, workflowService, logger, cancellationToken);
+            logger.LogInformation("User status message deleted for user {UserId}, recreating...", participant.UserId);
+            await RecreateAsync(session, participant, botClient, workflowService, logger, cancellationToken);
         }
         catch (ApiRequestException ex) when (ex.Message.Contains("message is not modified"))
         {
@@ -220,29 +218,28 @@ internal static class UserStatusMessage
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to update user status message for user {UserId}", userId);
+            logger.LogWarning(ex, "Failed to update user status message for user {UserId}", participant.UserId);
         }
     }
-    private static async Task RecreateAsync(SessionState session, long userId, string displayName, ITelegramBotClient botClient, SessionWorkflowService workflowService, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
+    private static async Task RecreateAsync(SessionState session, ParticipantState participant, ITelegramBotClient botClient, SessionWorkflowService workflowService, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
     {
         try
         {
-            await SendAsync(session, userId, displayName, botClient, workflowService, logger, cancellationToken);
+            await SendAsync(session, participant, botClient, workflowService, logger, cancellationToken);
 
-            logger.LogInformation("User status message recreated for user {UserId}", userId);
+            logger.LogInformation("User status message recreated for user {UserId}", participant.UserId);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to recreate user status message for user {UserId}", userId);
-            // Clear invalid message ID if participant exists
-            if (session.Participants.TryGetValue(userId, out var participant))
-                participant.StatusMessageId = null;
+            logger.LogError(ex, "Failed to recreate user status message for user {UserId}", participant.UserId);
+            // Clear invalid message ID
+            participant.StatusMessageId = null;
         }
     }
-    private static string Build(SessionState session, ParticipantState? participant, string chatTitle)
+    private static string Build(SessionState session, ParticipantState? participant = null)
     {
         var status = new StringBuilder();
-        status.AppendLine($"🎉 Welcome to the *{chatTitle}* Team Zaps session!\n");
+        status.AppendLine($"🎉 Welcome to the *{session}* Team Zaps session!\n");
 
         status.AppendSessionState(session);
         if (participant is not null)

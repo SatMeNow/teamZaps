@@ -183,6 +183,20 @@ namespace teamZaps.Utils
                 throw new NotImplementedException($"Failed to obtain key due to conditional missmatch!");
         }
     }
+    internal static partial class ExtString
+    {
+        #region Markdown
+        /// <remarks><see href="https://core.telegram.org/bots/api#markdownv2-style">MarkdownV2 Style</see></remarks>
+        private static readonly char[] EscapedMarkdownCharacters = [ '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' ];
+        public static string? ToMarkdownString(this object source)
+        {
+            var result = source.ToString();
+            foreach (var esc in EscapedMarkdownCharacters)
+                result = result?.Replace(esc.ToString(), ("\\" + esc));
+            return (result);
+        }
+        #endregion
+    }
     internal static partial class ExtStringBuilder
     {
         public static StringBuilder AppendLineIf(this StringBuilder source, string format, bool condition, string trueValue, string? falseValue = null)

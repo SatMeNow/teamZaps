@@ -272,12 +272,12 @@ public partial class UpdateHandler : IUpdateHandler
             await botClient.SendMessage(chatId, "⚠️ No active session found.", cancellationToken: cancellationToken);
             return;
         }
+        var participant = session.Participants[userId];
         if (session.LotteryParticipants.ContainsKey(userId))
         {
-            await botClient.SendMessage(chatId, $"ℹ️ {displayName}, you've already entered the lottery!", cancellationToken: cancellationToken);
+            await botClient.SendMessage(chatId, $"ℹ️ {participant.ToMarkdownUserName()}, you've already entered the lottery!", parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
             return;
         }
-        var participant = session.Participants[userId];
 
         if (await DeleteMessageAsync(botClient, chatId, participant.BudgetSelectionMessageId, cancellationToken))
             participant.BudgetSelectionMessageId = null;
@@ -377,7 +377,7 @@ public partial class UpdateHandler : IUpdateHandler
         var session = workflowService.GetSessionByUser(userId);
         if (session is null)
         {
-            await botClient.SendMessage(chatId, $"⚠️ No active session found for user {displayName}.", cancellationToken: cancellationToken);
+            await botClient.SendMessage(chatId, $"⚠️ No active session found for user {displayName.ToMarkdownString()}.", parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
             return;
         }
         var participant = session.Participants[userId];
@@ -389,7 +389,7 @@ public partial class UpdateHandler : IUpdateHandler
         // Set the user's tip
         participant.Tip = (tip == 0) ? null : (byte)tip;
         // Update the user's status message to reflect the new tip
-        await UserStatusMessage.UpdateAsync(session, userId, botClient, workflowService, logger, cancellationToken);
+        await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken);
 
     }
     #endregion

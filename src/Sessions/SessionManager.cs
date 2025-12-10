@@ -21,11 +21,17 @@ public class SessionManager
 
     public bool TryCreateSession(ChatFullInfo chat, long userId, string userDisplayName, out SessionState session)
     {
+        var startedByUser = new ParticipantState
+        {
+            UserId = userId,
+            DisplayName = userDisplayName
+        };
+        
         session = new SessionState
         {
             ChatId = chat.Id,
             ChatTitle = (chat.Title ?? ""),
-            StartedByUser = userDisplayName,
+            StartedByUser = startedByUser,
             StartedAt = DateTimeOffset.UtcNow,
             Phase = SessionPhase.WaitingForLotteryParticipants
         };
