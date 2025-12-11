@@ -9,6 +9,15 @@ namespace teamZaps.Utils
     #region Utilities
     internal static partial class UtilAssembly
     {
+        public static Version? GetVersion(Type type) => GetVersion(type.Assembly);
+        public static Version? GetVersion(Assembly? assembly = null) => GetInfo(assembly).Version;
+        public static AssemblyName GetInfo(Assembly? assembly = null)
+        {
+            if (assembly is null)
+                assembly = Assembly.GetExecutingAssembly();
+            return (assembly!.GetName());
+        }
+
         /// <summary>
         /// Determines defined types of the specified type.
         /// </summary>
@@ -208,6 +217,7 @@ namespace teamZaps.Utils
             
             return (source);
         }
+        public static StringBuilder AppendLineIfNotNull(this StringBuilder source, string format, string? value, string? fallbackValue = null) => AppendLineIf(source, format, (value is not null), value!, fallbackValue);
     }
     internal static partial class ExtRegEx
     {

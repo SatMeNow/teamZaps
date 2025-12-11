@@ -326,6 +326,86 @@ public partial class UpdateHandler
 
         await SessionStatusMessage.SendAsync(session, botClient, workflowService, cancellationToken);
     }
+    /// <summary>
+    /// Shows diagnostic information about the current session and system state.
+    /// </summary>
+    /// <remarks>
+    /// Useful for debugging and monitoring session health.
+    /// </remarks>
+    private async Task HandleDiagnosisAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
+    {
+       RESUME;
+        // - diese funktion soll eigentlich in `HandleDirectMessageAsync()` oder so aufgerufen werden
+
+
+
+        // Check if user is a root user
+        if (!telegramSettings.RootUsers.Contains(userId))
+            return;
+
+        // Check if command is used in private chat
+        var chat = await botClient.GetChat(chatId, cancellationToken);
+        if (chat.Type != ChatType.Private)
+        {
+            await botClient.SendMessage(chatId,
+                "❌ This command is only available in private chat with the bot.",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        var diagnostics = new StringBuilder();
+        diagnostics.AppendLine("🔍 *DIAGNOSTIC INFORMATION*");
+        
+        // Environment Information
+        diagnostics.AppendLine("\n🖥️ *Environment:*");
+        diagnostics.AppendLine($"• OS: *{Environment.OSVersion}*");
+        diagnostics.AppendLine($"• .NET: *{Environment.Version}*");
+        diagnostics.AppendLine($"• Host configuration: *{hostEnvironment.EnvironmentName}*");
+        #if !DEBUG
+        diagnostics.AppendLine($"• Timezone: *{TimeZoneInfo.Local.DisplayName}*");
+        diagnostics.AppendLine($"• Machine: *{Environment.MachineName}*");
+        diagnostics.AppendLine($"• User: *{Environment.UserName}*");
+        #endif
+
+        // Application Information
+        var asmName = UtilAssembly.GetInfo();
+        diagnostics.AppendLine("\n🚀 *Application:*");
+        diagnostics.AppendLine($"• Version: *v{UtilAssembly.GetVersion()}*");
+        diagnostics.AppendLine($"• Process ID: *{Environment.ProcessId}*");
+        diagnostics.AppendLine($"• Is 64bit process: *{Environment.Is64BitProcess}*");
+        diagnostics.AppendLine($"• Is privileged process: *{Environment.IsPrivilegedProcess}*");
+
+        // System Information
+        diagnostics.AppendLine("\n⚙️ *System status:*");
+        diagnostics.AppendLine($"• CPU usage: *{Environment.CpuUsage.TotalTime}*");
+        diagnostics.AppendLine($"• Memory usage: *{GC.GetTotalMemory(false) / 1024 / 1024:N0} MB*");
+        diagnostics.AppendLine($"• Uptime: *{DateTimeOffset.UtcNow - Process.GetCurrentProcess().StartTime:dd\\.hh\\:mm\\:ss}*");
+        
+        // Bot Information
+        diagnostics.AppendLine("\n🤖 *Bot status:*");
+        diagnostics.AppendLine($"• Active sessions: *{sessionManager.ActiveSessions.Count()}*");
+
+        if (botBehaviour.MaxBudget is null)
+            diagnostics.AppendLine("• Server budget: *Unlimited*");
+        else
+        {
+            var consumed = sessionManager.ConsumedServerBudget;
+            var available = sessionManager.AvailableServerBudget ?? 0;
+            diagnostics.AppendLine($"• Server budget: *{consumed.Format()}* / *{botBehaviour.MaxBudget!.Value.Format()}*");
+            diagnostics.AppendLine($"• Available budget: *{available.Format()}*");
+        }
+        diagnostics.AppendLineIfNotNull("• Total locked amount: *{0}*", sessionManager.FormatAmount(), "💤 none");
+
+        // Lightning backend Information
+        diagnostics.AppendLine("\n⚡ *Lightning backend status:*");
+        diagnostics.AppendLine($"• Node type: *{lnbitsService.ServiceType}*");
+        diagnostics.AppendLine($"• Sent requests: *{lnbitsService.SentRequests}*");
+
+        await botClient.SendMessage(chatId,
+            diagnostics.ToString(),
+            parseMode: ParseMode.Markdown,
+            cancellationToken: cancellationToken);
+    }
 
 
     #region Helper

@@ -73,13 +73,14 @@ The bot accepts various payment formats:
 
 ## 🔧 Bot Commands
 
-| Command | Description | Who Can Use |
+| Command | Description | Who can Use |
 |---------|-------------|-------------|
 | `/startsession` | Start a new payment session | Admins (configurable) |
 | `/closesession` | Close payments and draw winner | Admins (configurable) |
 | `/cancelsession` | Cancel the current session | Admins |
 | `/status` | View current session status | Anyone |
 | `/help` | Show help information | Anyone |
+| `/diag` | Show diagnostics | Root users |
 
 ## 🔒 Privacy & Security
 

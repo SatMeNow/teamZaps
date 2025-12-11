@@ -21,6 +21,17 @@ public class LnbitsService
     }
 
 
+    #region Properties.Management
+    public string ServiceType => "LNBits";
+    #endregion
+    #region Properties
+    /// <summary>
+    /// Total number of requests sent to the LNbits server.
+    /// </summary>
+    public ulong SentRequests { get; private set; }
+    #endregion
+
+
     public async Task<LnbitsWalletDetails?> GetWalletDetailsAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -130,6 +141,7 @@ public class LnbitsService
                 reqMsg.Content = new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, "application/json");
         }
         var sendRsp = await httpClient.SendAsync(reqMsg, cancellationToken).ConfigureAwait(false);
+        SentRequests++;
         sendRsp.EnsureSuccessStatusCode();
 
         var readRsp = await sendRsp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);

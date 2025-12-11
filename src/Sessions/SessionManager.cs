@@ -4,7 +4,7 @@ using teamZaps.Configuration;
 namespace teamZaps.Sessions;
 
 
-public class SessionManager
+public class SessionManager : IFormattableAmount
 {
     public SessionManager(ILogger<SessionManager> logger, IOptions<BotBehaviorOptions> botBehaviour)
     {
@@ -13,12 +13,22 @@ public class SessionManager
     }
 
 
+    #region Properties.Management
+    public IEnumerable<SessionState> ActiveSessions => sessions.Values;
+    #endregion
+    #region Properties
+    public double? AvailableServerBudget => (botBehaviour.MaxBudget - ConsumedServerBudget);
     public double ConsumedServerBudget => ActiveSessions
         .SelectMany(s => s.LotteryParticipants.Values)
         .Sum();
-    public double? AvailableServerBudget => (botBehaviour.MaxBudget - ConsumedServerBudget);
+    long IFormattableAmount.SatsAmount => TotalLockedSats;
+    public long TotalLockedSats => ActiveSessions.Sum(p => p.SatsAmount);
+    double IFormattableAmount.FiatAmount => TotalLockedFiat;
+    public double TotalLockedFiat => ActiveSessions.Sum(p => p.FiatAmount);
+    #endregion
 
 
+    #region Management
     public bool TryCreateSession(ChatFullInfo chat, long userId, string userDisplayName, out SessionState session)
     {
         var startedByUser = new ParticipantState
@@ -83,16 +93,7 @@ public class SessionManager
             Tip = botBehaviour.TipChoices.Min() // Default to the lowest tip choice
         });
     }
-
-    public IReadOnlyCollection<SessionState> ActiveSessions => sessions.Values.ToList().AsReadOnly();
-
-    public SessionSummary? GetLastSummary(long chatId)
-    {
-        if (lastSummaries.TryGetValue(chatId, out var summary))
-            return summary;
-
-        return null;
-    }
+    #endregion
     
 
     private readonly ConcurrentDictionary<long, SessionState> sessions = new();

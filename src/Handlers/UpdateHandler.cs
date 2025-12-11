@@ -9,11 +9,13 @@ namespace teamZaps.Handlers;
 
 public partial class UpdateHandler : IUpdateHandler
 {
-    public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, LnbitsService lnbitsService, SessionManager sessionManager, SessionWorkflowService workflowService)
+    public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, LnbitsService lnbitsService, SessionManager sessionManager, SessionWorkflowService workflowService)
     {
         this.logger = logger;
         this.debugSettings = debugSettings.Value;
         this.botBehaviour = botBehaviour.Value;
+        this.telegramSettings = telegramSettings.Value;
+        this.hostEnvironment = hostEnvironment;
         this.lnbitsService = lnbitsService;
         this.sessionManager = sessionManager;
         this.workflowService = workflowService;
@@ -157,6 +159,10 @@ public partial class UpdateHandler : IUpdateHandler
 
                 case "/status":
                     await HandleStatusAsync(botClient, chatId, cancellationToken);
+                    break;
+
+                case "/diag":
+                    await HandleDiagnosisAsync(botClient, chatId, userId, cancellationToken);
                     break;
 
                 default:
@@ -398,6 +404,8 @@ public partial class UpdateHandler : IUpdateHandler
     private readonly ILogger<UpdateHandler> logger;
     private readonly DebugSettings debugSettings;
     private readonly BotBehaviorOptions botBehaviour;
+    private readonly TelegramSettings telegramSettings;
+    private readonly IHostEnvironment hostEnvironment;
     private readonly LnbitsService lnbitsService;
     private readonly SessionManager sessionManager;
     private readonly SessionWorkflowService workflowService;

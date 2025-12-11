@@ -59,7 +59,7 @@ internal static class SessionSummaryMessage
         summary.AppendLine("*Payments:*");
         foreach (var participant in session.Participants.Values)
         {
-            summary.AppendLine($"*{participant}:*");
+            summary.AppendLine($"{participant.ToMarkdownUserName()}:");
             summary.AppendPayments(participant.Payments);
         }
         summary.AppendLine();
