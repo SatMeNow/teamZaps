@@ -4,22 +4,44 @@ using teamZaps.Configuration;
 using teamZaps.Services;
 using teamZaps.Sessions;
 using teamZaps.Utils;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace teamZaps.Handlers;
 
 public partial class UpdateHandler
 {
-    private async Task HandleStartSessionAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
+    private async Task<bool> HandleGroupCommandAsync(ITelegramBotClient botClient, CommandMessage command, CancellationToken cancellationToken)
     {
-        var chatId = message.Chat.Id;
-        var userId = message.From!.Id;
-        var displayName = message.From.GetDisplayName();
+        switch (command.Value)
+        {
+            case "/startsession":
+                await HandleStartSessionAsync(botClient, command, cancellationToken);
+                break;
+            case "/closesession":
+                await HandleCloseSessionAsync(botClient, command.ChatId, command.UserId, cancellationToken);
+                break;
+            case "/cancelsession":
+                await HandleCancelSessionAsync(botClient, command.ChatId, command.UserId, cancellationToken);
+                break;
+
+            case "/status":
+                await HandleStatusAsync(botClient, command.ChatId, cancellationToken);
+                break;
+
+            default: return (false);
+        }
+        return (true);
+    }
+
+    private async Task HandleStartSessionAsync(ITelegramBotClient botClient, CommandMessage command, CancellationToken cancellationToken)
+    {
+        var displayName = command.Source.From!.GetDisplayName();
 
         // Check if request was done for a group chat:
-        var chat = await botClient.GetChat(chatId);
+        var chat = await botClient.GetChat(command.ChatId);
         if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
         {
-            await botClient.SendMessage(chatId, 
+            await botClient.SendMessage(command.ChatId, 
                 "❌ Sessions can only be started in group chats.",
                 cancellationToken: cancellationToken);
             return;
@@ -28,23 +50,23 @@ public partial class UpdateHandler
         // Check if only admins can start sessions
         if (!botBehaviour.AllowNonAdminSessionStart)
         {
-            if (!await IsUserAdminAsync(botClient, chatId, userId, cancellationToken))
+            if (!await IsUserAdminAsync(botClient, command.ChatId, command.UserId, cancellationToken))
             {
-                await botClient.SendMessage(chatId, 
+                await botClient.SendMessage(command.ChatId, 
                     "❌ Only group administrators can start a session.", 
                     cancellationToken: cancellationToken);
                 return;
             }
         }
 
-        if (workflowService.TryStartSession(chat, userId, displayName, out var session))
+        if (workflowService.TryStartSession(chat, command.UserId, displayName, out var session))
         {
             await SessionStatusMessage.SendAsync(session, botClient, workflowService, cancellationToken);
-            logger.LogInformation("Session started in chat {ChatId} by user {UserId}", chatId, userId);
+            logger.LogInformation("Session started in chat {ChatId} by user {UserId}", command.ChatId, command.UserId);
         }
         else
         {
-            await botClient.SendMessage(chatId,
+            await botClient.SendMessage(command.ChatId,
                 "⚠️ A session is already active in this group!",
                 cancellationToken: cancellationToken);
         }
@@ -216,36 +238,6 @@ public partial class UpdateHandler
         logger.LogInformation("User {UserId} joined session in chat {ChatId}", userId, chatId);
     }
 
-    private int SelectWinners(SessionState session)
-    {
-        Debug.Assert(session.Winners.IsEmpty());
-
-        var remainingAmount = ((ITipableAmount)session).TotalFiatAmount;
-
-        // Shuffle participants for fair random selection
-        var random = new Random();
-        var lotteryParticipants = session.LotteryParticipants
-            .OrderBy(_ => random.Next())
-            .ToArray();
-
-        foreach (var participant in lotteryParticipants)
-        {
-            if (remainingAmount <= 0)
-                break;
-
-            var userId = participant.Key;
-            var budget = participant.Value;
-            var amountToPay = Math.Min(budget, remainingAmount);
-            var satsAmount = CalculateWinnerSats(session, amountToPay);
-            
-            session.Winners[userId] = new WinnerInfo(amountToPay, satsAmount);
-
-            remainingAmount -= amountToPay;
-        }
-
-        return (session.Winners.Count);
-    }
-
     private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, double budget, CancellationToken cancellationToken)
     {
         var session = workflowService.GetSessionByUser(userId);
@@ -303,6 +295,104 @@ public partial class UpdateHandler
             await UserStatusMessage.UpdateAsync(session, p, botClient, workflowService, logger, cancellationToken);
         }
     }
+    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, CancellationToken cancellationToken)
+    {
+        var session = workflowService.GetSessionByUser(userId);
+        if (session is null)
+        {
+            await botClient.SendMessage(chatId, "⚠️ No active session found.", cancellationToken: cancellationToken);
+            return;
+        }
+        var participant = session.Participants[userId];
+        if (session.LotteryParticipants.ContainsKey(userId))
+        {
+            await botClient.SendMessage(chatId, $"ℹ️ {participant.ToMarkdownUserName()}, you've already entered the lottery!", parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
+            return;
+        }
+
+        if (await DeleteMessageAsync(botClient, chatId, participant.BudgetSelectionMessageId, cancellationToken))
+            participant.BudgetSelectionMessageId = null;
+
+        var keyboard = botBehaviour.BudgetChoices
+            .Select(c => InlineKeyboardButton.WithCallbackData($"{c}{BotBehaviorOptions.AcceptedFiatCurrency.ToSymbol()}", $"{CallbackActions.SelectBudget}_{c}"))
+            .Chunk(4)
+            .ToArray();
+
+        var budgetMessage = await botClient.SendMessage(chatId, 
+            "🎰 *Enter Lottery* 🎰\n\n" +
+            "How much are you willing to pay in fiat at maximum?\n\n" +
+            "💡 *Multiple winners possible!* If total payments exceed your budget, " +
+            "we'll select multiple winners to share the cost.", 
+            parseMode: ParseMode.Markdown,
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken);
+
+        participant.BudgetSelectionMessageId = budgetMessage.MessageId;
+    }
+    private async Task HandleJoinLotteryWithBudgetAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, double budget, CancellationToken cancellationToken)
+    {
+        if (workflowService.TryGetSessionByUser(userId, out var session))
+        {
+            var participant = session.Participants[userId];
+
+            if (await DeleteMessageAsync(botClient, chatId, participant.BudgetSelectionMessageId, cancellationToken))
+                participant.BudgetSelectionMessageId = null;
+                
+            // Now process the lottery join
+            await HandleJoinLotteryAsync(botClient, chatId, userId, displayName, budget, cancellationToken);
+        }
+    }
+
+    private async Task HandleTipSelectionAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, CancellationToken cancellationToken)
+    {
+        var session = workflowService.GetSessionByUser(userId);
+        if (session is null)
+        {
+            await botClient.SendMessage(chatId, "⚠️ No active session found.", cancellationToken: cancellationToken);
+            return;
+        }
+        
+        var keyboard = new InlineKeyboardMarkup(botBehaviour.TipChoices
+            .Prepend((byte)0)
+            .Select(t => InlineKeyboardButton.WithCallbackData(t.FormatTip(), $"{CallbackActions.SelectTip}_{t}"))
+            .Chunk(4)
+            .ToArray());
+
+        var tipMessage = await botClient.SendMessage(chatId, 
+            "🎩 *Setup Tip*\n\n" +
+            "Choose your *tip percentage* to be added to each payment:\n\n",
+            //"💭 Tips help support Lightning Network infrastructure and development!"
+            parseMode: ParseMode.Markdown,
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken);
+
+        // Store the tip selection message ID for cleanup
+        if (session.Participants.TryGetValue(userId, out var participant))
+        {
+            participant.TipSelectionMessageId = tipMessage.MessageId;
+        }
+    }
+
+    private async Task HandleSetTipAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, int tip, CancellationToken cancellationToken)
+    {
+        var session = workflowService.GetSessionByUser(userId);
+        if (session is null)
+        {
+            await botClient.SendMessage(chatId, $"⚠️ No active session found for user {displayName.ToMarkdownString()}.", parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
+            return;
+        }
+        var participant = session.Participants[userId];
+        
+        // Delete the tip selection message
+        if (await DeleteMessageAsync(botClient, chatId, participant.TipSelectionMessageId, cancellationToken))
+            participant.TipSelectionMessageId = null;
+
+        // Set the user's tip
+        participant.Tip = (tip == 0) ? null : (byte)tip;
+        // Update the user's status message to reflect the new tip
+        await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken);
+    }
+
     /// <summary>
     /// Views the current session status.
     /// </summary>
@@ -326,89 +416,39 @@ public partial class UpdateHandler
 
         await SessionStatusMessage.SendAsync(session, botClient, workflowService, cancellationToken);
     }
-    /// <summary>
-    /// Shows diagnostic information about the current session and system state.
-    /// </summary>
-    /// <remarks>
-    /// Useful for debugging and monitoring session health.
-    /// </remarks>
-    private async Task HandleDiagnosisAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
-    {
-       RESUME;
-        // - diese funktion soll eigentlich in `HandleDirectMessageAsync()` oder so aufgerufen werden
-
-
-
-        // Check if user is a root user
-        if (!telegramSettings.RootUsers.Contains(userId))
-            return;
-
-        // Check if command is used in private chat
-        var chat = await botClient.GetChat(chatId, cancellationToken);
-        if (chat.Type != ChatType.Private)
-        {
-            await botClient.SendMessage(chatId,
-                "❌ This command is only available in private chat with the bot.",
-                cancellationToken: cancellationToken);
-            return;
-        }
-
-        var diagnostics = new StringBuilder();
-        diagnostics.AppendLine("🔍 *DIAGNOSTIC INFORMATION*");
-        
-        // Environment Information
-        diagnostics.AppendLine("\n🖥️ *Environment:*");
-        diagnostics.AppendLine($"• OS: *{Environment.OSVersion}*");
-        diagnostics.AppendLine($"• .NET: *{Environment.Version}*");
-        diagnostics.AppendLine($"• Host configuration: *{hostEnvironment.EnvironmentName}*");
-        #if !DEBUG
-        diagnostics.AppendLine($"• Timezone: *{TimeZoneInfo.Local.DisplayName}*");
-        diagnostics.AppendLine($"• Machine: *{Environment.MachineName}*");
-        diagnostics.AppendLine($"• User: *{Environment.UserName}*");
-        #endif
-
-        // Application Information
-        var asmName = UtilAssembly.GetInfo();
-        diagnostics.AppendLine("\n🚀 *Application:*");
-        diagnostics.AppendLine($"• Version: *v{UtilAssembly.GetVersion()}*");
-        diagnostics.AppendLine($"• Process ID: *{Environment.ProcessId}*");
-        diagnostics.AppendLine($"• Is 64bit process: *{Environment.Is64BitProcess}*");
-        diagnostics.AppendLine($"• Is privileged process: *{Environment.IsPrivilegedProcess}*");
-
-        // System Information
-        diagnostics.AppendLine("\n⚙️ *System status:*");
-        diagnostics.AppendLine($"• CPU usage: *{Environment.CpuUsage.TotalTime}*");
-        diagnostics.AppendLine($"• Memory usage: *{GC.GetTotalMemory(false) / 1024 / 1024:N0} MB*");
-        diagnostics.AppendLine($"• Uptime: *{DateTimeOffset.UtcNow - Process.GetCurrentProcess().StartTime:dd\\.hh\\:mm\\:ss}*");
-        
-        // Bot Information
-        diagnostics.AppendLine("\n🤖 *Bot status:*");
-        diagnostics.AppendLine($"• Active sessions: *{sessionManager.ActiveSessions.Count()}*");
-
-        if (botBehaviour.MaxBudget is null)
-            diagnostics.AppendLine("• Server budget: *Unlimited*");
-        else
-        {
-            var consumed = sessionManager.ConsumedServerBudget;
-            var available = sessionManager.AvailableServerBudget ?? 0;
-            diagnostics.AppendLine($"• Server budget: *{consumed.Format()}* / *{botBehaviour.MaxBudget!.Value.Format()}*");
-            diagnostics.AppendLine($"• Available budget: *{available.Format()}*");
-        }
-        diagnostics.AppendLineIfNotNull("• Total locked amount: *{0}*", sessionManager.FormatAmount(), "💤 none");
-
-        // Lightning backend Information
-        diagnostics.AppendLine("\n⚡ *Lightning backend status:*");
-        diagnostics.AppendLine($"• Node type: *{lnbitsService.ServiceType}*");
-        diagnostics.AppendLine($"• Sent requests: *{lnbitsService.SentRequests}*");
-
-        await botClient.SendMessage(chatId,
-            diagnostics.ToString(),
-            parseMode: ParseMode.Markdown,
-            cancellationToken: cancellationToken);
-    }
 
 
     #region Helper
+    private int SelectWinners(SessionState session)
+    {
+        Debug.Assert(session.Winners.IsEmpty());
+
+        var remainingAmount = ((ITipableAmount)session).TotalFiatAmount;
+
+        // Shuffle participants for fair random selection
+        var random = new Random();
+        var lotteryParticipants = session.LotteryParticipants
+            .OrderBy(_ => random.Next())
+            .ToArray();
+
+        foreach (var participant in lotteryParticipants)
+        {
+            if (remainingAmount <= 0)
+                break;
+
+            var userId = participant.Key;
+            var budget = participant.Value;
+            var amountToPay = Math.Min(budget, remainingAmount);
+            var satsAmount = CalculateWinnerSats(session, amountToPay);
+            
+            session.Winners[userId] = new WinnerInfo(amountToPay, satsAmount);
+
+            remainingAmount -= amountToPay;
+        }
+
+        return (session.Winners.Count);
+    }
+
     private bool CheckServerBudgetLimit(double requestedBudget)
     {
         if (botBehaviour.MaxBudget is null)

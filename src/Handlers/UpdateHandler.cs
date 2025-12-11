@@ -59,126 +59,52 @@ public partial class UpdateHandler : IUpdateHandler
         return Task.CompletedTask;
     }
 
-    private async Task HandleMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
+    private async Task<bool> HandleMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
     {
         var chatId = message.Chat.Id;
         logger.LogInformation("Received message from {ChatId}: {MessageText}", chatId, message.Text);
 
-        // Only process group messages for session functionality
-        if (message.Chat.Type != ChatType.Private && message.Chat.Type != ChatType.Channel)
-        {
-            if (message.IsCommand())
-            {
-                await HandleCommandAsync(botClient, message, cancellationToken);
-            }
-        }
-        else if (message.IsCommand())
-        {
-            await HandleCommandAsync(botClient, message, cancellationToken);
-        }
-        else
-        {
-            // Check if this is an invoice submission in DM
-            await HandleDirectMessageAsync(botClient, message, cancellationToken);
-        }
-    }
-    private async Task HandleCommandAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
-    {
-        var chatId = message.Chat.Id;
-        var userId = message.From!.Id;
-        message.GetCommand(out var cmd, out _);
-        
+        var res = true;
+        var isCmd = message.TryGetCommand(out var cmd);
         try
         {
-            switch (cmd)
+            switch (message.Chat.Type)
             {
-                case "/start":
-                    await botClient.SendMessage(chatId, 
-                        "Welcome to Team Zaps! 🎯\n\n" +
-                        "I help groups split bills using Bitcoin Lightning!\n\n" +
-                        "*How it works:*\n" +
-                        "1️⃣ Someone starts a session in your group\n" +
-                        "2️⃣ Join the session using the _Join_ button\n" +
-                        "3️⃣ Send me payments as direct message\n" +
-                        "4️⃣ One random participant wins the pot!\n\n" +
-                        "Use `/help` for detailed instructions.", 
-                        parseMode: ParseMode.Markdown,
-                        cancellationToken: cancellationToken);
-
-                    // Check if user has a pending session join
-                    foreach (var session in sessionManager.ActiveSessions)
-                    {
-                        if (session.PendingJoins.TryRemove(userId, out var joinInfo))
-                        {
-                            // Delete the warning message that told user to start bot chat
-                            try
-                            {
-                                await botClient.DeleteMessage(joinInfo.ChatId, joinInfo.MessageId, cancellationToken);
-                            }
-                            catch (Exception ex)
-                            {
-                                logger.LogWarning(ex, "Failed to delete pending join message {MessageId} in chat {ChatId}", joinInfo.MessageId, joinInfo.ChatId);
-                            }
-                            
-                            await HandleJoinSessionAsync(botClient, joinInfo.ChatId, userId, message.From.GetDisplayName(), cancellationToken);
-                            break;
-                        }
-                    }
-
+                case ChatType.Private:
+                    if (isCmd)
+                        res = await HandleDirectCommandAsync(botClient, cmd!.Value, cancellationToken);
+                    else
+                        res = await HandleDirectMessageAsync(botClient, message, cancellationToken);
                     break;
 
-                case "/help":
-                    await botClient.SendMessage(chatId,
-                        "🎯 *Team Zaps Help*\n\n" +
-                        "*Commands:*\n" +
-                        "/startsession - Start a new payment session\n" +
-                        "/closesession - Close payments and start lottery\n" +
-                        "/cancelsession - Cancel session (admin only)\n" +
-                        "/status - View session details\n\n" +
-                        "*How it works:*\n" +
-                        "1️⃣ Join the session using the button on the pinned message\n" +
-                        "2️⃣ Send me payment amounts in *private chat*\n" +
-                        "3️⃣ Pay the Lightning invoices I send you\n" +
-                        "4️⃣ Join the lottery when payments close!\n\n" +
-                        "💡 *All payments happen in private messages for privacy!*",
-                        parseMode: ParseMode.Markdown,
-                        cancellationToken: cancellationToken);
-                    break;
-
-                case "/startsession":
-                    await HandleStartSessionAsync(botClient, message, cancellationToken);
-                    break;
-
-                case "/closesession":
-                    await HandleCloseSessionAsync(botClient, chatId, userId, cancellationToken);
-                    break;
-
-                case "/cancelsession":
-                    await HandleCancelSessionAsync(botClient, chatId, userId, cancellationToken);
-                    break;
-
-                case "/status":
-                    await HandleStatusAsync(botClient, chatId, cancellationToken);
-                    break;
-
-                case "/diag":
-                    await HandleDiagnosisAsync(botClient, chatId, userId, cancellationToken);
-                    break;
-
-                default:
-                    await botClient.SendMessage(chatId, 
-                        "Unknown command. Use /help to see available commands.", 
-                        cancellationToken: cancellationToken);
+                case ChatType.Group:
+                case ChatType.Supergroup:
+                    if (isCmd)
+                        res = await HandleGroupCommandAsync(botClient, cmd!.Value, cancellationToken);
+                    else
+                        res = true; // Just ignore regular group messages.
                     break;
             }
+            
+            if (res)
+                ; // Succeeded.
+            else if (isCmd)
+                throw new ArgumentException("Unknown command!");
+            else
+                throw new Exception("Unable to process message!");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error handling command: {cmd}", cmd);
-            await botClient.SendMessage(chatId, 
-                "An error occurred while processing your command.", 
-                cancellationToken: cancellationToken);
+            res = false;
+            if (isCmd)
+                logger.LogError(ex, "Error handling command: {Command}", cmd);
+            else
+                logger.LogError(ex, "Error handling message");
+
+            await botClient.SendException(chatId, ex.AddHelp("Use /help to see available commands."), cancellationToken);
         }
+        
+        return (res);
     }
     private Task HandleEditedMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
     {
@@ -270,55 +196,6 @@ public partial class UpdateHandler : IUpdateHandler
     
 
     #region Helper
-    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, CancellationToken cancellationToken)
-    {
-        var session = workflowService.GetSessionByUser(userId);
-        if (session is null)
-        {
-            await botClient.SendMessage(chatId, "⚠️ No active session found.", cancellationToken: cancellationToken);
-            return;
-        }
-        var participant = session.Participants[userId];
-        if (session.LotteryParticipants.ContainsKey(userId))
-        {
-            await botClient.SendMessage(chatId, $"ℹ️ {participant.ToMarkdownUserName()}, you've already entered the lottery!", parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
-            return;
-        }
-
-        if (await DeleteMessageAsync(botClient, chatId, participant.BudgetSelectionMessageId, cancellationToken))
-            participant.BudgetSelectionMessageId = null;
-
-        var keyboard = botBehaviour.BudgetChoices
-            .Select(c => InlineKeyboardButton.WithCallbackData($"{c}{BotBehaviorOptions.AcceptedFiatCurrency.ToSymbol()}", $"{CallbackActions.SelectBudget}_{c}"))
-            .Chunk(4)
-            .ToArray();
-
-        var budgetMessage = await botClient.SendMessage(chatId, 
-            "🎰 *Enter Lottery* 🎰\n\n" +
-            "How much are you willing to pay in fiat at maximum?\n\n" +
-            "💡 *Multiple winners possible!* If total payments exceed your budget, " +
-            "we'll select multiple winners to share the cost.", 
-            parseMode: ParseMode.Markdown,
-            replyMarkup: keyboard,
-            cancellationToken: cancellationToken);
-
-        participant.BudgetSelectionMessageId = budgetMessage.MessageId;
-    }
-
-    private async Task HandleJoinLotteryWithBudgetAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, double budget, CancellationToken cancellationToken)
-    {
-        if (workflowService.TryGetSessionByUser(userId, out var session))
-        {
-            var participant = session.Participants[userId];
-
-            if (await DeleteMessageAsync(botClient, chatId, participant.BudgetSelectionMessageId, cancellationToken))
-                participant.BudgetSelectionMessageId = null;
-                
-            // Now process the lottery join
-            await HandleJoinLotteryAsync(botClient, chatId, userId, displayName, budget, cancellationToken);
-        }
-    }
-
     private async Task<bool> DeleteMessageAsync(ITelegramBotClient botClient, long chatId, int? messageId, CancellationToken cancellationToken)
     {
         if (messageId is null)
@@ -334,7 +211,6 @@ public partial class UpdateHandler : IUpdateHandler
         }
         return (true);
     }
-
     private async Task<bool> IsUserAdminAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
     {
         try
@@ -346,57 +222,6 @@ public partial class UpdateHandler : IUpdateHandler
         {
             return false;
         }
-    }
-
-    private async Task HandleTipSelectionAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, CancellationToken cancellationToken)
-    {
-        var session = workflowService.GetSessionByUser(userId);
-        if (session is null)
-        {
-            await botClient.SendMessage(chatId, "⚠️ No active session found.", cancellationToken: cancellationToken);
-            return;
-        }
-        
-        var keyboard = new InlineKeyboardMarkup(botBehaviour.TipChoices
-            .Prepend((byte)0)
-            .Select(t => InlineKeyboardButton.WithCallbackData(t.FormatTip(), $"{CallbackActions.SelectTip}_{t}"))
-            .Chunk(4)
-            .ToArray());
-
-        var tipMessage = await botClient.SendMessage(chatId, 
-            "🎩 *Setup Tip*\n\n" +
-            "Choose your *tip percentage* to be added to each payment:\n\n",
-            //"💭 Tips help support Lightning Network infrastructure and development!"
-            parseMode: ParseMode.Markdown,
-            replyMarkup: keyboard,
-            cancellationToken: cancellationToken);
-
-        // Store the tip selection message ID for cleanup
-        if (session.Participants.TryGetValue(userId, out var participant))
-        {
-            participant.TipSelectionMessageId = tipMessage.MessageId;
-        }
-    }
-
-    private async Task HandleSetTipAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, int tip, CancellationToken cancellationToken)
-    {
-        var session = workflowService.GetSessionByUser(userId);
-        if (session is null)
-        {
-            await botClient.SendMessage(chatId, $"⚠️ No active session found for user {displayName.ToMarkdownString()}.", parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
-            return;
-        }
-        var participant = session.Participants[userId];
-        
-        // Delete the tip selection message
-        if (await DeleteMessageAsync(botClient, chatId, participant.TipSelectionMessageId, cancellationToken))
-            participant.TipSelectionMessageId = null;
-
-        // Set the user's tip
-        participant.Tip = (tip == 0) ? null : (byte)tip;
-        // Update the user's status message to reflect the new tip
-        await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken);
-
     }
     #endregion
 
@@ -413,41 +238,22 @@ public partial class UpdateHandler : IUpdateHandler
 
 internal static partial class Ext
 {
-    public static string GetDisplayName(this User user)
-    {
-        if (!string.IsNullOrEmpty(user.Username))
-            return $"@{user.Username}";
-        
-        var name = user.FirstName;
-        if (!string.IsNullOrEmpty(user.LastName))
-            name += $" {user.LastName}";
-        
-        return name;
-    }
-
-    public static bool IsCommand(this Message source) => (source.Text?.StartsWith('/') == true);
-    public static void GetCommand(this Message source, out string command, out string[] args)
-    {
-        if (source?.IsCommand() == true)
-        {
-            var items = source.Text!.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            {
-                command = items.First().ToLower();
-                args = items.Skip(1).ToArray();
-            }
-        }
-        else
-            throw new InvalidOperationException("Failed to parse command from message!");
-    }
-    
     public static Task SendException(this ITelegramBotClient source, long userId, Exception exception, CancellationToken cancellationToken)
     {
+        var message = exception.Message;
+        if (exception.Data.Contains("help"))
+            message += $" {exception.Data["help"]}";
+        if (exception.InnerException is not null)
+            message += "\n\n" + string.Join("\n\n", exception.InnerException
+                .Enumerate()
+                .Select(ex => ex.Message));
+
         if (exception.Data.Contains(nameof(LogLevel)))
         {
             switch ((LogLevel)exception.Data[nameof(LogLevel)]!)
             {
                 case LogLevel.Warning:
-                    return SendWarning(source, userId, exception.Message, cancellationToken);
+                    return SendWarning(source, userId, message, cancellationToken);
                 case LogLevel.Error:
                 case LogLevel.Critical:
                     break;
@@ -456,7 +262,7 @@ internal static partial class Ext
                     throw new NotSupportedException("Failed to send message due to not supported log level!");
             }
         }
-        return SendError(source, userId, exception.Message, cancellationToken);
+        return SendError(source, userId, message, cancellationToken);
     }
     public static Task SendWarning(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "⚠️", message, cancellationToken);
     public static Task SendError(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "❌", message, cancellationToken);

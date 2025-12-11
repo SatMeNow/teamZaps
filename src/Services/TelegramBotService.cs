@@ -1,6 +1,19 @@
+using System.Diagnostics.CodeAnalysis;
 using teamZaps.Handlers;
 
 namespace teamZaps.Services;
+
+
+record struct CommandMessage(Message Source, string Value, string[] Arguments)
+{
+    #region  Properties
+    public long ChatId => Source.Chat.Id;
+    public long UserId => Source.From!.Id;
+    #endregion
+
+
+    public override string ToString() => Value;
+}
 
 public class TelegramBotService : BackgroundService
 {
@@ -38,4 +51,37 @@ public class TelegramBotService : BackgroundService
     private readonly ILogger<TelegramBotService> logger;
     private readonly ITelegramBotClient botClient;
     private readonly UpdateHandler updateHandler;
+}
+
+internal static partial class Ext
+{
+    public static string GetDisplayName(this User user)
+    {
+        if (!string.IsNullOrEmpty(user.Username))
+            return $"@{user.Username}";
+        
+        var name = user.FirstName;
+        if (!string.IsNullOrEmpty(user.LastName))
+            name += $" {user.LastName}";
+        
+        return name;
+    }
+
+    public static bool IsCommand(this Message source) => (source.Text?.StartsWith('/') == true);
+    public static bool TryGetCommand(this Message source, [NotNullWhen(true)] out CommandMessage? command)
+    {
+        if (source?.IsCommand() == true)
+        {
+            var items = source.Text!.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            command = new CommandMessage(
+                source,
+                items.First().ToLower(),
+                items.Skip(1).ToArray()
+            );
+        }
+        else
+            command = null;
+
+        return (command is not null);
+    }
 }

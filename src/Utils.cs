@@ -231,6 +231,22 @@ namespace teamZaps.Utils
     }
     internal static partial class ExtException
     {
+        /// <summary>
+        /// Enumerates all exceptions.
+        /// </summary>
+        /// <remarks>
+        /// Starts at the specified exception, followed by all inner exceptions in order.
+        /// </remarks>
+        public static IEnumerable<Exception> Enumerate(this Exception source)
+        {
+            var ex = source;
+            while (ex is not null)
+            {
+                yield return (ex);
+                ex = ex.InnerException;
+            }
+            yield break;
+        }
         public static T AddData<T>(this T source, object key, object? value)
             where T : Exception
         {
