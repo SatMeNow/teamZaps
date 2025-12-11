@@ -25,7 +25,10 @@ public enum PaymentCurrency
     [Description("Euro"), Currency("€", "EUR", [ "eur", "euro" ])]
     Euro,
     [Description("US Dollar"), Currency("$", "USD", [ "usd" ])]
-    Dollar
+    Dollar,
+
+    [Description("Cent"), Currency("¢", "", [ "c", "cnt", "cent", "cents" ])]
+    Cent
 }
 
 public interface IFormattableAmount
@@ -51,7 +54,10 @@ public record PaymentToken : IFormattableAmount
 
 public static class PaymentParser
 {
-    private static readonly string CurrencyAbbreviations = string.Join("|", PaymentCurrency.Euro.GetAbbreviations());
+    private static readonly PaymentCurrency[] ParsedCurrencies = [ PaymentCurrency.Euro , PaymentCurrency.Cent];
+    private static readonly string CurrencyAbbreviations = string.Join("|", ParsedCurrencies
+        .Select(c => c.GetAbbreviations())
+        .SelectMany(a => a));
     private static readonly Regex TokenRegex = new(
         $@"(?<amount>[0-9]+(?:[\.,][0-9]+)?)\s*(?<currency>{CurrencyAbbreviations})?(?:\s+(?<note>[^+\r\n]+?))?(?=\s*[\+\r\n]|$)",
         (RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace)
@@ -96,6 +102,13 @@ public static class PaymentParser
                 return false;
             }
             var note = match.Groups.TryGetValue("note");
+
+            // Convert if required:
+            if (currency == PaymentCurrency.Cent)
+            {
+                amount = (amount / 100m);
+                currency = PaymentCurrency.Euro;
+            }
 
             tokens.Add(new PaymentToken() {
                 Amount = amount,
