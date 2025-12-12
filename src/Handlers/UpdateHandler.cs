@@ -96,7 +96,7 @@ public partial class UpdateHandler : IUpdateHandler
         {
             res = false;
             if (isCmd)
-                logger.LogError(ex, "Error handling command: {Command}", cmd);
+                logger.LogError(ex, "Error handling command {Command}", cmd);
             else
                 logger.LogError(ex, "Error handling message");
 
@@ -108,18 +108,19 @@ public partial class UpdateHandler : IUpdateHandler
 
     private async Task HandleCallbackQueryAsync(ITelegramBotClient botClient, CallbackQuery query, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrEmpty(query.Data))
+            return;
+
+        var chatId = query.Message!.Chat.Id;
+        var userId = query.From.Id;
+
+        var data = query.Data!.Split("_");
+        var action = data.First();
         try
         {
             await botClient.AnswerCallbackQuery(query.Id, cancellationToken: cancellationToken);
 
-            if (string.IsNullOrEmpty(query.Data))
-                return;
-
-            var chatId = query.Message!.Chat.Id;
-            var userId = query.From.Id;
-
-            var data = query.Data.Split("_");
-            switch (data.First())
+            switch (action)
             {
                 case CallbackActions.JoinLottery:
                     #if DEBUG
@@ -183,7 +184,9 @@ public partial class UpdateHandler : IUpdateHandler
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error handling callback query");
+            logger.LogError(ex, "Error handling callback query '{Action}'", action);
+
+            await botClient.SendException(userId, ex, cancellationToken);
         }
     }
     

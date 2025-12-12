@@ -190,30 +190,20 @@ public partial class UpdateHandler
         // Decode and validate the invoice amount
         var decodedInvoice = await lnbitsService.DecodeInvoiceAsync(bolt11, cancellationToken);
         if (decodedInvoice is null)
-        {
-            await botClient.SendMessage(winnerUser.UserId, "❌ Invalid invoice! Please provide a valid Lightning invoice.", cancellationToken: cancellationToken);
-            return;
-        }
+            throw new ArgumentException("Invalid invoice! Please provide a valid Lightning invoice.");
 
         // Validate invoice amount
         var expectedSats = winnerInfo.SatsAmount;
         var invoiceSats = decodedInvoice.Amount;
         if (invoiceSats != expectedSats)
-        {
-            await botClient.SendMessage(winnerUser.UserId,
-                $"❌ Invoice amount mismatch!\n\n" +
+            throw new InvalidOperationException($"Invoice amount mismatch!\n\n" +
                 $"Expected: {winnerInfo.SatsAmount.Format()}\n" +
                 $"Your invoice: {invoiceSats.Format()}\n" +
-                "Please create a new invoice with the correct amount.",
-                cancellationToken: cancellationToken);
-            return;
-        }
+                "Please create a new invoice with the correct amount.");
 
         winnerUser!.SubmittedInvoice = true;
 
-        await botClient.SendMessage(winnerUser.UserId,
-            "✅ Invoice received!\n⏳ Processing payout...",
-            cancellationToken: cancellationToken);
+        await botClient.SendMessage(winnerUser.UserId, "✅ Invoice received!\n⏳ Processing payout...", cancellationToken: cancellationToken);
 
         try
         {
@@ -245,23 +235,16 @@ public partial class UpdateHandler
                 }
             }
             else
-            {
-                await botClient.SendMessage(session.ChatId,
-                    "❌ Failed to execute payout. Please try again later.",
-                    cancellationToken: cancellationToken);
-            }
+                throw new InvalidOperationException("Failed to execute payout. Please try again later.");
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error executing payout by {User} for session {Session}", winnerUser, session);
-            await botClient.SendMessage(session.ChatId,
-                "❌ Error during payout. Please contact support.",
-                cancellationToken: cancellationToken);
+            await botClient.SendMessage(session.ChatId, "❌ Error during payout. Please contact support.", cancellationToken: cancellationToken);
+            return;
         }
         
-        await botClient.SendMessage(winnerUser.UserId,
-            "✅ Payout completed.",
-            cancellationToken: cancellationToken);
+        await botClient.SendMessage(winnerUser.UserId, "✅ Payout completed.", cancellationToken: cancellationToken);
     }
     /// <summary>
     /// Shows diagnostic information about the current session and system state.
@@ -278,12 +261,7 @@ public partial class UpdateHandler
         // Check if command is used in private chat
         var chat = await botClient.GetChat(command.ChatId, cancellationToken);
         if (chat.Type != ChatType.Private)
-        {
-            await botClient.SendMessage(command.ChatId,
-                "❌ This command is only available in private chat with the bot.",
-                cancellationToken: cancellationToken);
-            return;
-        }
+            throw new InvalidOperationException("This command is only available in private chat with the bot.");
 
         var diagnostics = new StringBuilder();
         diagnostics.AppendLine("🔍 *DIAGNOSTIC INFORMATION*");
