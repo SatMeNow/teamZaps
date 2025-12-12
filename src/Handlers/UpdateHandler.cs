@@ -30,10 +30,9 @@ public partial class UpdateHandler : IUpdateHandler
             {
                 case UpdateType.Message: return (HandleMessageAsync(botClient, update.Message!, cancellationToken));
                 case UpdateType.CallbackQuery: return (HandleCallbackQueryAsync(botClient, update.CallbackQuery!, cancellationToken));
-                case UpdateType.EditedMessage: return (HandleEditedMessageAsync(botClient, update.EditedMessage!, cancellationToken));
 
                 default:
-                    logger.LogInformation("Received update type: {UpdateType}", update.Type);
+                    logger.LogInformation("Received update of not implemented type '{UpdateType}'", update.Type);
                     return (Task.CompletedTask);
             }
         }
@@ -62,7 +61,7 @@ public partial class UpdateHandler : IUpdateHandler
     private async Task<bool> HandleMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
     {
         var chatId = message.Chat.Id;
-        logger.LogInformation("Received message from {ChatId}: {MessageText}", chatId, message.Text);
+        logger.LogInformation("Received message from {User} in chat {ChatId}: {MessageText}", message.From, chatId, message.Text);
 
         var res = true;
         var isCmd = message.TryGetCommand(out var cmd);
@@ -106,11 +105,6 @@ public partial class UpdateHandler : IUpdateHandler
         
         return (res);
     }
-    private Task HandleEditedMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
-    {
-        logger.LogInformation("Received edited message from {ChatId}", message.Chat.Id);
-        return Task.CompletedTask;
-    }
 
     private async Task HandleCallbackQueryAsync(ITelegramBotClient botClient, CallbackQuery query, CancellationToken cancellationToken)
     {
@@ -123,7 +117,6 @@ public partial class UpdateHandler : IUpdateHandler
 
             var chatId = query.Message!.Chat.Id;
             var userId = query.From.Id;
-            var displayName = query.From.GetDisplayName();
 
             var data = query.Data.Split("_");
             switch (data.First())
@@ -133,17 +126,17 @@ public partial class UpdateHandler : IUpdateHandler
                     // [Debug] Join lottery instant with fix budget
                     if (debugSettings.FixBudget is not null)
                     {
-                        await HandleJoinLotteryWithBudgetAsync(botClient, chatId, userId, displayName, debugSettings.FixBudget.Value, cancellationToken);
+                        await HandleJoinLotteryWithBudgetAsync(botClient, chatId, query.From!, debugSettings.FixBudget.Value, cancellationToken);
                         return;
                     }
                     #endif
 
-                    await HandleJoinLotteryAsync(botClient, chatId, userId, displayName, cancellationToken);
+                    await HandleJoinLotteryAsync(botClient, chatId, query.From!, cancellationToken);
                     break;
 
                 case CallbackActions.SelectBudget when (data.Length == 2):
                     var budget = double.Parse(data[1]);
-                    await HandleJoinLotteryWithBudgetAsync(botClient, chatId, userId, displayName, budget, cancellationToken);
+                    await HandleJoinLotteryWithBudgetAsync(botClient, chatId, query.From!, budget, cancellationToken);
                     break;
 
                 case CallbackActions.ViewStatus:
@@ -151,13 +144,13 @@ public partial class UpdateHandler : IUpdateHandler
                     break;
 
                 case CallbackActions.JoinSession:
-                    await HandleJoinSessionAsync(botClient, chatId, userId, displayName, cancellationToken);
+                    await HandleJoinSessionAsync(botClient, chatId, query.From!, cancellationToken);
                     break;
                 case CallbackActions.CloseSession:
-                    await HandleCloseSessionAsync(botClient, chatId, userId, cancellationToken);
+                    await HandleCloseSessionAsync(botClient, chatId, query.From!, cancellationToken);
                     break;
                 case CallbackActions.CancelSession:
-                    await HandleCancelSessionAsync(botClient, chatId, userId, cancellationToken);
+                    await HandleCancelSessionAsync(botClient, chatId, query.From!, cancellationToken);
                     break;
 
                 case CallbackActions.MakePayment:
@@ -180,11 +173,11 @@ public partial class UpdateHandler : IUpdateHandler
                     }
                     break;
                 case CallbackActions.SetTip:
-                    await HandleTipSelectionAsync(botClient, chatId, userId, displayName, cancellationToken);
+                    await HandleTipSelectionAsync(botClient, chatId, query.From!, cancellationToken);
                     break;
                 case CallbackActions.SelectTip when (data.Length == 2):
                     var tip = int.Parse(data[1]);
-                    await HandleSetTipAsync(botClient, chatId, userId, displayName, tip, cancellationToken);
+                    await HandleSetTipAsync(botClient, chatId, query.From!, tip, cancellationToken);
                     break;
             }
         }
@@ -211,6 +204,7 @@ public partial class UpdateHandler : IUpdateHandler
         }
         return (true);
     }
+    private Task<bool> IsUserAdminAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken) => IsUserAdminAsync(botClient, chatId, user.Id, cancellationToken);
     private async Task<bool> IsUserAdminAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
     {
         try
@@ -238,6 +232,7 @@ public partial class UpdateHandler : IUpdateHandler
 
 internal static partial class Ext
 {
+    public static Task SendException(this ITelegramBotClient source, User user, Exception exception, CancellationToken cancellationToken) => SendException(source, user.Id, exception, cancellationToken);
     public static Task SendException(this ITelegramBotClient source, long userId, Exception exception, CancellationToken cancellationToken)
     {
         var message = exception.Message;

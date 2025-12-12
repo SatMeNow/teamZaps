@@ -32,7 +32,7 @@ public partial class UpdateHandler
                     if (session.PendingJoins.TryRemove(command.UserId, out var joinInfo))
                     {
                         await DeleteMessageAsync(botClient, joinInfo.ChatId, joinInfo.MessageId, cancellationToken);
-                        await HandleJoinSessionAsync(botClient, joinInfo.ChatId, command.UserId, command.Source.From!.GetDisplayName(), cancellationToken);
+                        await HandleJoinSessionAsync(botClient, joinInfo.ChatId, command.Source.From!, cancellationToken);
                         break;
                     }
                 }
@@ -66,14 +66,12 @@ public partial class UpdateHandler
     }
     private async Task<bool> HandleDirectMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
     {
-        var userId = message.From!.Id;
-        var displayName = message.From.GetDisplayName();
-
+        var user = message.From!;
         var text = message.Text?.Trim();
         if (string.IsNullOrEmpty(text))
             return (true);
 
-        var session = sessionManager.GetSessionByUser(userId);
+        var session = sessionManager.GetSessionByUser(user.Id);
         if (session is null)
             return (true); // Ignore messages from users without active session
 
@@ -88,14 +86,14 @@ public partial class UpdateHandler
                 // Try to parse as payment from session participant
                 if (PaymentParser.TryParse(text, out var tokens, out var error))
                 {
-                    await ProcessPrivatePaymentAsync(botClient, session, userId, displayName, tokens, text, cancellationToken);
+                    await ProcessPrivatePaymentAsync(botClient, session, user, tokens, text, cancellationToken);
                     return (true);   
                 }
                 break;
 
             case SessionPhase.WaitingForInvoice:
                 // Check if this user is a winner waiting to submit an invoice
-                var winnerUser = session.GetWinnerUser(userId);
+                var winnerUser = session.GetWinnerUser(user.Id);
                 if (winnerUser?.SubmittedInvoice == false)
                 {
                     // This looks like an invoice submission
@@ -114,18 +112,17 @@ public partial class UpdateHandler
         
         throw new NotImplementedException("Sorry, push the `payment` button for instructions or use `/help` for commands.");
     }
-    private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, long userId, string displayName, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
+    private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, User user, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
     {
         try
         {
-            var participant = session.Participants[userId];
-
+            var participant = session.Participants[user.Id];
             // Process each token and create invoices
             foreach (var tokenGrp in tokens.GroupBy(t => t.Currency))
             {
                 var grpCurrency = tokenGrp.Key;
                 var unit = grpCurrency.ToUnitName();
-                var memo = $"{session.ChatTitle}/{displayName} zapped";
+                var memo = $"{session.ChatTitle}'{user} zapped";
 
                 // Ensure invoice to be payed in Euro only
                 if (grpCurrency != BotBehaviorOptions.AcceptedFiatCurrency)
@@ -155,10 +152,9 @@ public partial class UpdateHandler
                     // Store as pending payment
                     var pending = new PendingPayment
                     {
+                        User = user,
                         PaymentHash = invoice!.PaymentHash,
                         PaymentRequest = invoice.PaymentRequest,
-                        UserId = userId,
-                        DisplayName = displayName,
                         Tokens = tokenGrp.ToArray(),
                         FiatAmount = grpAmount,
                         TipAmount = tipAmount,
@@ -171,24 +167,23 @@ public partial class UpdateHandler
                     var message = await PaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
                     pending.MessageId = message.MessageId;
 
-                    logger.LogInformation("Created invoice for user {UserId} in session {ChatId}: {InvoiceAmount} {Currency}",
-                        userId, session.ChatId, invoiceAmount, grpCurrency);
+                    logger.LogInformation("Created invoice for user {User} in session {Session}: {InvoiceAmount}", user, session, invoiceAmount.Format(grpCurrency));
                 }
                 catch (Exception ex)
                 {
-                    throw new Exception($"Failed to create invoice for {invoiceAmount} {unit}.", ex);
+                    throw new Exception($"Failed to create invoice for {invoiceAmount.Format(grpCurrency)}.", ex);
                 }
             }
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error creating invoice for private payment");
-            await botClient.SendException(userId, ex, cancellationToken);
+            await botClient.SendException(user, ex, cancellationToken);
         }
     }
     private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, ParticipantState winnerUser, string bolt11, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Winner invoice submitted by {UserId} for session in chat {ChatId}", winnerUser.UserId, session.ChatId);
+        logger.LogInformation("Winner invoice submitted by {User} for session {Session}", winnerUser, session);
 
         var winnerInfo = session.Winners[winnerUser.UserId];
 
@@ -246,7 +241,7 @@ public partial class UpdateHandler
                     // Clean up session
                     workflowService.TryCloseSession(session.ChatId, false);
 
-                    logger.LogInformation("Payout executed successfully by {UserId} for chat {ChatId}", winnerUser.UserId, session.ChatId);
+                    logger.LogInformation("Payout executed successfully by {User} for session {Session}", winnerUser, session);
                 }
             }
             else
@@ -258,7 +253,7 @@ public partial class UpdateHandler
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error executing payout by {UserId} for chat {ChatId}", winnerUser.UserId, session.ChatId);
+            logger.LogError(ex, "Error executing payout by {User} for session {Session}", winnerUser, session);
             await botClient.SendMessage(session.ChatId,
                 "❌ Error during payout. Please contact support.",
                 cancellationToken: cancellationToken);

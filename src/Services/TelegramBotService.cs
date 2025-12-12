@@ -1,14 +1,28 @@
 using System.Diagnostics.CodeAnalysis;
 using teamZaps.Handlers;
+using teamZaps.Sessions;
 
 namespace teamZaps.Services;
 
+
+public interface IUser
+{
+    public User User { get; }
+
+    /// <example>@MyUserName</example>
+    public string UserName => User.Username.DisplayName(null);
+    /// <example>@MyUserName (1000)</example>
+    public string DisplayName => User.DisplayName();
+    /// <example>[{MyUserName}](tg://user?id={1000})</example>
+    public string MarkdownDisplayName => User.MarkdownDisplayName();
+}
 
 record struct CommandMessage(Message Source, string Value, string[] Arguments)
 {
     #region  Properties
     public long ChatId => Source.Chat.Id;
-    public long UserId => Source.From!.Id;
+    public long UserId => From.Id;
+    public User From => Source.From!;
     #endregion
 
 
@@ -30,7 +44,7 @@ public class TelegramBotService : BackgroundService
         try
         {
             User me = await botClient.GetMe(stoppingToken);
-            logger.LogInformation("Bot initialized successfully: @{BotUsername}", me.Username);
+            logger.LogInformation("Bot {BotUsername} initialized successfully", me);
 
             var receiverOptions = new ReceiverOptions { AllowedUpdates = Array.Empty<UpdateType>() };
             await botClient.ReceiveAsync(updateHandler, receiverOptions, stoppingToken);
@@ -55,17 +69,22 @@ public class TelegramBotService : BackgroundService
 
 internal static partial class Ext
 {
-    public static string GetDisplayName(this User user)
+    public static string UserName<T>(this T source) where T : IUser => source.UserName;
+    public static string DisplayName<T>(this T source) where T : IUser => source.DisplayName;
+    /// <remarks>
+    /// For completeness only, as <see cref="User.ToString()"/> already provides a suitable display name.
+    /// </remarks>
+    public static string DisplayName(this User source) => source.ToString();
+    public static string DisplayName(this string? userName, long? userId = null)
     {
-        if (!string.IsNullOrEmpty(user.Username))
-            return $"@{user.Username}";
-        
-        var name = user.FirstName;
-        if (!string.IsNullOrEmpty(user.LastName))
-            name += $" {user.LastName}";
-        
-        return name;
+        var result = userName ?? "?";
+        if (userId is not null)
+            result = $" ({userId})";
+        return (result);
     }
+    public static string MarkdownDisplayName<T>(this T source) where T : IUser => source.MarkdownDisplayName;
+    public static string MarkdownDisplayName(this User source) => MarkdownDisplayName(source.Username, source.Id);
+    private static string MarkdownDisplayName(this string? name, long? id = null) => $"[@{name}](tg://user?id={id})";
 
     public static bool IsCommand(this Message source) => (source.Text?.StartsWith('/') == true);
     public static bool TryGetCommand(this Message source, [NotNullWhen(true)] out CommandMessage? command)

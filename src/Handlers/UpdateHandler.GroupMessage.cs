@@ -18,10 +18,10 @@ public partial class UpdateHandler
                 await HandleStartSessionAsync(botClient, command, cancellationToken);
                 break;
             case "/closesession":
-                await HandleCloseSessionAsync(botClient, command.ChatId, command.UserId, cancellationToken);
+                await HandleCloseSessionAsync(botClient, command.ChatId, command.From, cancellationToken);
                 break;
             case "/cancelsession":
-                await HandleCancelSessionAsync(botClient, command.ChatId, command.UserId, cancellationToken);
+                await HandleCancelSessionAsync(botClient, command.ChatId, command.From, cancellationToken);
                 break;
 
             case "/status":
@@ -35,8 +35,6 @@ public partial class UpdateHandler
 
     private async Task HandleStartSessionAsync(ITelegramBotClient botClient, CommandMessage command, CancellationToken cancellationToken)
     {
-        var displayName = command.Source.From!.GetDisplayName();
-
         // Check if request was done for a group chat:
         var chat = await botClient.GetChat(command.ChatId);
         if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
@@ -50,7 +48,7 @@ public partial class UpdateHandler
         // Check if only admins can start sessions
         if (!botBehaviour.AllowNonAdminSessionStart)
         {
-            if (!await IsUserAdminAsync(botClient, command.ChatId, command.UserId, cancellationToken))
+            if (!await IsUserAdminAsync(botClient, command.ChatId, command.From, cancellationToken))
             {
                 await botClient.SendMessage(command.ChatId, 
                     "❌ Only group administrators can start a session.", 
@@ -59,11 +57,8 @@ public partial class UpdateHandler
             }
         }
 
-        if (workflowService.TryStartSession(chat, command.UserId, displayName, out var session))
-        {
+        if (workflowService.TryStartSession(chat, command.From, out var session))
             await SessionStatusMessage.SendAsync(session, botClient, workflowService, cancellationToken);
-            logger.LogInformation("Session started in chat {ChatId} by user {UserId}", command.ChatId, command.UserId);
-        }
         else
         {
             await botClient.SendMessage(command.ChatId,
@@ -71,12 +66,12 @@ public partial class UpdateHandler
                 cancellationToken: cancellationToken);
         }
     }
-    private async Task HandleCloseSessionAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
+    private async Task HandleCloseSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
         // Check permissions
         if (!botBehaviour.AllowNonAdminSessionClose)
         {
-            if (!await IsUserAdminAsync(botClient, chatId, userId, cancellationToken))
+            if (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken))
             {
                 await botClient.SendMessage(chatId,
                     "❌ Only group administrators can close a session.",
@@ -104,7 +99,7 @@ public partial class UpdateHandler
 
         if (!session.HasPayments)
         {
-            await HandleCancelSessionAsync(botClient, chatId, userId, cancellationToken);
+            await HandleCancelSessionAsync(botClient, chatId, user, cancellationToken);
             return;
         }
 
@@ -127,7 +122,7 @@ public partial class UpdateHandler
             
             await WinnerMessage.SendAsync(session, botClient, workflowService, cancellationToken);
 
-            logger.LogInformation("Winners selected for chat {ChatId}: {Winners}", chatId, 
+            logger.LogInformation("Winners selected for session {Session}: {Winners}", session, 
                 string.Join(", ", session.Winners.Select(w => $"{w.Key} ({w.Value.FiatAmount.Format()})")));
         }
         
@@ -139,7 +134,7 @@ public partial class UpdateHandler
             await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken);
         }
     }
-    private async Task HandleCancelSessionAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
+    private async Task HandleCancelSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
         var session = workflowService.GetSessionByChat(chatId);
         if (session is null)
@@ -150,7 +145,7 @@ public partial class UpdateHandler
             ; // Skip (No need to check)
         else if (!botBehaviour.AllowNonAdminSessionCancel)
         {
-            if (!await IsUserAdminAsync(botClient, chatId, userId, cancellationToken))
+            if (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken))
             {
                 await botClient.SendMessage(chatId,
                     "❌ Only group administrators can cancel a session.",
@@ -172,7 +167,7 @@ public partial class UpdateHandler
             await botClient.SendMessage(chatId,
                 "❌ Session has been cancelled and removed.",
                 cancellationToken: cancellationToken);
-            logger.LogInformation("Session cancelled in chat {ChatId} by user {UserId}", chatId, userId);
+            logger.LogInformation("Session {Session} cancelled by user {User}", session, user);
         }
         else
         {
@@ -181,7 +176,7 @@ public partial class UpdateHandler
                 cancellationToken: cancellationToken);
         }   
     }
-    private async Task HandleJoinSessionAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, CancellationToken cancellationToken)
+    private async Task HandleJoinSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
         var session = workflowService.GetSessionByChat(chatId);
         if (session is null || session.Phase > SessionPhase.AcceptingPayments)
@@ -191,22 +186,22 @@ public partial class UpdateHandler
         }
 
         // Check if user is already a participant in this session
-        if (session.Participants.ContainsKey(userId))
+        if (session.Participants.ContainsKey(user.Id))
         {
             await botClient.SendMessage(chatId,
-                $"ℹ️ {displayName.ToMarkdownString()}, you're already part of this session!",
+                $"ℹ️ {user.ToMarkdownString()}, you're already part of this session!",
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
             return;
         }
 
         // Check if user is already participating in another session
-        var existingSession = workflowService.GetSessionByUser(userId);
+        var existingSession = workflowService.GetSessionByUser(user.Id);
         if (existingSession is not null && existingSession.ChatId != chatId)
         {
             var existingChat = await botClient.GetChat(existingSession.ChatId, cancellationToken);
             await botClient.SendMessage(chatId,
-                $"⚠️ {displayName.ToMarkdownString()}, you're already participating in a session in *{existingChat.Title}*!\n\n" +
+                $"⚠️ {user.ToMarkdownString()}, you're already participating in a session in *{existingChat.Title}*!\n\n" +
                 "You can only join one session at a time. Please complete your current session first.",
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
@@ -216,18 +211,18 @@ public partial class UpdateHandler
         // Send private status message
         try
         {
-            var participant = workflowService.EnsureParticipant(session, userId, displayName);
+            var participant = workflowService.EnsureParticipant(session, user);
             await UserStatusMessage.SendAsync(session, participant, botClient, workflowService, logger, cancellationToken);
         }
         catch (Exception)
         {
             var warningMessage = await botClient.SendMessage(chatId,
-                $"⚠️ {displayName.ToMarkdownString()}, please start a private chat with me first by clicking @{(await botClient.GetMe(cancellationToken)).Username}",
+                $"⚠️ {user.ToMarkdownString()}, please start a private chat with me first by clicking @{(await botClient.GetMe(cancellationToken)).Username}",
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
                 
             // Mark user as pending session join with message ID for later deletion
-            session.PendingJoins[userId] = (chatId, warningMessage.MessageId);
+            session.PendingJoins[user.Id] = (chatId, warningMessage.MessageId);
 
             return;
         }
@@ -235,24 +230,24 @@ public partial class UpdateHandler
         // Update the pinned status message
         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
 
-        logger.LogInformation("User {UserId} joined session in chat {ChatId}", userId, chatId);
+        logger.LogInformation("User {User} joined session in chat {ChatId}", user, chatId);
     }
 
-    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, double budget, CancellationToken cancellationToken)
+    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, User user, double budget, CancellationToken cancellationToken)
     {
-        var session = workflowService.GetSessionByUser(userId);
+        var session = workflowService.GetSessionByUser(user.Id);
         if (session is null)
         {
             await botClient.SendMessage(chatId, "⚠️ No active session found.", cancellationToken: cancellationToken);
             return;
         }
-        var participant = session.Participants[userId];
+        var participant = session.Participants[user.Id];
 
         // Check if user already joined
-        if (session.LotteryParticipants.ContainsKey(userId))
+        if (session.LotteryParticipants.ContainsKey(user.Id))
         {
             await botClient.SendMessage(chatId,
-                $"ℹ️ {participant.ToMarkdownUserName()}, you've already entered the lottery!",
+                $"ℹ️ {participant.MarkdownDisplayName()}, you've already entered the lottery!",
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
             return;
@@ -263,7 +258,7 @@ public partial class UpdateHandler
         {
             var availBudget = sessionManager.AvailableServerBudget!.Value;
             var minBudget = botBehaviour.BudgetChoices.Min();
-            var message = $"⚠️💸 Sorry {participant.ToMarkdownUserName()}, your budget of {budget.Format()} would exceed the server-wide limit!\n\n" +
+            var message = $"⚠️💸 Sorry {participant.MarkdownDisplayName()}, your budget of {budget.Format()} would exceed the server-wide limit!\n\n" +
                 $"Available at this time: {availBudget.Format()}\n\n";
             if (minBudget <= availBudget)
                 message += $"Please choose a lower budget and try again.";
@@ -274,17 +269,17 @@ public partial class UpdateHandler
         }
 
         // Add user to lottery with budget
-        session.LotteryParticipants[userId] = budget;
+        session.LotteryParticipants[user.Id] = budget;
 
         // Handle first lottery participant - unlock payments
         if (session.Phase == SessionPhase.WaitingForLotteryParticipants)
         {
             session.Phase = SessionPhase.AcceptingPayments;
-            logger.LogInformation("First lottery participant {UserId} in chat {ChatId}, payments unlocked", userId, chatId);
+            logger.LogInformation("First lottery participant {User} in chat {ChatId}, payments unlocked", user, chatId);
         }
         else
         {
-            logger.LogInformation("User {UserId} joined lottery in chat {ChatId} with {Budget}€ budget", userId, chatId, budget);
+            logger.LogInformation("User {User} joined lottery in chat {ChatId} with {Budget} budget", user, chatId, budget.Format());
         }
         
         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
@@ -295,18 +290,18 @@ public partial class UpdateHandler
             await UserStatusMessage.UpdateAsync(session, p, botClient, workflowService, logger, cancellationToken);
         }
     }
-    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, CancellationToken cancellationToken)
+    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
-        var session = workflowService.GetSessionByUser(userId);
+        var session = workflowService.GetSessionByUser(user.Id);
         if (session is null)
         {
             await botClient.SendMessage(chatId, "⚠️ No active session found.", cancellationToken: cancellationToken);
             return;
         }
-        var participant = session.Participants[userId];
-        if (session.LotteryParticipants.ContainsKey(userId))
+        var participant = session.Participants[user.Id];
+        if (session.LotteryParticipants.ContainsKey(user.Id))
         {
-            await botClient.SendMessage(chatId, $"ℹ️ {participant.ToMarkdownUserName()}, you've already entered the lottery!", parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
+            await botClient.SendMessage(chatId, $"ℹ️ {participant.MarkdownDisplayName()}, you've already entered the lottery!", parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
             return;
         }
 
@@ -329,8 +324,9 @@ public partial class UpdateHandler
 
         participant.BudgetSelectionMessageId = budgetMessage.MessageId;
     }
-    private async Task HandleJoinLotteryWithBudgetAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, double budget, CancellationToken cancellationToken)
+    private async Task HandleJoinLotteryWithBudgetAsync(ITelegramBotClient botClient, long chatId, User user, double budget, CancellationToken cancellationToken)
     {
+        var userId = user.Id;
         if (workflowService.TryGetSessionByUser(userId, out var session))
         {
             var participant = session.Participants[userId];
@@ -339,12 +335,13 @@ public partial class UpdateHandler
                 participant.BudgetSelectionMessageId = null;
                 
             // Now process the lottery join
-            await HandleJoinLotteryAsync(botClient, chatId, userId, displayName, budget, cancellationToken);
+            await HandleJoinLotteryAsync(botClient, chatId, user, budget, cancellationToken);
         }
     }
 
-    private async Task HandleTipSelectionAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, CancellationToken cancellationToken)
+    private async Task HandleTipSelectionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
+        var userId = user.Id;
         var session = workflowService.GetSessionByUser(userId);
         if (session is null)
         {
@@ -373,15 +370,15 @@ public partial class UpdateHandler
         }
     }
 
-    private async Task HandleSetTipAsync(ITelegramBotClient botClient, long chatId, long userId, string displayName, int tip, CancellationToken cancellationToken)
+    private async Task HandleSetTipAsync(ITelegramBotClient botClient, long chatId, User user, int tip, CancellationToken cancellationToken)
     {
-        var session = workflowService.GetSessionByUser(userId);
+        var session = workflowService.GetSessionByUser(user.Id);
         if (session is null)
         {
-            await botClient.SendMessage(chatId, $"⚠️ No active session found for user {displayName.ToMarkdownString()}.", parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
+            await botClient.SendMessage(chatId, $"⚠️ No active session found for user {user.ToMarkdownString()}.", parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
             return;
         }
-        var participant = session.Participants[userId];
+        var participant = session.Participants[user.Id];
         
         // Delete the tip selection message
         if (await DeleteMessageAsync(botClient, chatId, participant.TipSelectionMessageId, cancellationToken))

@@ -62,8 +62,7 @@ public class PaymentMonitorService : BackgroundService
 
                         var payment = new PaymentRecord()
                         {
-                            UserId = pending.UserId,
-                            DisplayName = pending.DisplayName,
+                            User = pending.User,
                             PaymentHash = pending.PaymentHash,
                             PaymentRequest = pending.PaymentRequest,
                             Timestamp = pending.PaidAt ?? DateTimeOffset.UtcNow,
@@ -76,7 +75,7 @@ public class PaymentMonitorService : BackgroundService
 
                         session.PendingPayments.TryRemove(pending.PaymentHash, out _);
 
-                        var participant = sessionManager.GetOrAddParticipant(session, pending.UserId, pending.DisplayName);
+                        var participant = sessionManager.GetOrAddParticipant(session, pending.User);
                         participant.Payments.Add(payment);
 
                         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);

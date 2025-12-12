@@ -20,18 +20,10 @@ public class SessionWorkflowService
         session = sessionManager.GetSessionByUser(userId);
         return (session is not null);
     }
-
-    public bool TryStartSession(ChatFullInfo chat, long userId, string displayName, out SessionState session)
-    {
-        return sessionManager.TryCreateSession(chat, userId, displayName, out session);
-    }
-
+    public bool TryStartSession(ChatFullInfo chat, User user, out SessionState session) => sessionManager.TryCreateSession(chat, user, out session);
     public bool TryCloseSession(long chatId, bool cancel) => sessionManager.RemoveSession(chatId, cancel);
 
-    public ParticipantState EnsureParticipant(SessionState session, long userId, string displayName)
-    {
-        return sessionManager.GetOrAddParticipant(session, userId, displayName);
-    }
+    public ParticipantState EnsureParticipant(SessionState session, User user) => sessionManager.GetOrAddParticipant(session, user);
 
 
     private readonly SessionManager sessionManager;

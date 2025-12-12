@@ -2,7 +2,9 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using teamZaps.Services;
 using teamZaps.Utils;
+using Telegram.Bot.Types;
 
 namespace teamZaps.Sessions;
 
@@ -42,7 +44,7 @@ public class SessionState : ITipableAmount
     public int? WinnerMessageId { get; set; }
 
 
-    public override string ToString() => ChatTitle;
+    public override string ToString() => $"{ChatTitle} ({ChatId})";
 
 
     public void Close(bool cancel)
@@ -53,10 +55,16 @@ public class SessionState : ITipableAmount
     public ParticipantState? GetWinnerUser(long userId) => WinnerUsers.FirstOrDefault(u => u.UserId.Equals(userId));
 }
 
-public class ParticipantState : ITipableAmount
+public class ParticipantState : IUser, ITipableAmount
 {
-    public required long UserId { get; init; }
-    public required string DisplayName { get; init; }
+    public ParticipantState(User user)
+    {
+        this.User = user;
+    }
+
+
+    public User User { get; }
+    public long UserId => User.Id;
 
     public byte? Tip { get; set; }
     public List<PaymentRecord> Payments { get; } = new();
@@ -72,8 +80,7 @@ public class ParticipantState : ITipableAmount
     public int? TipSelectionMessageId { get; set; }
 
 
-    public override string ToString() => DisplayName;
-    public string ToMarkdownUserName() => $"[{DisplayName}](tg://user?id={UserId})";
+    public override string ToString() => User.ToString();
 
 
     public bool JoinedLottery(SessionState session) => session.LotteryParticipants.ContainsKey(UserId);
@@ -81,10 +88,11 @@ public class ParticipantState : ITipableAmount
 
 public record WinnerInfo(double FiatAmount, long SatsAmount);
 
-public record PaymentRecord() : ITipableAmount
+public record PaymentRecord() : IUser, ITipableAmount
 {
-    public required long UserId;
-    public required string DisplayName;
+    public required User User { get; init;} 
+    public long UserId => User.Id;
+    
     public required string PaymentHash;
     public required string PaymentRequest;
     public required DateTimeOffset Timestamp;
@@ -97,14 +105,18 @@ public record PaymentRecord() : ITipableAmount
     double ITipableAmount.TipAmount => this.TipAmount;
     public required double TipAmount;
     public required double FiatAmount;
+
+
+    public override string ToString() => $"{User}: {this}";
 }
 
-public class PendingPayment : ITipableAmount
+public class PendingPayment : IUser, ITipableAmount
 {
+    public required User User { get; init; }
+    public long UserId => User.Id;
+
     public required string PaymentHash { get; init; }
     public required string PaymentRequest { get; init; }
-    public required long UserId { get; init; }
-    public required string DisplayName { get; init; }
     public required DateTimeOffset CreatedAt { get; init; }
 
     public bool NotifiedPaid { get; set; }
@@ -116,6 +128,9 @@ public class PendingPayment : ITipableAmount
     long IFormattableAmount.SatsAmount => 0;
     public required double TipAmount { get; init; }
     public required double FiatAmount { get; init; }
+
+
+    public override string ToString() => $"{User}: {this}";
 }
 
 public enum SessionPhase
@@ -148,7 +163,7 @@ internal static partial class Ext
     {
         source.AppendLine("📊 *Session Status*\n");
         source.AppendLine($"• Phase: *{session.Phase.GetDescription()}*");
-        source.AppendLine($"• Started: {session.StartedAt:yyyy-MM-dd HH:mm} UTC");
+        source.AppendLine($"• Started: {session.StartedAt:f}");
     }
     public static bool IsClosed(this SessionPhase source) => ((source == SessionPhase.Canceled) || (source == SessionPhase.Completed));
 }

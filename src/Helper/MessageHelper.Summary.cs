@@ -16,21 +16,22 @@ internal static class SessionSummaryMessage
 {
     public static async Task SendAsync(SessionState session, ITelegramBotClient botClient, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
     {
-        foreach (var winner in session.Winners)
+        foreach (var winnerUser in session.WinnerUsers)
         {
+            var winnerInfo = session.Winners[winnerUser.UserId];
             try
             {
                 await botClient.SendMessage(
-                    winner.Key,
-                    text: BuildSummary(session, winner.Key, winner.Value),
+                    winnerUser.UserId,
+                    text: BuildSummary(session, winnerUser.UserId, winnerInfo),
                     parseMode: ParseMode.Markdown,
                     cancellationToken: cancellationToken);
                     
-                logger.LogDebug("Summary message sent to winner {WinnerId} for session {ChatId}", winner.Key, session.ChatId);
+                logger.LogDebug("Summary message sent to winner {Winner} for session {Session}", winnerUser, session);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to send summary message to winner {WinnerId} for session {ChatId}", winner.Key, session.ChatId);
+                logger.LogWarning(ex, "Failed to send summary message to winner {Winner} for session {Session}", winnerUser, session);
             }
         }
     }
@@ -59,7 +60,7 @@ internal static class SessionSummaryMessage
         summary.AppendLine("*Payments:*");
         foreach (var participant in session.Participants.Values)
         {
-            summary.AppendLine($"{participant.ToMarkdownUserName()}:");
+            summary.AppendLine($"{participant.MarkdownDisplayName()}:");
             summary.AppendPayments(participant.Payments);
         }
         summary.AppendLine();

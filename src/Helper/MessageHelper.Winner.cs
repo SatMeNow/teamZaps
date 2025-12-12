@@ -38,7 +38,7 @@ internal static class WinnerMessage
             (ex.Message.Contains("message to edit not found") || ex.Message.Contains("message can't be edited")))
         {
             // Message was deleted, no need to recreate winner messages
-            logger.LogInformation("Winner message deleted for chat {ChatId}, skipping update", session.ChatId);
+            logger.LogInformation("Winner message deleted for session {Session}, skipping update", session);
         }
         catch (ApiRequestException ex) when (ex.Message.Contains("message is not modified"))
         {
@@ -46,7 +46,7 @@ internal static class WinnerMessage
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to update winner message for chat {ChatId}", session.ChatId);
+            logger.LogWarning(ex, "Failed to update winner message for session {Session}", session);
         }
     }
     private static string Build(SessionState session, SessionWorkflowService workflowService, PaymentStatus status, LnbitsPaymentResponse? paymentResult = null)
@@ -62,7 +62,7 @@ internal static class WinnerMessage
                 {
                     message.AppendLine("🎉🏆 *WINNER SELECTED!* 🏆🎉\n");
                 
-                    message.AppendLine($"Congratulations {session.WinnerUser!.ToMarkdownUserName()}!\n");
+                    message.AppendLine($"Congratulations {session.WinnerUser!.MarkdownDisplayName()}!\n");
                     message.Append("I sent you a message with the *payment summary* and a *lightning invoice*.");
                 }
                 else
@@ -73,7 +73,7 @@ internal static class WinnerMessage
                     foreach (var winner in session.Winners)
                     {
                         var winnerUser = session.Participants[winner.Key];
-                        message.AppendLine($"• {winnerUser.ToMarkdownUserName()}: *{winner.Value.FiatAmount.Format()}*");
+                        message.AppendLine($"• {winnerUser.MarkdownDisplayName()}: *{winner.Value.FiatAmount.Format()}*");
                     }
                     message.AppendLine("\nI sent each winner a message with their *payment summary* and *lightning invoice*.");
                 }
@@ -84,7 +84,7 @@ internal static class WinnerMessage
                 message.AppendLine("🎉🏆 *PAYOUT COMPLETED!* 🏆🎉\n");
                 
                 if (session.Winners.Count == 1)
-                    message.AppendLine($"Congratulations {session.WinnerUser!.ToMarkdownUserName()}!\n");
+                    message.AppendLine($"Congratulations {session.WinnerUser!.MarkdownDisplayName()}!\n");
                 else
                     message.AppendLine("All winners have been paid!\n");
                 
@@ -95,6 +95,6 @@ internal static class WinnerMessage
                 throw new InvalidEnumArgumentException($"Invalid payment status '{status.GetDescription()}' for winner message");
         }
 
-        return message.ToString();
+        return (message.ToString());
     }
 }

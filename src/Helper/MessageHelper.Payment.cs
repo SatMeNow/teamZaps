@@ -36,7 +36,7 @@ internal static class PaymentMessage
             (ex.Message.Contains("message to edit not found") || ex.Message.Contains("message can't be edited")))
         {
             // Message was deleted, no need to recreate payment messages
-            logger.LogInformation("Payment message deleted for user {UserId}, skipping update", payment.UserId);
+            logger.LogInformation("Payment message deleted for user {User}, skipping update", payment.User);
         }
         catch (ApiRequestException ex) when (ex.Message.Contains("message is not modified"))
         {
@@ -44,7 +44,7 @@ internal static class PaymentMessage
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to update payment message for user {UserId}", payment.UserId);
+            logger.LogWarning(ex, "Failed to update payment message for user {User}", payment.User);
         }
     }
     private static string Build(PendingPayment payment, PaymentStatus status)

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using teamZaps.Configuration;
+using teamZaps.Services;
 
 namespace teamZaps.Sessions;
 
@@ -29,13 +30,9 @@ public class SessionManager : IFormattableAmount
 
 
     #region Management
-    public bool TryCreateSession(ChatFullInfo chat, long userId, string userDisplayName, out SessionState session)
+    public bool TryCreateSession(ChatFullInfo chat, User user, out SessionState session)
     {
-        var startedByUser = new ParticipantState
-        {
-            UserId = userId,
-            DisplayName = userDisplayName
-        };
+        var startedByUser = new ParticipantState(user);
         
         session = new SessionState
         {
@@ -48,7 +45,7 @@ public class SessionManager : IFormattableAmount
 
         if (sessions.TryAdd(chat.Id, session))
         {
-            logger.LogInformation("Session created for chat {ChatId} by {UserId}", chat.Id, userId);
+            logger.LogInformation("Session {Session} created by user {User}", session, user);
             return true;
         }
 
@@ -65,7 +62,7 @@ public class SessionManager : IFormattableAmount
         var removed = sessions.TryRemove(chatId, out var session);
         if (removed)
         {
-            logger.LogInformation("Session removed for chat {ChatId}", chatId);
+            logger.LogInformation("Session {Session} removed", session);
 
             if (session is not null)
             {
@@ -78,21 +75,16 @@ public class SessionManager : IFormattableAmount
                     session.FiatAmount,
                     session.Participants.Count,
                     session.WinnerUser?.UserId,
-                    session.WinnerUser?.DisplayName,
+                    session.WinnerUser?.DisplayName(),
                     session.PayoutCompleted);
             }
         }
-        return removed;
+        return (removed);
     }
-    public ParticipantState GetOrAddParticipant(SessionState session, long userId, string displayName)
+    public ParticipantState GetOrAddParticipant(SessionState session, User user) => session.Participants.GetOrAdd(user.Id, uid => new ParticipantState(user)
     {
-        return session.Participants.GetOrAdd(userId, uid => new ParticipantState
-        {
-            UserId = uid,
-            DisplayName = displayName,
-            Tip = botBehaviour.TipChoices.Min() // Default to the lowest tip choice
-        });
-    }
+        Tip = botBehaviour.TipChoices.Min() // Default to the lowest tip choice
+    });
     #endregion
     
 
