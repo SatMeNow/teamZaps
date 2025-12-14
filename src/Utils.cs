@@ -52,6 +52,23 @@ namespace teamZaps.Utils
             ));
         }
     }
+    internal static partial class UtilTask
+    {
+        /// <inheritdoc cref="DelayWhileAsync(Func{bool}, TimeSpan, CancellationToken)"/> 
+        public static Task<bool> DelayWhileAsync(Func<bool> condition, int timeout, CancellationToken cancellationToken) => DelayWhileAsync(condition, TimeSpan.FromMilliseconds(timeout), cancellationToken);
+        /// <param name="timeout">Max. timeout (in [ms]).</param>
+        public static async Task<bool> DelayWhileAsync(Func<bool> condition, TimeSpan timeout, CancellationToken cancellationToken)
+        {
+            using var timeoutCts = new CancellationTokenSource(timeout);
+            using var cancel = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+            
+            bool result;
+            while ((result = condition()) && (!cancel.Token.IsCancellationRequested))
+                await Task.Delay(1000, cancel.Token);
+                
+            return (result);
+        }
+    }
     internal static partial class UtilEnum
     {
         /// <summary>

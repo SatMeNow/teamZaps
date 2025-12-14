@@ -9,5 +9,9 @@ public class DebugSettings
     /// Pre-configured, fix budget for users when joining the lottery.
     /// </summary>
     public double? FixBudget { get; set; }
+    /// <summary>
+    /// Disable the recovery system for lost sats.
+    /// </summary>
+    public bool EnableRecovery { get; set; } = true;
 #endif
 }

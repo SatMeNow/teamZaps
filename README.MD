@@ -56,11 +56,9 @@ Your team meets up for food and drinks, but the venue doesn't accept Bitcoin? He
 The bot accepts various payment formats:
 
 ```
-5.99 beer                    # Euro amount with note
+5.99 Beer                    # Euro amount with note
 12.50€ lunch                 # Explicit Euro symbol  
-3.00 + 2.50 tip             # Multiple amounts
-4.99 coffee
-1.50 cookie                  # Multiple lines
+3.00 Milk + 2.50 Pizza       # Multiple amounts
 ```
 
 ## 🎰 Lottery System
@@ -79,8 +77,50 @@ The bot accepts various payment formats:
 | `/closesession` | Close payments and draw winner | Admins (configurable) |
 | `/cancelsession` | Cancel the current session | Admins |
 | `/status` | View current session status | Anyone |
+| `/recover` | Recover lost sats from failed sessions | Anyone (private chat) |
 | `/help` | Show help information | Anyone |
 | `/diag` | Show diagnostics | Root users |
+
+## 💰 Lost and Found Recovery
+
+**What happens if a session fails?**
+
+Team Zaps includes a **Lost and Found** system to protect your payments. If something goes wrong (session cancelled, network or lightning issues, unexpected errors), your sats are automatically tracked for recovery.
+
+### How Recovery Works
+
+1. **Automatic Detection** - Bot automatically detects when your payments are lost
+2. **Notification** - You'll receive a direct message about recoverable sats
+3. **Simple Recovery** - Use `/recover` command to get your sats back
+4. **Instant Payout** - Submit a Lightning invoice and receive your recovery
+
+### Using the Recovery Command
+
+**In private chat with the bot:**
+
+```
+/recover                     # Check if you have any lost sats
+```
+
+**The bot will:**
+- Show you the amount of recoverable sats
+- Request a Lightning invoice for that exact amount
+- Pay your invoice once verified
+- Clear your recovery record
+
+### When Does Recovery Happen?
+
+Lost sats are automatically recorded when:
+- Winner fails to submit payout invoice
+- Network errors interrupt payment processing
+- Lightning issues interrupt payment processing
+- Unexpected session failures occur
+
+### Important Notes
+
+- ⏰ Recovery is available immediately after detection
+- 🔔 You'll receive weekly reminders about outstanding recoveries
+- 💬 Recovery only works in **private chat** with the bot
 
 ## 🔒 Privacy & Security
 

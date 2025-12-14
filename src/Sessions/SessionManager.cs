@@ -7,10 +7,11 @@ namespace teamZaps.Sessions;
 
 public class SessionManager : IFormattableAmount
 {
-    public SessionManager(ILogger<SessionManager> logger, IOptions<BotBehaviorOptions> botBehaviour)
+    public SessionManager(ILogger<SessionManager> logger, IOptions<BotBehaviorOptions> botBehaviour, RecoveryService recoveryService)
     {
         this.logger = logger;
         this.botBehaviour = botBehaviour.Value;
+        this.recoveryService = recoveryService;
     }
 
 
@@ -68,6 +69,10 @@ public class SessionManager : IFormattableAmount
             {
                 session.Close(cancel);
                 
+                if (!cancel)
+                    // Clear recovery files for all participants:
+                    recoveryService.ClearLostSats(session);
+                
                 lastSummaries[chatId] = new SessionSummary(
                     session.StartedAt,
                     DateTimeOffset.UtcNow,
@@ -92,6 +97,7 @@ public class SessionManager : IFormattableAmount
     private readonly ConcurrentDictionary<long, SessionSummary> lastSummaries = new();
     private readonly BotBehaviorOptions botBehaviour;
     private readonly ILogger<SessionManager> logger;
+    private readonly RecoveryService recoveryService;
 }
 
 public record SessionSummary(

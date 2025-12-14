@@ -9,7 +9,7 @@ namespace teamZaps.Handlers;
 
 public partial class UpdateHandler : IUpdateHandler
 {
-    public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, LnbitsService lnbitsService, SessionManager sessionManager, SessionWorkflowService workflowService)
+    public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, LnbitsService lnbitsService, SessionManager sessionManager, SessionWorkflowService workflowService, RecoveryService recoveryService)
     {
         this.logger = logger;
         this.debugSettings = debugSettings.Value;
@@ -19,6 +19,7 @@ public partial class UpdateHandler : IUpdateHandler
         this.lnbitsService = lnbitsService;
         this.sessionManager = sessionManager;
         this.workflowService = workflowService;
+        this.recoveryService = recoveryService;
     }
 
 
@@ -231,6 +232,7 @@ public partial class UpdateHandler : IUpdateHandler
     private readonly LnbitsService lnbitsService;
     private readonly SessionManager sessionManager;
     private readonly SessionWorkflowService workflowService;
+    private readonly RecoveryService recoveryService;
 }
 
 internal static partial class Ext
@@ -250,6 +252,10 @@ internal static partial class Ext
         {
             switch ((LogLevel)exception.Data[nameof(LogLevel)]!)
             {
+                case LogLevel.None:
+                    return Send(source, userId, null, message, cancellationToken);
+                case LogLevel.Information:
+                    return SendInfo(source, userId, message, cancellationToken);
                 case LogLevel.Warning:
                     return SendWarning(source, userId, message, cancellationToken);
                 case LogLevel.Error:
@@ -262,7 +268,13 @@ internal static partial class Ext
         }
         return SendError(source, userId, message, cancellationToken);
     }
+    public static Task SendInfo(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "ℹ️", message, cancellationToken);
     public static Task SendWarning(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "⚠️", message, cancellationToken);
     public static Task SendError(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "❌", message, cancellationToken);
-    private static Task Send(this ITelegramBotClient source, long userId, string icon, string message, CancellationToken cancellationToken) => source.SendMessage(userId, $"{icon} {message}", cancellationToken: cancellationToken);
+    private static Task Send(this ITelegramBotClient source, long userId, string? icon, string message, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrEmpty(icon))
+            message = $"{icon} {message}";
+        return source.SendMessage(userId, message, cancellationToken: cancellationToken);
+    }
 }

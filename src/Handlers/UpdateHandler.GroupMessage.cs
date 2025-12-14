@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using teamZaps.Configuration;
+using teamZaps.Helper;
 using teamZaps.Services;
 using teamZaps.Sessions;
 using teamZaps.Utils;
@@ -141,6 +142,18 @@ public partial class UpdateHandler
         // Check if user is already a participant in this session
         if (session.Participants.ContainsKey(user.Id))
             throw new InvalidOperationException($"You're already part of this session!");
+
+        // Check for lost sats of this user
+        var lostSats = await recoveryService.TryGetLostSatsAsync(user.Id);
+        if (lostSats is not null)
+        {
+            var message = new StringBuilder()
+                .AppendRecoveryMessage(lostSats)
+                .AppendLine("\nℹ️ You need to *recover your lost sats before joining* a new session.")
+                .ToString();
+            throw new Exception(message)
+                .AddLogLevel(LogLevel.None);
+        }
 
         // Check if user is already participating in another session
         var existingSession = workflowService.GetSessionByUser(user.Id);

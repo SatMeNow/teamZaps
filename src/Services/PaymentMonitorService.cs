@@ -6,13 +6,14 @@ namespace teamZaps.Sessions;
 
 public class PaymentMonitorService : BackgroundService
 {
-    public PaymentMonitorService(SessionManager sessionManager, LnbitsService lnbitsService, ITelegramBotClient botClient, ILogger<PaymentMonitorService> logger, SessionWorkflowService workflowService)
+    public PaymentMonitorService(SessionManager sessionManager, LnbitsService lnbitsService, ITelegramBotClient botClient, ILogger<PaymentMonitorService> logger, SessionWorkflowService workflowService, RecoveryService recoveryService)
     {
         this.sessionManager = sessionManager;
         this.lnbitsService = lnbitsService;
         this.botClient = botClient;
         this.logger = logger;
         this.workflowService = workflowService;
+        this.recoveryService = recoveryService;
     }
 
 
@@ -78,6 +79,9 @@ public class PaymentMonitorService : BackgroundService
                         var participant = sessionManager.GetOrAddParticipant(session, pending.User);
                         participant.Payments.Add(payment);
 
+                        // Record lost sats for crash recovery:
+                        await recoveryService.RecordLostSatsAsync(participant, $"Payment in session: *{session.ChatTitle}*");
+
                         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
                         
                         // Update user status messages for affected participant
@@ -90,7 +94,9 @@ public class PaymentMonitorService : BackgroundService
                             {
                                 await botClient.DeleteMessage(participant.UserId, participant.PaymentHelpMessageId!.Value, cancellationToken);
                             }
-                            catch (Exception) { }
+                            catch (Exception)
+                            {
+                            }
                             
                             participant.PaymentHelpMessageId = null;
                         }
@@ -110,4 +116,5 @@ public class PaymentMonitorService : BackgroundService
     private readonly ITelegramBotClient botClient;
     private readonly ILogger<PaymentMonitorService> logger;
     private readonly SessionWorkflowService workflowService;
+    private readonly RecoveryService recoveryService;
 }

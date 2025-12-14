@@ -5,16 +5,22 @@ using teamZaps.Sessions;
 namespace teamZaps.Services;
 
 
-public interface IUser
+public interface IUserName
+{
+    long UserId { get; }
+    string UserName { get; }
+    /// <example>@MyUserName (1000)</example>
+    string DisplayName => UserName.DisplayName(UserId);
+    /// <example>[{MyUserName}](tg://user?id={1000})</example>
+    string MarkdownDisplayName => UserName.MarkdownDisplayName(UserId);
+}
+public interface IUser : IUserName
 {
     public User User { get; }
 
+    long IUserName.UserId => User.Id;
     /// <example>@MyUserName</example>
-    public string UserName => User.Username.DisplayName(null);
-    /// <example>@MyUserName (1000)</example>
-    public string DisplayName => User.DisplayName();
-    /// <example>[{MyUserName}](tg://user?id={1000})</example>
-    public string MarkdownDisplayName => User.MarkdownDisplayName();
+    string IUserName.UserName => User.Username.DisplayName(null);
 }
 
 record struct CommandMessage(Message Source, string Value, string[] Arguments)
@@ -39,6 +45,9 @@ public class TelegramBotService : BackgroundService
     }
 
 
+    public bool Ready { get; private set; }
+
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
@@ -48,6 +57,8 @@ public class TelegramBotService : BackgroundService
 
             var receiverOptions = new ReceiverOptions { AllowedUpdates = Array.Empty<UpdateType>() };
             await botClient.ReceiveAsync(updateHandler, receiverOptions, stoppingToken);
+
+            this.Ready = true;
         }
         catch (Exception ex)
         {
@@ -57,6 +68,8 @@ public class TelegramBotService : BackgroundService
     }
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
+        this.Ready = false;
+
         logger.LogInformation("Stopping Team Zaps Telegram Bot...");
         await base.StopAsync(cancellationToken);
     }
@@ -69,22 +82,19 @@ public class TelegramBotService : BackgroundService
 
 internal static partial class Ext
 {
-    public static string UserName<T>(this T source) where T : IUser => source.UserName;
-    public static string DisplayName<T>(this T source) where T : IUser => source.DisplayName;
-    /// <remarks>
-    /// For completeness only, as <see cref="User.ToString()"/> already provides a suitable display name.
-    /// </remarks>
+    public static string UserName<T>(this T source) where T : IUserName => source.UserName;
+    public static string DisplayName<T>(this T source) where T : IUserName => source.DisplayName;
     public static string DisplayName(this User source) => source.ToString();
     public static string DisplayName(this string? userName, long? userId = null)
     {
         var result = userName ?? "?";
         if (userId is not null)
-            result = $" ({userId})";
+            result += $" ({userId})";
         return (result);
     }
-    public static string MarkdownDisplayName<T>(this T source) where T : IUser => source.MarkdownDisplayName;
+    public static string MarkdownDisplayName<T>(this T source) where T : IUserName => source.MarkdownDisplayName;
     public static string MarkdownDisplayName(this User source) => MarkdownDisplayName(source.Username, source.Id);
-    private static string MarkdownDisplayName(this string? name, long? id = null) => $"[@{name}](tg://user?id={id})";
+    public static string MarkdownDisplayName(this string? name, long? id = null) => $"[@{name}](tg://user?id={id})";
 
     public static bool IsCommand(this Message source) => (source.Text?.StartsWith('/') == true);
     public static bool TryGetCommand(this Message source, [NotNullWhen(true)] out CommandMessage? command)

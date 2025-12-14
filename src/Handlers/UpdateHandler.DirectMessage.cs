@@ -1,9 +1,11 @@
 using System.Diagnostics;
 using System.Text;
 using teamZaps.Configuration;
+using teamZaps.Helper;
 using teamZaps.Services;
 using teamZaps.Sessions;
 using teamZaps.Utils;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace teamZaps.Handlers;
 
@@ -45,7 +47,8 @@ public partial class UpdateHandler
                     "/startsession - Start a new payment session\n" +
                     "/closesession - Close payments and start lottery\n" +
                     "/cancelsession - Cancel session (admin only)\n" +
-                    "/status - View session details\n\n" +
+                    "/status - View session details\n" +
+                    "/recover - Recovers lost sats from e.g. interrupted sessions\n\n" +
                     "*How it works:*\n" +
                     "1️⃣ Join the session using the button on the pinned message\n" +
                     "2️⃣ Send me payment amounts in *private chat*\n" +
@@ -58,6 +61,10 @@ public partial class UpdateHandler
 
             case "/diag":
                 await HandleDiagnosisAsync(botClient, command, cancellationToken);
+                break;
+
+            case "/recover":
+                await HandleRecoverCommandAsync(botClient, command, cancellationToken);
                 break;
 
             default: return (false);
@@ -73,41 +80,54 @@ public partial class UpdateHandler
 
         var session = sessionManager.GetSessionByUser(user.Id);
         if (session is null)
-            return (true); // Ignore messages from users without active session
-
-        switch (session.Phase)
         {
-            case SessionPhase.WaitingForLotteryParticipants:
-                throw new InvalidOperationException("Payments are blocked until someone enters the lottery!\n\n" +
-                    "Use the 🎰 Enter Lottery button in your welcome message or ask someone to enter the lottery first.")
-                    .AddLogLevel(LogLevel.Warning);
-
-            case SessionPhase.AcceptingPayments:
-                // Try to parse as payment from session participant
-                if (PaymentParser.TryParse(text, out var tokens, out var error))
+            // Check if this is a recovery invoice
+            if (text.IsLightningInvoice(out var recoveryInvoice))
+            {
+                var lostSats = await recoveryService.TryGetLostSatsAsync(user.Id);
+                if (lostSats is not null)
                 {
-                    await ProcessPrivatePaymentAsync(botClient, session, user, tokens, text, cancellationToken);
-                    return (true);   
+                    await ProcessRecoveryInvoiceAsync(botClient, user, recoveryInvoice, lostSats, cancellationToken);
+                    return (true);
                 }
-                break;
+            }
+        }
+        else
+        {
+            switch (session.Phase)
+            {
+                case SessionPhase.WaitingForLotteryParticipants:
+                    throw new InvalidOperationException("Payments are blocked until someone enters the lottery!\n\n" +
+                        "Use the 🎰 Enter Lottery button in your welcome message or ask someone to enter the lottery first.")
+                        .AddLogLevel(LogLevel.Warning);
 
-            case SessionPhase.WaitingForInvoice:
-                // Check if this user is a winner waiting to submit an invoice
-                var winnerUser = session.GetWinnerUser(user.Id);
-                if (winnerUser?.SubmittedInvoice == false)
-                {
-                    // This looks like an invoice submission
-                    if (text.IsLightningInvoice(out var invoice))
+                case SessionPhase.AcceptingPayments:
+                    // Try to parse as payment from session participant
+                    if (PaymentParser.TryParse(text, out var tokens, out var error))
                     {
-                        await ProcessWinnerInvoiceAsync(botClient, session, winnerUser, invoice, cancellationToken);
-                        return (true);
+                        await ProcessPrivatePaymentAsync(botClient, session, user, tokens, text, cancellationToken);
+                        return (true);   
                     }
-                }
-                break;
+                    break;
 
-            default:
-                throw new InvalidOperationException($"Payments are not available in current session phase: {session.Phase}")
-                    .AddLogLevel(LogLevel.Warning);
+                case SessionPhase.WaitingForInvoice:
+                    // Check if this user is a winner waiting to submit an invoice
+                    var winnerUser = session.GetWinnerUser(user.Id);
+                    if (winnerUser?.SubmittedInvoice == false)
+                    {
+                        // This looks like an invoice submission
+                        if (text.IsLightningInvoice(out var invoice))
+                        {
+                            await ProcessWinnerInvoiceAsync(botClient, session, winnerUser, invoice, cancellationToken);
+                            return (true);
+                        }
+                    }
+                    break;
+
+                default:
+                    throw new InvalidOperationException($"Payments are not available in current session phase: {session.Phase}")
+                        .AddLogLevel(LogLevel.Warning);
+            }
         }
         
         throw new NotImplementedException("Sorry, push the `payment` button for instructions or use `/help` for commands.");
@@ -192,14 +212,7 @@ public partial class UpdateHandler
         if (decodedInvoice is null)
             throw new ArgumentException("Invalid invoice! Please provide a valid Lightning invoice.");
 
-        // Validate invoice amount
-        var expectedSats = winnerInfo.SatsAmount;
-        var invoiceSats = decodedInvoice.Amount;
-        if (invoiceSats != expectedSats)
-            throw new InvalidOperationException($"Invoice amount mismatch!\n\n" +
-                $"Expected: {winnerInfo.SatsAmount.Format()}\n" +
-                $"Your invoice: {invoiceSats.Format()}\n" +
-                "Please create a new invoice with the correct amount.");
+        ValidateInvoiceAmount(winnerInfo.SatsAmount, decodedInvoice.Amount);
 
         winnerUser!.SubmittedInvoice = true;
 
@@ -306,6 +319,24 @@ public partial class UpdateHandler
         }
         diagnostics.AppendLineIfNotNull("• Total locked amount: *{0}*", sessionManager.FormatAmount(), "💤 none");
 
+        // Lost and Found Recovery Information
+        diagnostics.AppendLine("\n🔍 *Lost and Found recovery:*");
+        var allLostSats = await recoveryService.GetAllLostSatsAsync();
+        if (allLostSats.IsEmpty())
+            diagnostics.AppendLine("• Lost sats records: ✅ *None*");
+        else
+        {
+            var totalLostSats = allLostSats.Sum(r => r.SatsAmount);
+            diagnostics.AppendLine($"• User(s) with lost sats: *{allLostSats.Count}*");
+            diagnostics.AppendLine($"• Total lost amount: ⚠️ *{totalLostSats.Format()}*");
+            var oldestRecord = allLostSats.OrderBy(r => r.Timestamp).FirstOrDefault();
+            if (oldestRecord is not null)
+            {
+                var age = (DateTimeOffset.UtcNow - oldestRecord.Timestamp);
+                diagnostics.AppendLine($"• Oldest record: *{age.TotalDays:N0} days ago*");
+            }
+        }
+
         // Lightning backend Information
         diagnostics.AppendLine("\n⚡ *Lightning backend status:*");
         diagnostics.AppendLine($"• Node type: *{lnbitsService.ServiceType}*");
@@ -316,4 +347,93 @@ public partial class UpdateHandler
             parseMode: ParseMode.Markdown,
             cancellationToken: cancellationToken);
     }
+
+    /// <summary>
+    /// Recovers lost sats from failed sessions.
+    /// </summary>
+    private async Task HandleRecoverCommandAsync(ITelegramBotClient botClient, CommandMessage command, CancellationToken cancellationToken)
+    {
+        // Check if command is used in private chat
+        var chat = await botClient.GetChat(command.ChatId, cancellationToken);
+        if (chat.Type != ChatType.Private)
+            throw new InvalidOperationException("The recover command is only available in private chat with the bot.\n\n" +
+                "Please send me `/recover` as a direct message.")
+                .AddLogLevel(LogLevel.Warning);
+
+        // Get lost sats for this user
+        var lostSats = await recoveryService.TryGetLostSatsAsync(command.UserId);
+        if (lostSats is null)
+            throw new Exception("You *don't have any lost sats* to recover.\n\n" +
+                "All your previous payments were successfully processed.")
+                .AddLogLevel(LogLevel.Information);
+
+        // Show recoverable amount
+        var message = new StringBuilder()
+            .AppendRecoveryMessage(lostSats)
+            .ToString();
+        await botClient.SendMessage(command.ChatId, message, 
+            parseMode: ParseMode.Markdown,
+            cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// Processes a recovery invoice submitted by a user to recover their lost sats.
+    /// </summary>
+    /// <remarks>
+    /// No need to check for sufficient balance here; if payment fails, recovery won't be cleared.
+    /// </remarks>
+    private async Task ProcessRecoveryInvoiceAsync(ITelegramBotClient botClient, User user, string bolt11, LostSatsRecord lostSats, CancellationToken cancellationToken)
+    {
+        // Calculate expected recovery amount
+        var expectedSats = lostSats.SatsAmount;
+        
+        // Decode and validate the invoice
+        var decodedInvoice = await lnbitsService.DecodeInvoiceAsync(bolt11, cancellationToken);
+        if (decodedInvoice is null)
+            throw new ArgumentException("Invalid Lightning invoice!\n\n" +
+                "Please provide a valid Lightning invoice for your recovery.")
+                .AddLogLevel(LogLevel.Warning);
+
+        ValidateInvoiceAmount(expectedSats, decodedInvoice.Amount);
+
+        await botClient.SendMessage(user.Id, 
+            "✅ Recovery invoice received!\n⏳ Processing recovery payment...", 
+            cancellationToken: cancellationToken);
+
+        // Attempt to pay the invoice
+        var paymentResult = await lnbitsService.PayInvoiceAsync(bolt11, cancellationToken);
+        if (paymentResult is not null)
+        {
+            await recoveryService.ClearLostSatsAsync(user.Id);
+            
+            await botClient.SendMessage(user.Id,
+                $"🎉 *Recovery Completed!*\n\n" +
+                $"✅ Successfully claimed *{expectedSats.Format()}*\n" +
+                $"Your lost sats have been sent to your Lightning wallet! 🚀",
+                parseMode: ParseMode.Markdown,
+                cancellationToken: cancellationToken);
+
+            logger.LogInformation("Successfully processed recovery payment for user {User}: {SatsAmount} sats from {Timestamp}", user, expectedSats.Format(), lostSats.Timestamp);
+        }
+        else
+        {
+            logger.LogError("Failed to process recovery payment for user {User}: {SatsAmount}", user, expectedSats.Format());
+                
+            throw new InvalidOperationException("Recovery payment failed!\n\n" +
+                "Unable to process your recovery invoice. Please try again later or contact support.")
+                .AddLogLevel(LogLevel.Error);
+        }
+    }
+
+
+    #region Helper
+    private void ValidateInvoiceAmount(long expectedSats, long invoiceSats)
+    {
+        if (invoiceSats != expectedSats)
+            throw new InvalidOperationException($"Invoice amount mismatch!\n\n" +
+                $"Expected: {expectedSats.Format()}\n" +
+                $"Your invoice: {invoiceSats.Format()}\n" +
+                "Please create a new invoice with the correct amount of sats.");
+    }
+    #endregion
 }

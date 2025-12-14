@@ -56,21 +56,22 @@ public static class Program
                 services.Configure<LnbitsSettings>(hostContext.Configuration.GetSection(LnbitsSettings.SectionName));
                 services.Configure<DebugSettings>(hostContext.Configuration.GetSection(DebugSettings.SectionName));
 
-                services.AddSingleton<LnbitsService>();
-                services.AddSingleton<SessionManager>();
-                services.AddSingleton<SessionWorkflowService>();
-
-                services.AddSingleton<UpdateHandler>();
+                services.AddHostedService<RecoveryService>();
+                services.AddHostedService<TelegramBotService>();
+                services.AddHostedService<PaymentMonitorService>();
 
                 services.AddSingleton<ITelegramBotClient>(sp =>
                 {
                     var settings = sp.GetRequiredService<IOptions<TelegramSettings>>().Value;
                     if (string.IsNullOrWhiteSpace(settings.BotToken))
                         throw new InvalidOperationException("Telegram bot token is not configured.");
-                    return new TelegramBotClient(settings.BotToken);
+                    return (new TelegramBotClient(settings.BotToken));
                 });
+                services.AddSingleton<RecoveryService>();
+                services.AddSingleton<LnbitsService>();
+                services.AddSingleton<SessionManager>();
+                services.AddSingleton<SessionWorkflowService>();
+                services.AddSingleton<UpdateHandler>();
 
-                services.AddHostedService<TelegramBotService>();
-                services.AddHostedService<PaymentMonitorService>();
             });
 }

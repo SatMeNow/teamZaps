@@ -135,6 +135,29 @@ When the limit is reached, new users cannot join lotteries until existing sessio
 }
 ```
 
+### EnableRecovery
+
+Disables the lost sats recovery system during development.
+- **Default**: `enabled`
+
+Completely disables all recovery operations:
+- No lost sats records will be created
+- Existing recovery files will not be processed
+- Background scanning for lost sats will be skipped
+
+```json
+{
+  "Debug": {
+    "DisableRecovery": true
+  }
+}
+```
+
+**Use cases:**
+- Testing payment flows without recovery interference
+- Preventing recovery file creation during development
+- Debugging session lifecycle without recovery noise
+
 ## 🧠 Core Concepts
 
 ### Session Lifecycle
@@ -153,11 +176,27 @@ graph TD
 
 ### Payment Flow
 
-1. **User Input** - Natural language parsing (`"5.99 beer + 2.50 tip"`)
+1. **User Input** - Natural language parsing (`"5.99 Beer"`)
 2. **Token Generation** - Structured `PaymentToken` objects with amounts and memos
 3. **Invoice Creation** - LNbits API calls to generate Lightning invoices
 4. **Payment Monitoring** - Background service polls payment status
 5. **Confirmation** - UI updates and session state changes
+
+### Lost and Found Recovery System
+
+Team Zaps includes a comprehensive **Lost and Found** recovery system to protect users from losing sats due to interrupted sessions, network issues, or other failures.
+
+#### How It Works
+
+**Automatic Detection:**
+- When sessions fail or are cancelled unexpectedly, user payments are automatically recorded as "lost sats"
+- Background service scans for lost payments periodically
+- Recovery records are stored as JSON files in the `lostSats/` directory
+
+**User Notification:**
+- Users with lost sats receive automatic notifications via direct message
+- Notifications include recovery amount and instructions
+- Notifications are sent weekly until recovery is completed
 
 ### Message Management
 
@@ -185,6 +224,32 @@ var participant = sessionManager.GetOrAddParticipant(session, userId, displayNam
 // Handles cleanup of help messages and status updates
 ```
 
+### RecoveryService
+```csharp
+// Background service for lost sats recovery
+// - Runs periodic scans every 6 hours
+// - Notifies users about pending recoveries
+// - Manages recovery file storage in lostSats/ directory
+// - Registered as both Singleton and HostedService
+public class RecoveryService : BackgroundService
+{
+    // Record lost sats for interrupted payments
+    public async Task RecordLostSatsAsync(ParticipantState participant, string reason);
+    
+    // Clear recovery record after successful recovery
+    public Task ClearLostSatsAsync(long userId);
+    
+    // Get user's lost sats record
+    public Task<LostSatsRecord?> TryGetLostSatsAsync(long userId);
+    
+    // Get all pending recoveries (for diagnostics)
+    public Task<ICollection<LostSatsRecord>> GetAllLostSatsAsync();
+    
+    // Scan for lost sats and notify users
+    public async Task ScanForLostSatsAsync();
+}
+```
+
 ### LnbitsService  
 ```csharp
 // Lightning Network integration
@@ -196,7 +261,7 @@ var result = await lnbitsService.PayInvoiceAsync(bolt11Invoice);
 ### PaymentParser
 ```csharp
 // Advanced payment string parsing with regex
-if (PaymentParser.TryParse("5.99 beer + 2.50 tip", out var tokens, out var error))
+if (PaymentParser.TryParse("5.99 beer + 2.50 pizza", out var tokens, out var error))
 {
     // tokens contain structured PaymentToken objects
     // Supports: amounts, currencies, memos, multiple formats

@@ -41,4 +41,7 @@ public static class CallbackActions
     public const string SelectBudget = "selectBudget";
     public const string SetTip = "setTip";
     public const string SelectTip = "selectTip";
+    public const string RecoverCreate = "recover_create";
+    public const string RecoverCancel = "recover_cancel";
+    public const string RecoverInvoice = "recover_invoice";
 }
