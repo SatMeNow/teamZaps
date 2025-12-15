@@ -306,7 +306,10 @@ public partial class UpdateHandler
         
         // Bot Information
         diagnostics.AppendLine("\n🤖 *Bot status:*");
-        diagnostics.AppendLine($"• Active sessions: *{sessionManager.ActiveSessions.Count()}*");
+        var maxSessions = "";
+        if (botBehaviour.MaxParallelSessions > 0)
+            maxSessions = $" of *{botBehaviour.MaxParallelSessions.Value}*";
+        diagnostics.AppendLine($"• Active sessions: *{sessionManager.ActiveSessions.Count()}*{maxSessions}");
 
         if (botBehaviour.MaxBudget is null)
             diagnostics.AppendLine("• Server budget: *Unlimited*");

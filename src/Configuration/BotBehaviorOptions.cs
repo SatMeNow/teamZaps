@@ -36,4 +36,8 @@ public class BotBehaviorOptions
     /// Maximum total budget (in <see cref="AcceptedFiatCurrency">fiat</see>) across all active sessions server-wide.
     /// </summary>
     public double? MaxBudget { get; set; }
+    /// <summary>
+    /// Maximum total number of parallel sessions server-wide.
+    /// </summary>
+    public uint? MaxParallelSessions { get; set; }
 }

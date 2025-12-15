@@ -135,6 +135,20 @@ When the limit is reached, new users cannot join lotteries until existing sessio
 }
 ```
 
+#### MaxParallelSessions
+Controls the maximum number of concurrent sessions allowed server-wide.
+- **Default**: `disabled` (unlimited sessions)
+
+When the limit is reached, new sessions cannot be started until existing sessions complete or are cancelled. This maybe helps manage server load and resource usage, but also to preserve the lightning backend.
+
+```json
+{
+  "BotBehaviorOptions": {
+    "MaxParallelSessions": 10
+  }
+}
+```
+
 ### EnableRecovery
 
 Disables the lost sats recovery system during development.

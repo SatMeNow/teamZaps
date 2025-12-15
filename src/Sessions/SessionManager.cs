@@ -33,6 +33,17 @@ public class SessionManager : IFormattableAmount
     #region Management
     public bool TryCreateSession(ChatFullInfo chat, User user, out SessionState session)
     {
+        // Check if maximum parallel sessions limit is reached:
+        if (botBehaviour.MaxParallelSessions is not null)
+        {
+            var activeSessionCount = (uint)sessions.Count;
+            if (activeSessionCount >= botBehaviour.MaxParallelSessions.Value)
+            {
+                logger.LogWarning("Refused to create session: Limit of {Limit} parallel sessions reached", botBehaviour.MaxParallelSessions.Value);
+                throw new InvalidOperationException($"Sorry, we reached the server's capacity! All session slots are in use. Please try again later.");
+            }
+        }
+
         var startedByUser = new ParticipantState(user);
         
         session = new SessionState
