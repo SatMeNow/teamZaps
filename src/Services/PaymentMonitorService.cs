@@ -39,7 +39,7 @@ public class PaymentMonitorService : BackgroundService
     {
         foreach (var session in sessionManager.ActiveSessions)
         {
-            foreach (var pending in session.PendingPayments.Values.ToArray())
+            foreach (var pending in session.PendingPayments.Values)
             {
                 try
                 {
@@ -49,15 +49,20 @@ public class PaymentMonitorService : BackgroundService
                     if (status.Paid && !pending.NotifiedPaid)
                     {
                         #if DEBUG
-                        var expectedAmount = ((ITipableAmount)pending).TotalFiatAmount;
-                        var actualAmount = status!.FiatAmount;
-                        var tolerance = Math.Max(0.01, expectedAmount * 0.01); // Allow 1% tolerance, minimum 1 cent
-                        Debug.Assert(Math.Abs(expectedAmount - actualAmount) <= tolerance);
+                        if (status!.SatsAmount > 0)
+                            Debug.Assert(status.SatsAmount == pending.SatsAmount);
+                        if (status!.FiatAmount > 0)
+                        {
+                            var expectedAmount = ((ITipableAmount)pending).TotalFiatAmount;
+                            var actualAmount = status!.FiatAmount;
+                            var tolerance = Math.Max(0.01, expectedAmount * 0.01); // Allow 1% tolerance, minimum 1 cent
+                            Debug.Assert(Math.Abs(expectedAmount - actualAmount) <= tolerance);
+                        }
                         Debug.Assert(pending.Currency == BotBehaviorOptions.AcceptedFiatCurrency);
                         #endif
 
                         pending.NotifiedPaid = true;
-                        pending.PaidAt = DateTimeOffset.UtcNow;
+                        pending.PaidAt = DateTimeOffset.Now;
 
                         // Update the payment message to show paid status
                         await PaymentMessage.UpdateAsync(pending, PaymentStatus.Paid, botClient, logger, cancellationToken);
@@ -67,12 +72,11 @@ public class PaymentMonitorService : BackgroundService
                             User = pending.User,
                             PaymentHash = pending.PaymentHash,
                             PaymentRequest = pending.PaymentRequest,
-                            Timestamp = pending.PaidAt ?? DateTimeOffset.UtcNow,
+                            Timestamp = pending.PaidAt ?? DateTimeOffset.Now,
                             Tokens = pending.Tokens,
                             SatsAmount = status!.SatsAmount,
                             FiatAmount = pending.FiatAmount,
-                            TipAmount = pending.TipAmount,
-                            FiatRate = status!.FiatRate
+                            TipAmount = pending.TipAmount
                         };
 
                         session.PendingPayments.TryRemove(pending.PaymentHash, out _);

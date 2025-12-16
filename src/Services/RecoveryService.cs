@@ -30,10 +30,9 @@ public class RecoveryService : BackgroundService
     #endregion
 
 
-    public RecoveryService(ILogger<RecoveryService> logger, ILightningBackend lightningBackend, ITelegramBotClient botClient, IOptions<DebugSettings> debugSettings)
+    public RecoveryService(ILogger<RecoveryService> logger, ITelegramBotClient botClient, IOptions<DebugSettings> debugSettings)
     {
         this.logger = logger;
-        this.lightningBackend = lightningBackend;
         this.botClient = botClient;
         this.debugSettings = debugSettings.Value;
 
@@ -99,7 +98,7 @@ public class RecoveryService : BackgroundService
                 UserId = participant.UserId,
                 UserName = participant.UserName(),
                 SatsAmount = participant.SatsAmount,
-                Timestamp = DateTimeOffset.UtcNow,
+                Timestamp = DateTimeOffset.Now,
                 Reason = reason,
                 LastNotified = null // Reset notification timestamp for new payment
             };
@@ -196,7 +195,7 @@ public class RecoveryService : BackgroundService
                 logger.LogInformation("Notified user {User} about {SatsAmount} of lost funds", record.DisplayName(), record.SatsAmount.Format());
                 
                 // Update the record with notification timestamp:
-                record.LastNotified = DateTimeOffset.UtcNow;
+                record.LastNotified = DateTimeOffset.Now;
                 await WriteRecordAsync(record);
             }
             catch (Exception ex)
@@ -261,7 +260,6 @@ public class RecoveryService : BackgroundService
 
 
     private readonly ILogger<RecoveryService> logger;
-    private readonly ILightningBackend lightningBackend;
     private readonly ITelegramBotClient botClient;
     private readonly DebugSettings debugSettings;
 }
@@ -279,7 +277,7 @@ public class LostSatsRecord : IUserName
 
     #region Properties.Management
     [JsonIgnore]
-    public bool NotificationRequired => (LastNotified is null) || ((DateTimeOffset.UtcNow - LastNotified.Value) < RecoveryNotificationPeriod);
+    public bool NotificationRequired => (LastNotified is null) || ((DateTimeOffset.Now - LastNotified.Value) < RecoveryNotificationPeriod);
     #endregion
     #region Properties
     public required long UserId { get; set; }

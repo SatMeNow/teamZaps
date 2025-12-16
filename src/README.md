@@ -35,7 +35,13 @@ src/
 │   └── UpdateHandler.Session.cs          # Group session commands
 ├── Services/                     # Background and integration services
 │   ├── TelegramBotService.cs     # Main bot service lifecycle
-│   └── LnbitsService.cs          # Lightning Network integration
+│   ├── PaymentMonitorService.cs  # Background payment monitoring
+│   ├── RecoveryService.cs        # Lost sats recovery system
+│   └── Backends/                 # Pluggable backend implementations
+│       ├── Backend.cs            # Backend interfaces and base types
+│       ├── Backend.AlbyHubService.cs   # AlbyHub NWC backend
+│       ├── Backend.LnbitsService.cs    # LNBits REST API backend
+│       └── Backend.CoinGecko.cs        # CoinGecko exchange rate backend
 ├── Sessions/                     # Core session management
 │   ├── SessionManager.cs         # Session storage and lifecycle
 │   ├── SessionState.cs           # Session and participant models
@@ -126,7 +132,7 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run
 
 ### Lightning Backend
 
-Team Zaps supports multiple Lightning backend implementations through a common `ILightningBackend` interface. **The first backend configured in the `Lightning` section will be selected and used.**
+Team Zaps supports multiple Lightning backend implementations through a common `ILightningBackend` interface. **The first backend configured in the `Backends` section will be selected and used.**
 
 #### AlbyHub Backend (NWC/NIP-47)
 
@@ -134,7 +140,7 @@ AlbyHub uses the **Nostr Wallet Connect (NWC)** protocol based on NIP-47 for com
 
 ```json
 {
-  "Lightning": {
+  "Backends": {
     "AlbyHub": {
       "ConnectionString": "nostr+walletconnect://PUBKEY?relay=wss://relay.getalby.com/v1&secret=SECRET",
       "RelayUrls": [ "wss://relay.getalby.com/v1" ]
@@ -159,7 +165,7 @@ LNBits uses a traditional REST API for Lightning operations. Requires a running 
 
 ```json
 {
-  "Lightning": {
+  "Backends": {
     "LNBits": {
       "LndhubUrl": "https://your-lnbits.com/lndhub/ext/",
       "ApiKey": "YOUR_LNBITS_API_KEY"
@@ -171,6 +177,23 @@ LNBits uses a traditional REST API for Lightning operations. Requires a running 
 **Configuration:**
 - `LndhubUrl` - LNDhub extension URL (must end with `/lndhub/ext/`)
 - `ApiKey` - Invoice/read key from your LNbits wallet
+
+#### CoinGecko Backend (Exchange Rates)
+
+CoinGecko provides free BTC exchange rate data for fiat currency support.
+
+```json
+{
+  "Backends": {
+    "CoinGecko": { }
+  }
+}
+```
+
+**Configuration:**
+- No settings required - works out of the box
+- Automatically fetches fiat exchange rates
+- Used by AlbyHub backend to support fiat currency invoices
 
 ### Bot Behavior Options
 
@@ -278,6 +301,78 @@ Team Zaps employs sophisticated message lifecycle management:
 - **Summary Messages** - Complete payment breakdowns for winners
 
 ## 🔧 Key Services
+
+### Backend Architecture
+
+Team Zaps uses a **pluggable backend architecture** that allows different service providers to be swapped without changing application code. Backends implement feature-specific interfaces and are automatically discovered via attributes.
+
+#### Backend Interface Pattern
+
+All backends must:
+1. **Implement one or more backend interfaces** based on provided features:
+   - `ILightningBackend` - Lightning wallet operations (create/pay invoices, check status)
+   - `IExchangeRateBackend` - Cryptocurrency exchange rate lookups
+
+2. **Decorate the class** with `[BackendDescription("BackendName")]` attribute:
+   ```csharp
+   [BackendDescription("AlbyHub")]
+   public class AlbyHubService : ILightningBackend
+   {
+       // Implementation...
+   }
+   ```
+
+#### Available Backends
+
+**Lightning Backends:**
+- **AlbyHub** - NWC (Nostr Wallet Connect) using NIP-47 protocol
+  - Implements: `ILightningBackend`
+  - Configuration: `Backends:AlbyHub` section
+  - Features: Invoice creation, payment, status checks via Nostr relays
+
+- **LNBits** - Traditional REST API integration
+  - Implements: `ILightningBackend`
+  - Configuration: `Backends:LNBits` section  
+  - Features: Full Lightning operations with fiat currency support
+
+**Exchange Rate Backends:**
+- **CoinGecko** - Free cryptocurrency price data
+  - Implements: `IExchangeRateBackend`
+  - Configuration: `Backends:CoinGecko` section (empty config - no keys needed)
+  - API: CoinGecko public API (no authentication required)
+  - Features: BTC/USD and BTC/EUR rates with 5-minute caching
+  - Rate limits: 30 calls/minute on free tier
+
+#### Backend Selection
+
+Backends are automatically registered based on configuration:
+```json
+{
+  "Lightning": {
+    "AlbyHub": { /* config */ },  // ← First backend is selected
+    "LNBits": { /* config */ }
+  }
+}
+```
+
+The first configured backend in each category is automatically selected and injected into services.
+
+#### Adding New Backends
+
+To add a new backend:
+
+1. Create `Backend.YourService.cs` in `Services/Backends/`
+2. Implement required interface(s) (`ILightningBackend`, `IExchangeRateBackend`, etc.)
+3. Add `[BackendDescription("YourService")]` attribute
+
+**Example - Multi-Feature Backend:**
+```csharp
+[BackendDescription("SuperWallet")]
+public class SuperWalletService : ILightningBackend, IExchangeRateBackend
+{
+    // Implements both Lightning operations AND exchange rates
+}
+```
 
 ### SessionManager
 ```csharp

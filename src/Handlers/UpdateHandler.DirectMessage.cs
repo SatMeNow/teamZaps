@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using teamZaps;
 using teamZaps.Configuration;
 using teamZaps.Helper;
 using teamZaps.Services;
@@ -175,10 +176,11 @@ public partial class UpdateHandler
                         PaymentHash = invoice!.PaymentHash,
                         PaymentRequest = invoice.PaymentRequest,
                         Tokens = tokenGrp.ToArray(),
-                        FiatAmount = grpAmount,
+                        SatsAmount = invoice.SatsAmount,
                         TipAmount = tipAmount,
+                        FiatAmount = grpAmount,
                         Currency = grpCurrency,
-                        CreatedAt = DateTimeOffset.UtcNow
+                        CreatedAt = DateTimeOffset.Now
                     };
 
                     session.PendingPayments.TryAdd(invoice.PaymentHash, pending);
@@ -207,11 +209,8 @@ public partial class UpdateHandler
         var winnerInfo = session.Winners[winnerUser.UserId];
 
         // Decode and validate the invoice amount
-        var decodedInvoice = await lightningBackend.DecodeInvoiceAsync(bolt11, cancellationToken);
-        if (decodedInvoice is null)
-            throw new ArgumentException("Invalid invoice! Please provide a valid Lightning invoice.");
-
-        ValidateInvoiceAmount(winnerInfo.SatsAmount, decodedInvoice.Amount);
+        var invoiceSats = lightningBackend.GetInvoiceAmount(bolt11);
+        ValidateInvoiceAmount(winnerInfo.SatsAmount, invoiceSats);
 
         winnerUser!.SubmittedInvoice = true;
 
@@ -301,7 +300,7 @@ public partial class UpdateHandler
         diagnostics.AppendLine("\n⚙️ *System status:*");
         diagnostics.AppendLine($"• CPU usage: *{Environment.CpuUsage.TotalTime}*");
         diagnostics.AppendLine($"• Memory usage: *{GC.GetTotalMemory(false) / 1024 / 1024:N0} MB*");
-        diagnostics.AppendLine($"• Uptime: *{DateTimeOffset.UtcNow - Process.GetCurrentProcess().StartTime:dd\\.hh\\:mm\\:ss}*");
+        diagnostics.AppendLine($"• Uptime: *{DateTimeOffset.Now - Process.GetCurrentProcess().StartTime:dd\\.hh\\:mm\\:ss}*");
         
         // Bot Information
         diagnostics.AppendLine("\n🤖 *Bot status:*");
@@ -334,7 +333,7 @@ public partial class UpdateHandler
             var oldestRecord = allLostSats.OrderBy(r => r.Timestamp).FirstOrDefault();
             if (oldestRecord is not null)
             {
-                var age = (DateTimeOffset.UtcNow - oldestRecord.Timestamp);
+                var age = (DateTimeOffset.Now - oldestRecord.Timestamp);
                 diagnostics.AppendLine($"• Oldest record: *{age.TotalDays:N0} days ago*");
             }
         }
@@ -343,6 +342,19 @@ public partial class UpdateHandler
         diagnostics.AppendLine("\n⚡ *Lightning backend status:*");
         diagnostics.AppendLine($"• Backend type: *{lightningBackend.BackendType}*");
         diagnostics.AppendLine($"• Sent requests: *{lightningBackend.SentRequests}*");
+
+        // Exchange rate backend Information (optional)
+        diagnostics.AppendLine("\n💱 *Exchange rate backend status:* ");
+        if (exchangeRateBackend is null)
+            diagnostics.AppendLine("• Backend: 🚫 *none*");
+        else
+        {
+            diagnostics.AppendLine($"• Backend type: *{exchangeRateBackend.BackendType}*");
+            diagnostics.AppendLineIfNotNull("• Last update: *{0}*", exchangeRateBackend.LastRateUpdate?.ToString("f"), "⚠️ never");
+            if (exchangeRateBackend.RatesReliable)
+                diagnostics.AppendLine($"• Fiat rate: *{exchangeRateBackend.FiatRate!.Value.FormatFiatRate()}*");
+            diagnostics.AppendLine($"• Sent requests: *{exchangeRateBackend.SentRequests}*");
+        }
 
         await botClient.SendMessage(command.ChatId,
             diagnostics.ToString(),
@@ -390,13 +402,8 @@ public partial class UpdateHandler
         var expectedSats = lostSats.SatsAmount;
         
         // Decode and validate the invoice
-        var decodedInvoice = await lightningBackend.DecodeInvoiceAsync(bolt11, cancellationToken);
-        if (decodedInvoice is null)
-            throw new ArgumentException("Invalid Lightning invoice!\n\n" +
-                "Please provide a valid Lightning invoice for your recovery.")
-                .AddLogLevel(LogLevel.Warning);
-
-        ValidateInvoiceAmount(expectedSats, decodedInvoice.Amount);
+        var invoiceSats = lightningBackend.GetInvoiceAmount(bolt11);
+        ValidateInvoiceAmount(expectedSats, invoiceSats);
 
         await botClient.SendMessage(user.Id, 
             "✅ Recovery invoice received!\n⏳ Processing recovery payment...", 

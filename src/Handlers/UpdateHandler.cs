@@ -11,6 +11,10 @@ namespace teamZaps.Handlers;
 public partial class UpdateHandler : IUpdateHandler
 {
     public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, ILightningBackend lightningBackend, SessionManager sessionManager, SessionWorkflowService workflowService, RecoveryService recoveryService)
+        : this(logger, botBehaviour, debugSettings, telegramSettings, hostEnvironment, lightningBackend, null, sessionManager, workflowService, recoveryService)
+    {
+    }
+    public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, ILightningBackend lightningBackend, IExchangeRateBackend? exchangeRateBackend, SessionManager sessionManager, SessionWorkflowService workflowService, RecoveryService recoveryService)
     {
         this.logger = logger;
         this.debugSettings = debugSettings.Value;
@@ -18,6 +22,7 @@ public partial class UpdateHandler : IUpdateHandler
         this.telegramSettings = telegramSettings.Value;
         this.hostEnvironment = hostEnvironment;
         this.lightningBackend = lightningBackend;
+        this.exchangeRateBackend = exchangeRateBackend;
         this.sessionManager = sessionManager;
         this.workflowService = workflowService;
         this.recoveryService = recoveryService;
@@ -231,6 +236,7 @@ public partial class UpdateHandler : IUpdateHandler
     private readonly TelegramSettings telegramSettings;
     private readonly IHostEnvironment hostEnvironment;
     private readonly ILightningBackend lightningBackend;
+    private readonly IExchangeRateBackend? exchangeRateBackend;
     private readonly SessionManager sessionManager;
     private readonly SessionWorkflowService workflowService;
     private readonly RecoveryService recoveryService;
@@ -276,6 +282,6 @@ internal static partial class Ext
     {
         if (!string.IsNullOrEmpty(icon))
             message = $"{icon} {message}";
-        return source.SendMessage(userId, message, cancellationToken: cancellationToken);
+        return source.SendMessage(userId, message, parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
     }
 }
