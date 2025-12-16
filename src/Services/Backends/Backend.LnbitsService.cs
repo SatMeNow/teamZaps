@@ -4,9 +4,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using teamZaps.Configuration;
-using teamZaps.Services.Backends;
+using teamZaps.Backend;
 
-namespace teamZaps.Services.Backends;
+namespace teamZaps.Backend;
 
 [BackendDescription("LNBits")]
 public class LnbitsService : ILightningBackend
@@ -24,9 +24,6 @@ public class LnbitsService : ILightningBackend
 
 
     #region Properties
-    /// <summary>
-    /// Total number of requests sent to the LNbits server.
-    /// </summary>
     public ulong SentRequests { get; private set; }
     #endregion
 
@@ -47,10 +44,10 @@ public class LnbitsService : ILightningBackend
             return (null);
         }
     }
-    public Task<ILightningInvoice?> CreateInvoiceAsync(double amount, string unitName, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
+    public Task<ILightningInvoice?> CreateInvoiceAsync(double amount, PaymentCurrency currency, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
     {
         amount = amount,
-        unit = unitName,
+        unit = currency.ToUnitName(),
         memo = memo ?? "",
         @out = false
     }, cancellationToken);

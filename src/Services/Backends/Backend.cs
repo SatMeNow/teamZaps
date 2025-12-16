@@ -1,6 +1,8 @@
+using System.ComponentModel;
 using teamZaps.Utils;
 
-namespace teamZaps.Services.Backends;
+namespace teamZaps.Backend;
+
 
 public static partial class Common
 {
@@ -42,7 +44,7 @@ public interface ILightningBackend
     /// <summary>
     /// Create a Lightning invoice.
     /// </summary>
-    Task<ILightningInvoice?> CreateInvoiceAsync(double amount, string currency, string? memo = null, CancellationToken cancellationToken = default);
+    Task<ILightningInvoice?> CreateInvoiceAsync(double amount, PaymentCurrency currency, string? memo = null, CancellationToken cancellationToken = default);
     /// <summary>
     /// Decode a BOLT11 Lightning invoice to extract payment details.
     /// </summary>
@@ -58,8 +60,6 @@ public interface ILightningBackend
     #endregion
 }
 
-
-#region Models.CommonData
 /// <summary>
 /// Lightning invoice details (BOLT11 payment request).
 /// </summary>
@@ -99,4 +99,3 @@ public interface IPaymentStatus
     double FiatAmount { get; }
     double FiatRate { get; }
 }
-#endregion
