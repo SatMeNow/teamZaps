@@ -69,22 +69,6 @@ public class LnbitsService : ILightningBackend
             return (null);
         }
     }
-    public async Task<IDecodedInvoice?> DecodeInvoiceAsync(string bolt11, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var res = await RequestAsync<LnbitsDecodedInvoice>(HttpMethod.Post, "/api/v1/payments/decode", new { data = bolt11 }, cancellationToken).ConfigureAwait(false);
-            {
-                res!.Amount = (res.Amount / 1000); // Convert msat to sat
-            }
-            return (res);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error decoding invoice: {Invoice}", bolt11);
-            return null;
-        }
-    }
 
     public async Task<IPaymentResponse?> PayInvoiceAsync(string bolt11, CancellationToken cancellationToken = default)
     {
@@ -170,6 +154,8 @@ file class LnbitsInvoice : ILightningInvoice
 
     [JsonPropertyName("payment_hash")]
     public string PaymentHash { get; set; } = string.Empty;
+
+    long? ILightningInvoice.SatsAmount => null;
 }
 file class LnbitsPaymentResponse : IPaymentResponse
 {
@@ -229,27 +215,4 @@ file class LnbitsPaymentStatus : IPaymentStatus
 
     [JsonPropertyName("preimage")]
     public string? Preimage { get; set; }
-}
-file class LnbitsDecodedInvoice : IDecodedInvoice
-{
-    [JsonPropertyName("amount_msat")]
-    public long Amount { get; set; }
-
-    [JsonPropertyName("description")]
-    public string? Description { get; set; }
-
-    [JsonPropertyName("description_hash")]
-    public string? DescriptionHash { get; set; }
-
-    [JsonPropertyName("payee")]
-    public string? Payee { get; set; }
-
-    [JsonPropertyName("payment_hash")]
-    public string? PaymentHash { get; set; }
-
-    [JsonPropertyName("expiry")]
-    public long? Expiry { get; set; }
-
-    [JsonPropertyName("min_final_cltv_expiry")]
-    public long? MinFinalCltvExpiry { get; set; }
 }

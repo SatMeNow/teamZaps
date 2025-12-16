@@ -15,6 +15,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.10" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.10" />
     <PackageReference Include="NBitcoin" Version="9.0.4" />
+    <PackageReference Include="NLightning.Bolt11" Version="4.0.5" />
     <PackageReference Include="NNostr.Client" Version="0.0.54" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />

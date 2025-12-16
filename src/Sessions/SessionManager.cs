@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using teamZaps.Configuration;
 using teamZaps.Services;
+using teamZaps.Utils;
 
 namespace teamZaps.Sessions;
 
@@ -30,6 +31,12 @@ public class SessionManager : IFormattableAmount
     #endregion
 
 
+    #region Events
+    public event EventHandler OnFirstSessionCreated;
+    public event EventHandler OnLastSessionRemoved;
+    #endregion
+
+
     #region Management
     public bool TryCreateSession(ChatFullInfo chat, User user, out SessionState session)
     {
@@ -44,6 +51,7 @@ public class SessionManager : IFormattableAmount
             }
         }
 
+        var firstSession = sessions.IsEmpty();
         var startedByUser = new ParticipantState(user);
         
         session = new SessionState
@@ -51,18 +59,22 @@ public class SessionManager : IFormattableAmount
             ChatId = chat.Id,
             ChatTitle = (chat.Title ?? ""),
             StartedByUser = startedByUser,
-            StartedAt = DateTimeOffset.UtcNow,
+            StartedAt = DateTimeOffset.Now,
             Phase = SessionPhase.WaitingForLotteryParticipants
         };
 
         if (sessions.TryAdd(chat.Id, session))
         {
             logger.LogInformation("Session {Session} created by user {User}", session, user);
-            return true;
+            if (firstSession)
+                OnFirstSessionCreated?.Invoke(this, EventArgs.Empty);
+            return (true);
         }
-
-        session = GetSessionByChat(chat.Id)!;
-        return false;
+        else
+        {
+            session = GetSessionByChat(chat.Id)!;
+            return (false);
+        }
     }
 
     public SessionState? GetSessionByChat(long chatId) => sessions.TryGetValue(chatId, out var session) ? session : null;
@@ -86,7 +98,7 @@ public class SessionManager : IFormattableAmount
                 
                 lastSummaries[chatId] = new SessionSummary(
                     session.StartedAt,
-                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.Now,
                     session.SatsAmount,
                     session.FiatAmount,
                     session.Participants.Count,
@@ -94,6 +106,9 @@ public class SessionManager : IFormattableAmount
                     session.WinnerUser?.DisplayName(),
                     session.PayoutCompleted);
             }
+
+            if (sessions.IsEmpty())
+                OnLastSessionRemoved?.Invoke(this, EventArgs.Empty);
         }
         return (removed);
     }

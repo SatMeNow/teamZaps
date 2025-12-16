@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Numerics;
+using teamZaps.Backend;
 using teamZaps.Configuration;
 using teamZaps.Utils;
 
@@ -54,6 +55,8 @@ public enum PaymentCurrency
 {
     [Description("Satoshis"), Currency("丰", "sat", [ "s", "sat", "sats" ])] // Alternative signs: ⓢ ₛ 𝕤 丰
     Sats,
+    [Description("Bitcoin"), Currency("₿", "BTC", [ "btc", "bitcoin" ])]
+    Bitcoin,
     [Description("Euro"), Currency("€", "EUR", [ "eur", "euro" ])]
     Euro,
     [Description("US Dollar"), Currency("$", "USD", [ "usd" ])]
@@ -114,6 +117,7 @@ public static partial class Extensions
             amount += $" (inkl. {tipAmount.Format()} tip)";
         return (amount);
     }
+    public static string FormatFiatRate(this double source) => $"{source:F2} {Common.AcceptedFiatPerBitcoinSymbol}";
     public static string? FormatAmount(this IFormattableAmount source)
     {
         var sats = source.SatsAmount.Format();

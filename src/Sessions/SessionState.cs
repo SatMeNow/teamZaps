@@ -101,7 +101,6 @@ public record PaymentRecord() : IUser, ITipableAmount
     long IFormattableAmount.SatsAmount => this.SatsAmount;
     public required long SatsAmount;
     double IFormattableAmount.FiatAmount => this.FiatAmount;
-    public required double FiatRate;
     double ITipableAmount.TipAmount => this.TipAmount;
     public required double TipAmount;
     public required double FiatAmount;
@@ -125,12 +124,13 @@ public class PendingPayment : IUser, ITipableAmount
     
     public required PaymentToken[] Tokens { get; init; }
     public required PaymentCurrency Currency { get; init; }
-    long IFormattableAmount.SatsAmount => 0;
+    long IFormattableAmount.SatsAmount => (SatsAmount ?? 0);
+    public long? SatsAmount { get; init; }
     public required double TipAmount { get; init; }
     public required double FiatAmount { get; init; }
 
 
-    public override string ToString() => $"{User}: {this}";
+    public override string ToString() => $"{User}: {(this as ITipableAmount).FormatAmount()}";
 }
 
 public enum SessionPhase

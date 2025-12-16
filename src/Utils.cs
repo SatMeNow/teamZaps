@@ -114,6 +114,7 @@ namespace teamZaps.Utils
             else
                 return (null);
         }
+        public static bool IsAssignableTo<T>(this Type source) => (source?.IsAssignableTo(typeof(T)) == true);
     }
     internal static class ExtFieldInfo
     {
@@ -177,6 +178,7 @@ namespace teamZaps.Utils
         {
             return ((source is null) || (!source.Any()));
         }
+        public static IEnumerable<T> WhereNotNull<T>(this IEnumerable<T> source) => source.Where(t => t is not null);
     }
     internal static partial class ExtDictionary
     {
@@ -207,6 +209,13 @@ namespace teamZaps.Utils
                 return (key);
             else
                 throw new NotImplementedException($"Failed to obtain key due to conditional missmatch!");
+        }
+        public static U? TryGetValue<T, U>(this IReadOnlyDictionary<T, U> source, T key)
+        {
+            if (source.TryGetValue(key, out var value))
+                return (value);
+            else
+                return (default);
         }
     }
     internal static partial class ExtString
