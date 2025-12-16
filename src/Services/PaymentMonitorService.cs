@@ -1,15 +1,16 @@
 using System.Diagnostics;
 using teamZaps.Configuration;
 using teamZaps.Services;
+using teamZaps.Services.Backends;
 
 namespace teamZaps.Sessions;
 
 public class PaymentMonitorService : BackgroundService
 {
-    public PaymentMonitorService(SessionManager sessionManager, LnbitsService lnbitsService, ITelegramBotClient botClient, ILogger<PaymentMonitorService> logger, SessionWorkflowService workflowService, RecoveryService recoveryService)
+    public PaymentMonitorService(SessionManager sessionManager, ILightningBackend lightningBackend, ITelegramBotClient botClient, ILogger<PaymentMonitorService> logger, SessionWorkflowService workflowService, RecoveryService recoveryService)
     {
         this.sessionManager = sessionManager;
-        this.lnbitsService = lnbitsService;
+        this.lightningBackend = lightningBackend;
         this.botClient = botClient;
         this.logger = logger;
         this.workflowService = workflowService;
@@ -42,14 +43,14 @@ public class PaymentMonitorService : BackgroundService
             {
                 try
                 {
-                    var status = await lnbitsService.CheckPaymentStatusAsync(pending.PaymentHash, cancellationToken).ConfigureAwait(false);
+                    var status = await lightningBackend.CheckPaymentStatusAsync(pending.PaymentHash, cancellationToken).ConfigureAwait(false);
                     if (status is null)
                         continue;
                     if (status.Paid && !pending.NotifiedPaid)
                     {
                         #if DEBUG
                         var expectedAmount = ((ITipableAmount)pending).TotalFiatAmount;
-                        var actualAmount = status.Details!.Extra!.FiatAmount;
+                        var actualAmount = status!.FiatAmount;
                         var tolerance = Math.Max(0.01, expectedAmount * 0.01); // Allow 1% tolerance, minimum 1 cent
                         Debug.Assert(Math.Abs(expectedAmount - actualAmount) <= tolerance);
                         Debug.Assert(pending.Currency == BotBehaviorOptions.AcceptedFiatCurrency);
@@ -68,10 +69,10 @@ public class PaymentMonitorService : BackgroundService
                             PaymentRequest = pending.PaymentRequest,
                             Timestamp = pending.PaidAt ?? DateTimeOffset.UtcNow,
                             Tokens = pending.Tokens,
-                            SatsAmount = status.Details!.Amount,
+                            SatsAmount = status!.SatsAmount,
                             FiatAmount = pending.FiatAmount,
                             TipAmount = pending.TipAmount,
-                            FiatRate = status.Details!.Extra!.FiatRate
+                            FiatRate = status!.FiatRate
                         };
 
                         session.PendingPayments.TryRemove(pending.PaymentHash, out _);
@@ -112,7 +113,7 @@ public class PaymentMonitorService : BackgroundService
 
 
     private readonly SessionManager sessionManager;
-    private readonly LnbitsService lnbitsService;
+    private readonly ILightningBackend lightningBackend;
     private readonly ITelegramBotClient botClient;
     private readonly ILogger<PaymentMonitorService> logger;
     private readonly SessionWorkflowService workflowService;

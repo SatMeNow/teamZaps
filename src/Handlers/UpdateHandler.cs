@@ -1,6 +1,7 @@
 using System.Text;
 using teamZaps.Configuration;
 using teamZaps.Services;
+using teamZaps.Services.Backends;
 using teamZaps.Sessions;
 using teamZaps.Utils;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -9,14 +10,14 @@ namespace teamZaps.Handlers;
 
 public partial class UpdateHandler : IUpdateHandler
 {
-    public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, LnbitsService lnbitsService, SessionManager sessionManager, SessionWorkflowService workflowService, RecoveryService recoveryService)
+    public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, ILightningBackend lightningBackend, SessionManager sessionManager, SessionWorkflowService workflowService, RecoveryService recoveryService)
     {
         this.logger = logger;
         this.debugSettings = debugSettings.Value;
         this.botBehaviour = botBehaviour.Value;
         this.telegramSettings = telegramSettings.Value;
         this.hostEnvironment = hostEnvironment;
-        this.lnbitsService = lnbitsService;
+        this.lightningBackend = lightningBackend;
         this.sessionManager = sessionManager;
         this.workflowService = workflowService;
         this.recoveryService = recoveryService;
@@ -229,7 +230,7 @@ public partial class UpdateHandler : IUpdateHandler
     private readonly BotBehaviorOptions botBehaviour;
     private readonly TelegramSettings telegramSettings;
     private readonly IHostEnvironment hostEnvironment;
-    private readonly LnbitsService lnbitsService;
+    private readonly ILightningBackend lightningBackend;
     private readonly SessionManager sessionManager;
     private readonly SessionWorkflowService workflowService;
     private readonly RecoveryService recoveryService;
