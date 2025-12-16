@@ -6,6 +6,7 @@ using teamZaps.Helper;
 using teamZaps.Sessions;
 using teamZaps.Utils;
 using teamZaps.Configuration;
+using teamZaps.Services.Backends;
 
 namespace teamZaps.Services;
 
@@ -29,10 +30,10 @@ public class RecoveryService : BackgroundService
     #endregion
 
 
-    public RecoveryService(ILogger<RecoveryService> logger, LnbitsService lnbitsService, ITelegramBotClient botClient, IOptions<DebugSettings> debugSettings)
+    public RecoveryService(ILogger<RecoveryService> logger, ILightningBackend lightningBackend, ITelegramBotClient botClient, IOptions<DebugSettings> debugSettings)
     {
         this.logger = logger;
-        this.lnbitsService = lnbitsService;
+        this.lightningBackend = lightningBackend;
         this.botClient = botClient;
         this.debugSettings = debugSettings.Value;
 
@@ -260,7 +261,7 @@ public class RecoveryService : BackgroundService
 
 
     private readonly ILogger<RecoveryService> logger;
-    private readonly LnbitsService lnbitsService;
+    private readonly ILightningBackend lightningBackend;
     private readonly ITelegramBotClient botClient;
     private readonly DebugSettings debugSettings;
 }

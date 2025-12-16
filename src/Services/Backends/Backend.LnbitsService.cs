@@ -4,10 +4,12 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using teamZaps.Configuration;
+using teamZaps.Services.Backends;
 
-namespace teamZaps.Services;
+namespace teamZaps.Services.Backends;
 
-public class LnbitsService
+[BackendDescription("LNBits")]
+public class LnbitsService : ILightningBackend
 {
     public LnbitsService(ILogger<LnbitsService> logger, IOptions<LnbitsSettings> settings)
     {
@@ -21,9 +23,6 @@ public class LnbitsService
     }
 
 
-    #region Properties.Management
-    public string ServiceType => "LNBits";
-    #endregion
     #region Properties
     /// <summary>
     /// Total number of requests sent to the LNbits server.
@@ -48,32 +47,32 @@ public class LnbitsService
             return (null);
         }
     }
-    public Task<LnbitsInvoice?> CreateInvoiceAsync(double amount, string unitName, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
+    public Task<ILightningInvoice?> CreateInvoiceAsync(double amount, string unitName, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
     {
         amount = amount,
         unit = unitName,
         memo = memo ?? "",
         @out = false
     }, cancellationToken);
-    public Task<LnbitsInvoice?> CreateInvoiceAsync(long amount, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
+    public Task<ILightningInvoice?> CreateInvoiceAsync(long amount, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
     {
         amount = amount,
         memo = memo ?? "",
         @out = false
     }, cancellationToken);
-    private Task<LnbitsInvoice?> CreateInvoiceAsync(object invoiceRequest, CancellationToken cancellationToken)
+    private async Task<ILightningInvoice?> CreateInvoiceAsync(object invoiceRequest, CancellationToken cancellationToken)
     {
         try
         {
-            return (RequestAsync<LnbitsInvoice>(HttpMethod.Post, "/api/v1/payments", invoiceRequest, cancellationToken));
+            return (await RequestAsync<LnbitsInvoice>(HttpMethod.Post, "/api/v1/payments", invoiceRequest, cancellationToken));
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error creating invoice.");
-            return (Task.FromResult<LnbitsInvoice?>(null));
+            return (null);
         }
     }
-    public async Task<LnbitsDecodedInvoice?> DecodeInvoiceAsync(string bolt11, CancellationToken cancellationToken = default)
+    public async Task<IDecodedInvoice?> DecodeInvoiceAsync(string bolt11, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -90,7 +89,7 @@ public class LnbitsService
         }
     }
 
-    public async Task<LnbitsPaymentResponse?> PayInvoiceAsync(string bolt11, CancellationToken cancellationToken = default)
+    public async Task<IPaymentResponse?> PayInvoiceAsync(string bolt11, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -112,7 +111,7 @@ public class LnbitsService
             return (null);
         }
     }
-    public async Task<LnbitsPaymentStatus?> CheckPaymentStatusAsync(string paymentHash, CancellationToken cancellationToken = default)
+    public async Task<IPaymentStatus?> CheckPaymentStatusAsync(string paymentHash, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -167,8 +166,7 @@ public class LnbitsWalletDetails
     [JsonPropertyName("balance")]
     public long Balance { get; set; }
 }
-
-public class LnbitsInvoice
+file class LnbitsInvoice : ILightningInvoice
 {
     [JsonPropertyName("payment_request")]
     public string PaymentRequest { get; set; } = string.Empty;
@@ -176,8 +174,7 @@ public class LnbitsInvoice
     [JsonPropertyName("payment_hash")]
     public string PaymentHash { get; set; } = string.Empty;
 }
-
-public class LnbitsPaymentResponse
+file class LnbitsPaymentResponse : IPaymentResponse
 {
     [JsonPropertyName("payment_hash")]
     public string PaymentHash { get; set; } = string.Empty;
@@ -200,9 +197,33 @@ public class LnbitsPaymentResponse
     [JsonPropertyName("memo")]
     public string? Memo { get; set; }
 }
-
-public class LnbitsPaymentStatus
+file class LnbitsPaymentStatus : IPaymentStatus
 {
+    public class LnbitsPaymentDetails
+    {
+        public class LnbitsPaymentExtra
+        {
+            [JsonPropertyName("fiat_amount")]
+            public double FiatAmount { get; set; }
+            [JsonPropertyName("fiat_currency")]
+            public string? FiatCurrency { get; set; }
+            [JsonPropertyName("fiat_rate")]
+            public double FiatRate { get; set; }
+        }
+        
+
+        [JsonPropertyName("amount")]
+        public long Amount { get; set; }
+        
+        [JsonPropertyName("extra")]
+        public LnbitsPaymentExtra? Extra { get; set; }
+    }
+
+
+    public long SatsAmount => Details?.Amount ?? 0;
+    public double FiatAmount => Details?.Extra?.FiatAmount ?? 0;
+    public double FiatRate => Details?.Extra?.FiatRate ?? 0;
+
     [JsonPropertyName("paid")]
     public bool Paid { get; set; }
 
@@ -212,25 +233,7 @@ public class LnbitsPaymentStatus
     [JsonPropertyName("preimage")]
     public string? Preimage { get; set; }
 }
-public class LnbitsPaymentDetails
-{
-    [JsonPropertyName("amount")]
-    public long Amount { get; set; }
-    
-    [JsonPropertyName("extra")]
-    public LnbitsPaymentExtra? Extra { get; set; }
-}
-public class LnbitsPaymentExtra
-{
-    [JsonPropertyName("fiat_amount")]
-    public double FiatAmount { get; set; }
-    [JsonPropertyName("fiat_currency")]
-    public string? FiatCurrency { get; set; }
-    [JsonPropertyName("fiat_rate")]
-    public double FiatRate { get; set; }
-}
-
-public class LnbitsDecodedInvoice
+file class LnbitsDecodedInvoice : IDecodedInvoice
 {
     [JsonPropertyName("amount_msat")]
     public long Amount { get; set; }

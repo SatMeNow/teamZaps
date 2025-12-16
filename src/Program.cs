@@ -1,6 +1,7 @@
 using teamZaps.Configuration;
 using teamZaps.Handlers;
 using teamZaps.Services;
+using teamZaps.Services.Backends;
 using teamZaps.Sessions;
 
 namespace teamZaps;
@@ -53,7 +54,7 @@ public static class Program
             {
                 services.Configure<BotBehaviorOptions>(hostContext.Configuration.GetSection(BotBehaviorOptions.SectionName));
                 services.Configure<TelegramSettings>(hostContext.Configuration.GetSection(TelegramSettings.SectionName));
-                services.Configure<LnbitsSettings>(hostContext.Configuration.GetSection(LnbitsSettings.SectionName));
+                services.Configure<LnbitsSettings>(hostContext.Configuration.GetSection("Lightning"));
                 services.Configure<DebugSettings>(hostContext.Configuration.GetSection(DebugSettings.SectionName));
 
                 services.AddHostedService<RecoveryService>();
@@ -67,8 +68,25 @@ public static class Program
                         throw new InvalidOperationException("Telegram bot token is not configured.");
                     return (new TelegramBotClient(settings.BotToken));
                 });
+
+                // Register Lightning backend based on configuration
+                // > Select first configured backend:
+                var backendType = hostContext.Configuration
+                    .GetSection("Lightning")
+                    .GetChildren()
+                    .Select(c => c.Key)
+                    .FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(backendType))
+                    throw new InvalidOperationException("No lightning backend configured!");
+                if (!Common.BackendTypes.TryGetValue(backendType.ToLowerInvariant(), out var lightningBackend))
+                    throw new NotSupportedException($"Unknown lightning backend '{backendType}' configured!");
+                else
+                {
+                    services.AddSingleton(typeof(ILightningBackend), lightningBackend);
+                    Log.Information($"Using '{backendType}' as lightning backend");
+                }
+                
                 services.AddSingleton<RecoveryService>();
-                services.AddSingleton<LnbitsService>();
                 services.AddSingleton<SessionManager>();
                 services.AddSingleton<SessionWorkflowService>();
                 services.AddSingleton<UpdateHandler>();

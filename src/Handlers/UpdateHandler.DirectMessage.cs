@@ -168,7 +168,7 @@ public partial class UpdateHandler
                 try
                 {
                     // TODO: pass the enum here, not a currency string! 
-                    var invoice = await lnbitsService.CreateInvoiceAsync(invoiceAmount, unit, memo, cancellationToken).ConfigureAwait(false);
+                    var invoice = await lightningBackend.CreateInvoiceAsync(invoiceAmount, unit, memo, cancellationToken).ConfigureAwait(false);
                     // Store as pending payment
                     var pending = new PendingPayment
                     {
@@ -208,7 +208,7 @@ public partial class UpdateHandler
         var winnerInfo = session.Winners[winnerUser.UserId];
 
         // Decode and validate the invoice amount
-        var decodedInvoice = await lnbitsService.DecodeInvoiceAsync(bolt11, cancellationToken);
+        var decodedInvoice = await lightningBackend.DecodeInvoiceAsync(bolt11, cancellationToken);
         if (decodedInvoice is null)
             throw new ArgumentException("Invalid invoice! Please provide a valid Lightning invoice.");
 
@@ -220,7 +220,7 @@ public partial class UpdateHandler
 
         try
         {
-            var paymentResult = await lnbitsService.PayInvoiceAsync(bolt11!, cancellationToken);
+            var paymentResult = await lightningBackend.PayInvoiceAsync(bolt11!, cancellationToken);
             if (paymentResult is not null)
             {
                 if (session.PayoutCompleted)
@@ -342,8 +342,8 @@ public partial class UpdateHandler
 
         // Lightning backend Information
         diagnostics.AppendLine("\n⚡ *Lightning backend status:*");
-        diagnostics.AppendLine($"• Node type: *{lnbitsService.ServiceType}*");
-        diagnostics.AppendLine($"• Sent requests: *{lnbitsService.SentRequests}*");
+        diagnostics.AppendLine($"• Backend type: *{lightningBackend.BackendType}*");
+        diagnostics.AppendLine($"• Sent requests: *{lightningBackend.SentRequests}*");
 
         await botClient.SendMessage(command.ChatId,
             diagnostics.ToString(),
@@ -391,7 +391,7 @@ public partial class UpdateHandler
         var expectedSats = lostSats.SatsAmount;
         
         // Decode and validate the invoice
-        var decodedInvoice = await lnbitsService.DecodeInvoiceAsync(bolt11, cancellationToken);
+        var decodedInvoice = await lightningBackend.DecodeInvoiceAsync(bolt11, cancellationToken);
         if (decodedInvoice is null)
             throw new ArgumentException("Invalid Lightning invoice!\n\n" +
                 "Please provide a valid Lightning invoice for your recovery.")
@@ -404,7 +404,7 @@ public partial class UpdateHandler
             cancellationToken: cancellationToken);
 
         // Attempt to pay the invoice
-        var paymentResult = await lnbitsService.PayInvoiceAsync(bolt11, cancellationToken);
+        var paymentResult = await lightningBackend.PayInvoiceAsync(bolt11, cancellationToken);
         if (paymentResult is not null)
         {
             await recoveryService.ClearLostSatsAsync(user.Id);

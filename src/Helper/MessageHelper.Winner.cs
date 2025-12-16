@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using teamZaps.Services;
+using teamZaps.Services.Backends;
 using teamZaps.Utils;
 
 namespace teamZaps.Sessions;
@@ -20,7 +21,7 @@ internal static class WinnerMessage
         session.WinnerMessageId = message.MessageId;
         return message;
     }
-    public static async Task UpdateAsync<TLogger>(SessionState session, PaymentStatus status, LnbitsPaymentResponse? paymentResult, ITelegramBotClient botClient, SessionWorkflowService workflowService, ILogger<TLogger> logger, CancellationToken cancellationToken)
+    public static async Task UpdateAsync<TLogger>(SessionState session, PaymentStatus status, IPaymentResponse? paymentResult, ITelegramBotClient botClient, SessionWorkflowService workflowService, ILogger<TLogger> logger, CancellationToken cancellationToken)
     {
         if (session.WinnerMessageId is null)
             return;
@@ -49,7 +50,7 @@ internal static class WinnerMessage
             logger.LogWarning(ex, "Failed to update winner message for session {Session}", session);
         }
     }
-    private static string Build(SessionState session, SessionWorkflowService workflowService, PaymentStatus status, LnbitsPaymentResponse? paymentResult = null)
+    private static string Build(SessionState session, SessionWorkflowService workflowService, PaymentStatus status, IPaymentResponse? paymentResult = null)
     {
         if (session.Winners.Count == 0)
             throw new InvalidOperationException("No winners available");
