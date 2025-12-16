@@ -84,11 +84,18 @@ Create `appsettings.Development.json`:
 ```json
 {
   "Telegram": {
-    "BotToken": "YOUR_BOT_TOKEN_FROM_BOTFATHER"
+    "BotToken": "YOUR_BOT_TOKEN_FROM_BOTFATHER",
+    "RootUsers": [ 123456789 ]
   },
-  "Lnbits": {
-    "LndhubUrl": "https://your-lnbits.com/lndhub/ext/",
-    "ApiKey": "YOUR_LNBITS_API_KEY"
+  "Lightning": {
+    "LNBits": {
+      "LndhubUrl": "YOUR_LNDHUB_URL_HERE",
+      "ApiKey": "YOUR_API_KEY_HERE"
+    },
+    "AlbyHub": {
+      "ConnectionString": "YOUR_NWC_CONNECTION_STRING_HERE",
+      "RelayUrls": [ "YOUR_RELAY_URLS_HERE" ]
+    }
   },
   "BotBehaviorOptions": {
     "AllowNonAdminSessionStart": false,
@@ -116,6 +123,54 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run
 ```
 
 ## 🔧 Configuration
+
+### Lightning Backend
+
+Team Zaps supports multiple Lightning backend implementations through a common `ILightningBackend` interface. **The first backend configured in the `Lightning` section will be selected and used.**
+
+#### AlbyHub Backend (NWC/NIP-47)
+
+AlbyHub uses the **Nostr Wallet Connect (NWC)** protocol based on NIP-47 for communication over Nostr relays. This provides a decentralized approach to Lightning wallet integration.
+
+```json
+{
+  "Lightning": {
+    "AlbyHub": {
+      "ConnectionString": "nostr+walletconnect://PUBKEY?relay=wss://relay.getalby.com/v1&secret=SECRET",
+      "RelayUrls": [ "wss://relay.getalby.com/v1" ]
+    }
+  }
+}
+```
+
+**Configuration:**
+- `ConnectionString` - NWC connection URI from AlbyHub wallet settings (format: `nostr+walletconnect://PUBKEY?relay=RELAY_URL&secret=SECRET`)
+- `RelayUrls` - Specify relay URLs from connection string
+
+**How to get the connection string:**
+1. Open your AlbyHub wallet
+2. Go to Connections → Create new connection
+3. Select "Nostr Wallet Connect"
+4. Copy the `nostr+walletconnect://...` URI
+
+#### LNBits Backend (REST API)
+
+LNBits uses a traditional REST API for Lightning operations. Requires a running LNbits instance.
+
+```json
+{
+  "Lightning": {
+    "LNBits": {
+      "LndhubUrl": "https://your-lnbits.com/lndhub/ext/",
+      "ApiKey": "YOUR_LNBITS_API_KEY"
+    }
+  }
+}
+```
+
+**Configuration:**
+- `LndhubUrl` - LNDhub extension URL (must end with `/lndhub/ext/`)
+- `ApiKey` - Invoice/read key from your LNbits wallet
 
 ### Bot Behavior Options
 
@@ -264,13 +319,18 @@ public class RecoveryService : BackgroundService
 }
 ```
 
-### LnbitsService  
+### Lightning Backend (ILightningBackend)
 ```csharp
-// Lightning Network integration
-var invoice = await lnbitsService.CreateInvoiceAsync(amount, "EUR", memo);
-var status = await lnbitsService.CheckPaymentStatusAsync(paymentHash);
-var result = await lnbitsService.PayInvoiceAsync(bolt11Invoice);
+// Abstracted Lightning Network integration
+// Automatically uses the first configured backend (AlbyHub or LNBits)
+var invoice = await lightningBackend.CreateInvoiceAsync(amount, "EUR", memo);
+var status = await lightningBackend.CheckPaymentStatusAsync(paymentHash);
+var result = await lightningBackend.PayInvoiceAsync(bolt11Invoice);
 ```
+
+**Available Backends:**
+- **AlbyHub** - Uses NWC (Nostr Wallet Connect) with NIP-47 protocol over Nostr relays
+- **LNBits** - Uses REST API for LNbits instances
 
 ### PaymentParser
 ```csharp

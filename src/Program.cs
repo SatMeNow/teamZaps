@@ -1,7 +1,7 @@
 using teamZaps.Configuration;
 using teamZaps.Handlers;
 using teamZaps.Services;
-using teamZaps.Services.Backends;
+using teamZaps.Backend;
 using teamZaps.Sessions;
 
 namespace teamZaps;
@@ -54,8 +54,10 @@ public static class Program
             {
                 services.Configure<BotBehaviorOptions>(hostContext.Configuration.GetSection(BotBehaviorOptions.SectionName));
                 services.Configure<TelegramSettings>(hostContext.Configuration.GetSection(TelegramSettings.SectionName));
-                services.Configure<LnbitsSettings>(hostContext.Configuration.GetSection("Lightning"));
                 services.Configure<DebugSettings>(hostContext.Configuration.GetSection(DebugSettings.SectionName));
+                var lightningSection = hostContext.Configuration.GetSection("Lightning");
+                services.Configure<LnbitsSettings>(lightningSection.GetSection(LnbitsSettings.SectionName));
+                services.Configure<AlbyHubSettings>(lightningSection.GetSection(AlbyHubSettings.SectionName));
 
                 services.AddHostedService<RecoveryService>();
                 services.AddHostedService<TelegramBotService>();

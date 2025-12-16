@@ -9,39 +9,6 @@ using teamZaps.Utils;
 
 namespace teamZaps.Sessions;
 
-public enum PaymentStatus
-{
-    [Icon("⏳"), Description("*Pay this invoice* to add your contribution to the session!")]
-    Pending,
-    [Icon("✅"), Description("*Thank you!* Your payment has been confirmed.")]
-    Paid,
-    [Icon("❌"), Description("This invoice has *expired*.")]
-    Expired
-}
-public enum PaymentCurrency
-{
-    [Description("Satoshis"), Currency("丰", "sat", [ "s", "sat", "sats" ])] // Alternative signs: ⓢ ₛ 𝕤 丰
-    Sats,
-    [Description("Euro"), Currency("€", "EUR", [ "eur", "euro" ])]
-    Euro,
-    [Description("US Dollar"), Currency("$", "USD", [ "usd" ])]
-    Dollar,
-
-    [Description("Cent"), Currency("¢", "", [ "c", "cnt", "cent", "cents" ])]
-    Cent
-}
-
-public interface IFormattableAmount
-{
-    long SatsAmount { get; }
-    double FiatAmount { get; }
-}
-public interface ITipableAmount : IFormattableAmount
-{
-    double TipAmount { get; }
-    double TotalFiatAmount => (TipAmount + FiatAmount);
-}
-
 public record PaymentToken : IFormattableAmount
 {
     public required decimal Amount;
@@ -129,73 +96,6 @@ public static class PaymentParser
 
 public static partial class Extensions
 {
-    #region Constants
-    private static readonly IReadOnlyDictionary<PaymentStatus, IconAttribute> IconMap = UtilEnum.GetCustomAttributes<PaymentStatus, IconAttribute>();
-    private static readonly IReadOnlyDictionary<PaymentCurrency, CurrencyAttribute> CurrencyMap = UtilEnum.GetCustomAttributes<PaymentCurrency, CurrencyAttribute>();
-    #endregion
-
-
-    public static string GetIcon(this PaymentStatus source) => (IconMap.TryGetValue(source, out var icon) ? icon.Icon : "");
-
-    public static PaymentCurrency? ToCurrency(this string? source)
-    {
-        if (string.IsNullOrEmpty(source))
-            // Return default currency:
-            return (BotBehaviorOptions.AcceptedFiatCurrency);
-
-        return (CurrencyMap.TryGetKeyOf(c => c.Equals(source), out var currency) ? currency : null);
-    }
-    public static string ToSymbol(this PaymentCurrency source) => (CurrencyMap.TryGetValue(source, out var attr) ? attr.Symbol : "");
-    public static string ToUnitName(this PaymentCurrency source) => (CurrencyMap.TryGetValue(source, out var attr) ? attr.UnitName : "");
-    public static IEnumerable<string> GetAbbreviations(this PaymentCurrency source)
-    {
-        if (CurrencyMap.TryGetValue(source, out var attr))
-            return (attr.Abbreviations.Prepend(attr.Symbol));
-        else
-            return (Enumerable.Empty<string>());
-    }
-
-    public static string FormatTip(this byte? source) => FormatTip(source ?? 0);
-    public static string FormatTip(this byte source) => (source <= 0) ? "🚫 None" : $"{source}%";
-
-    public static string? FormatTotalFiatAmount(this ITipableAmount source)
-    {
-        var amount = $"*{source.TotalFiatAmount.Format()}*";
-        var tipAmount = source.TipAmount;
-        if (tipAmount > 0.01)
-            amount += $" (inkl. {tipAmount.Format()} tip)";
-        return (amount);
-    }
-    public static string? FormatAmount(this IFormattableAmount source)
-    {
-        var sats = source.SatsAmount.Format();
-        string? fiat;
-        if (source is ITipableAmount tip)
-            fiat = tip.TotalFiatAmount.Format();
-        else
-            fiat = source.FiatAmount.Format();
-
-        if ((sats is null) && (fiat is null))
-            return (null);
-        else if ((sats is not null) && (fiat is not null))
-            return ($"*{sats}* ({fiat})");
-        else
-            return (sats ?? fiat);
-    }
-    public static string? Format(this long source) => Format(source, PaymentCurrency.Sats);
-    public static string? Format(this double source) => Format(source, BotBehaviorOptions.AcceptedFiatCurrency);
-    public static string? Format<T>(this INumber<T> source, PaymentCurrency currency)
-        where T : INumber<T>
-    {
-        if (T.Zero.Equals(source))
-            return (null);
-        
-        if (currency == PaymentCurrency.Sats)
-            return ($"{source}{currency.ToSymbol()}");
-        else
-            return ($"{source:F2}{currency.ToSymbol()}");
-    }
-
     public static bool IsLightningInvoice(this string source, out string parsedInvoice)
     {
         parsedInvoice = source

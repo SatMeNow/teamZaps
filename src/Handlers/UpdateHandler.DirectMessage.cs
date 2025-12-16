@@ -141,7 +141,6 @@ public partial class UpdateHandler
             foreach (var tokenGrp in tokens.GroupBy(t => t.Currency))
             {
                 var grpCurrency = tokenGrp.Key;
-                var unit = grpCurrency.ToUnitName();
                 var memo = $"{session.ChatTitle}'{user} zapped";
 
                 // Ensure invoice to be payed in Euro only
@@ -168,7 +167,7 @@ public partial class UpdateHandler
                 try
                 {
                     // TODO: pass the enum here, not a currency string! 
-                    var invoice = await lightningBackend.CreateInvoiceAsync(invoiceAmount, unit, memo, cancellationToken).ConfigureAwait(false);
+                    var invoice = await lightningBackend.CreateInvoiceAsync(invoiceAmount, grpCurrency, memo, cancellationToken).ConfigureAwait(false);
                     // Store as pending payment
                     var pending = new PendingPayment
                     {
