@@ -15,6 +15,7 @@ public class SessionState : ITipableAmount
     public required ParticipantState StartedByUser { get; init; }
     public required DateTimeOffset StartedAt { get; init; }
 
+    public bool BotCanPinMessages { get; set; }
 
     public SessionPhase Phase { get; set; } = SessionPhase.AcceptingPayments;
 

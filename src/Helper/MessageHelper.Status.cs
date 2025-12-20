@@ -25,7 +25,8 @@ internal static class SessionStatusMessage
 
         session.StatusMessageId = statusMessage.MessageId;
 
-        await botClient.PinChatMessage(session.ChatId, statusMessage.MessageId, cancellationToken: cancellationToken);
+        if (session.BotCanPinMessages)
+            await botClient.PinChatMessage(session.ChatId, statusMessage.MessageId, cancellationToken: cancellationToken);
 
         return (statusMessage);
     }
@@ -60,14 +61,12 @@ internal static class SessionStatusMessage
             logger.LogWarning(ex, "Failed to update pinned status message for session {Session}", session);
         }
         
-        if ((session.Phase.IsClosed()) && (session.StatusMessageId is not null))
-        {
-            // Unpin status message
+        // Unpin status message
+        if ((session.BotCanPinMessages) && (session.Phase.IsClosed()) && (session.StatusMessageId is not null))
             await botClient.UnpinChatMessage(
                 chatId: session.ChatId,
                 messageId: session.StatusMessageId.Value,
                 cancellationToken: cancellationToken);
-        }
     }
     private static async Task RecreateAsync<TLogger>(SessionState session, ITelegramBotClient botClient, SessionWorkflowService workflowService, ILogger<TLogger> logger, CancellationToken cancellationToken)
     {
