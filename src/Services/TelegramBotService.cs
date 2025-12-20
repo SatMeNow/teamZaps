@@ -113,4 +113,21 @@ internal static partial class Ext
 
         return (command is not null);
     }
+    public static async Task<bool> BotCanPinMessagesAsync(this ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var me = await botClient.GetMe(cancellationToken);
+            var member = await botClient.GetChatMember(chatId, me.Id, cancellationToken);
+            if (member is ChatMemberOwner)
+                return (true);
+            if (member is ChatMemberAdministrator admin)
+                return (admin.CanPinMessages);
+        }
+        catch (ApiRequestException ex) when (ex.ErrorCode == 400 || ex.ErrorCode == 403)
+        {
+            // Chat not found OR bot was kicked/forbidden
+        }
+        return (false);
+    }
 }

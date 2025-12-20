@@ -46,7 +46,12 @@ public partial class UpdateHandler
             throw new UnauthorizedAccessException("Only group administrators can start a session.");
 
         if (workflowService.TryStartSession(chat, command.From, out var session))
+        {
+            // Check if messages can be pinned
+            session.BotCanPinMessages = await botClient.BotCanPinMessagesAsync(chat.Id, cancellationToken);
+            
             await SessionStatusMessage.SendAsync(session, botClient, workflowService, cancellationToken);
+        }
         else
             throw new InvalidOperationException("A session is already active in this group!")
                 .AddLogLevel(LogLevel.Warning);
