@@ -1,6 +1,6 @@
 # Team Zaps 🎯⚡
 
-> **Split bills with Bitcoin Lightning in Telegram groups!**
+**Split bills with Bitcoin Lightning in Telegram groups!**
 
 Team Zaps helps groups coordinate Lightning payments for shared expenses. When Bitcoin isn't accepted at your favorite restaurant or bar, use Team Zaps to let everyone pay in sats while one person handles the fiat transaction.
 
@@ -21,35 +21,42 @@ Your team meets up for food and drinks, but the venue doesn't accept Bitcoin? He
 
 ## 🚀 Getting Started
 
-### 1. Add Bot to Your Group
-1. Add `@TeamZapsBot` to your Telegram group (replace with your actual bot username)
-2. Grant the bot admin rights to pin messages
+Follow the appropriate path below depending on whether you are a group admin or a regular user.
 
-### 2. Start Using Team Zaps
+### Admins: Set up the bot for your group
+1. Add the bot to your group: search for `@TeamZapsBot` and invite it.
+2. Open `Group Info` → `Administrators` → Promote the bot to an administrator.
+   - Grant these permissions at minimum:
+     - **Delete messages**
+   - Optional but recommended:
+     - **Pin messages** (if pinned session status is desired)  
+3. Confirm the bot appears in the admin list.
+4. Configure who may start/close sessions in the bot settings (admins only by default).
 
-**In your group chat:**
+### Users: Join and use Team Zaps
+Once the bot is added and has necessary permissions, users can interact:
+
+In the group chat:
 ```
-/startsession - Start a new payment session
-/help - View all available commands
+/startsession    # Admins only (configurable)
+/status          # Show current session status
+/help            # Show help and commands
 ```
 
-**The bot will guide you through:**
-- Joining the session
-- Entering the lottery (who's willing to pay fiat)  
-- Making Lightning payments in private chat
-- Drawing the winner and executing the payout
+How to participate:
+- Click the pinned session message's **🎯 Join** button to join a session.
+- If you're willing to pay the bill in fiat, click **🎰 Enter Lottery**.
+- For payments and private info, open a private chat with the bot and send amounts like:
+  - `5.99 beer`
+  - `12.50 pizza + 3.00 tip`
+  - Multiple lines are allowed.
 
-### 3. Payment Flow
-
-1. **Join Session** - Click the "🎯 Join" button on the pinned message
-2. **Enter Lottery** - Click "🎰 Enter Lottery" if you're willing to pay the bill
-3. **Send Payments** - In private chat with the bot, send amounts like:
-   - `5.99 beer`
-   - `12.50 pizza + 3.00 tip`
-   - Multiple lines also work!
-4. **Pay Invoices** - Pay the Lightning invoices the bot sends you
-5. **Wait for Draw** - When the group closes the session, a winner is drawn
-6. **Automatic Payout** - Winner submits Lightning invoice and receives all payments
+Payment flow summary:
+1. Join session in group
+2. Enter lottery (optional)
+3. Send payments in private chat
+4. Admin closes session → winner is drawn
+5. Winner submits Lightning invoice → automatic payout
 
 ## ⚡ Payment Examples
 
@@ -71,15 +78,19 @@ The bot accepts various payment formats:
 
 ## 🔧 Bot Commands
 
+### Group (use in group chats)
 | Command | Description | Who can Use |
 |---------|-------------|-------------|
 | `/startsession` | Start a new payment session | Admins (configurable) |
 | `/closesession` | Close payments and draw winner | Admins (configurable) |
 | `/cancelsession` | Cancel the current session | Admins |
 | `/status` | View current session status | Anyone |
-| `/recover` | Recover lost sats from failed sessions | Anyone (private chat) |
-| `/help` | Show help information | Anyone |
-| `/diag` | Show diagnostics | Root users |
+
+### Private (use in direct messages with the bot)
+| Command | Description |
+|---------|-------------|
+| `/recover` | Recover lost sats from failed sessions | 
+| `/help` | Show help information |
 
 ## 💰 Lost and Found Recovery
 
@@ -140,7 +151,10 @@ Want to run your own Team Zaps bot? Check the [developer documentation](src/READ
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read the [developer documentation](src/README.md) for technical details and contribution guidelines.
+Contributions are welcome
+
+Please read the [developer documentation](src/README.md) for technical details and contribution guidelines.
+You will find the [repository](https://github.com/SatMeNow/teamZaps) on github.
 
 ## 📞 Support
 

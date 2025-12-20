@@ -44,18 +44,21 @@ public partial class UpdateHandler
             case "/help":
                 await botClient.SendMessage(command.ChatId,
                     "🎯 *Team Zaps Help*\n\n" +
-                    "*Commands:*\n" +
-                    "/startsession - Start a new payment session\n" +
-                    "/closesession - Close payments and start lottery\n" +
-                    "/cancelsession - Cancel session (admin only)\n" +
-                    "/status - View session details\n" +
-                    "/recover - Recovers lost sats from e.g. interrupted sessions\n\n" +
-                    "*How it works:*\n" +
-                    "1️⃣ Join the session using the button on the pinned message\n" +
-                    "2️⃣ Send me payment amounts in *private chat*\n" +
+                    "*Group commands* (use in a group chat):\n" +
+                    "/startsession - Start a new payment session (maybe for admins only)\n" +
+                    "/closesession - Close payments and start lottery (maybe for admins only)\n" +
+                    "/cancelsession - Cancel session (maybe for admins only)\n\n" +
+                    "*Private commands* (use in direct message with the bot):\n" +
+                    "/status - View session details (in group or private)\n" +
+                    "/recover - Recover lost sats from interrupted sessions (private chat)\n" +
+                    "/help - Show this help message\n\n" +
+                    "*How to participate:*\n" +
+                    "1️⃣ Join the session using the button on the status message in the group\n" +
+                    "2️⃣ Send payment amounts here in *private chat*\n" +
                     "3️⃣ Pay the Lightning invoices I send you\n" +
-                    "4️⃣ Join the lottery when payments close!\n\n" +
-                    "💡 *All payments happen in private messages for privacy!*",
+                    "4️⃣ If you opted into the lottery, wait for the draw when the admin closes payments\n\n" +
+                    "💡 *Payments and invoices are handled in private messages for privacy.*\n\n" +
+                    "ℹ️ For *detailed info*, check out the [GitHub Repository](https://github.com/SatMeNow/teamZaps).",
                     parseMode: ParseMode.Markdown,
                     cancellationToken: cancellationToken);
                 break;
