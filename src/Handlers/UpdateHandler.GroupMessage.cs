@@ -173,14 +173,18 @@ public partial class UpdateHandler
         }
         catch (Exception)
         {
+            var botUser = await botClient.GetMe(cancellationToken);
             var warningMessage = await botClient.SendMessage(chatId,
-                $"⚠️ {user.ToMarkdownString()}, please start a private chat with me first by clicking @{(await botClient.GetMe(cancellationToken)).Username}",
+                $"Hey @{user.Username}, we did not meet before ✌️\n" +
+                "I'm a telegram bot, *helping you* and your friends *to coordinate lightning payments*.\n\n" +
+                $"ℹ️ Please *start a private chat* to interact with me, by clicking @{botUser.Username}. See you soon 👍",
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken);
                 
             // Mark user as pending session join with message ID for later deletion
             session.PendingJoins[user.Id] = (chatId, warningMessage.MessageId);
 
+            logger.LogInformation("Invited new user {User} to a private bot chat.", user.DisplayName());
             return;
         }
 
