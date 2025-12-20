@@ -660,11 +660,33 @@ COPY publish/ .
 ENTRYPOINT ["dotnet", "teamZaps.dll"]
 ```
 
+## ✅ User-facing Commands (quick reference)
+
+Use the commands below in the appropriate context — group chats or private/direct messages with the bot.
+
+> Explained commands in this section are only relevant for technical users!
+  For end-user guidance (screenshots and UX tips) see the user-facing README in the project root: [README.MD](../README.MD)
+
+### Group commands (use inside the group chat)
+
+### Private commands (use in a direct/private chat with the bot)
+- `/diag` - Show diagnostics (root users only)
+
+  This command returns detailed runtime diagnostics   intended for the bot operator (root user) only. It   includes:
+  - Current host environment and process information
+  - Active sessions and their phases
+  - Recovery queue status and lost sats summary
+  - Registered backends and their health status
+  
+  Only root user IDs (configured in `appsettings.*.json` under `Telegram:RootUsers`) can run `/diag`. The   output may contain sensitive operational details — do   not share publicly.
+
 ## 🤝 Contributing
+
+You will find the [repository](https://github.com/SatMeNow/teamZaps) on github.
 
 ### Pull Request Process
 
-1. **Fork & Branch** - Create feature branches from `main`
+1. **Fork & Branch** - Create feature branches from `master`
 2. **Follow Patterns** - Match existing code style and architecture
 3. **Test Thoroughly** - Manual testing at minimum, unit tests preferred  
 4. **Update Documentation** - Keep this README current
