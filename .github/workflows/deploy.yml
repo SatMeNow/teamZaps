@@ -1,0 +1,154 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [ "master" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # 1. Calculate the next version based on commits
+  calculate-version:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    outputs:
+      new_tag: ${{ steps.tag_version.outputs.new_tag }}
+      changelog: ${{ steps.tag_version.outputs.changelog }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required to calculate version history
+
+      - name: Bump version and push tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch # Default to patch (v1.0.0 -> v1.0.1) if no #major/#minor found
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v4
+
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore src/teamZaps.csproj
+
+    - name: Build
+      run: dotnet build src/teamZaps.csproj --no-restore --configuration Release
+
+    # TODO: No tests implemented yet
+    # - name: Test
+    #   run: dotnet test src/teamZaps.csproj --no-build --verbosity normal
+
+    - name: Publish
+      run: dotnet publish src/teamZaps.csproj --configuration Release --output ./publish
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: teamZaps-binaries
+        path: ./publish
+
+  docker-build-push:
+    needs: [build-and-test, calculate-version]
+    runs-on: ubuntu-latest
+    # Only run if we are on master (auto-tagging) OR if a tag was pushed manually
+    if: |
+      always() && 
+      (needs.build-and-test.result == 'success') &&
+      (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            # Add the auto-calculated tag if available
+            type=raw,value=${{ needs.calculate-version.outputs.new_tag }},enable=${{ needs.calculate-version.outputs.new_tag != '' }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  create-release:
+    needs: [build-and-test, docker-build-push, calculate-version]
+    # Run if we are on master (auto-tagging) OR if a tag was pushed manually
+    if: |
+      always() &&
+      (needs.build-and-test.result == 'success') &&
+      (needs.calculate-version.outputs.new_tag != '' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: teamZaps-binaries
+          path: ./teamZaps
+
+      # Determine the tag name to use (either auto-calculated or manual)
+      - name: Set Tag Name
+        id: tag_name
+        run: |
+          if [ -n "${{ needs.calculate-version.outputs.new_tag }}" ]; then
+            echo "tag=${{ needs.calculate-version.outputs.new_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Zip Artifacts
+        run: zip -r teamZaps-${{ steps.tag_name.outputs.tag }}.zip ./teamZaps
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag_name.outputs.tag }}
+          files: teamZaps-${{ steps.tag_name.outputs.tag }}.zip
+          generate_release_notes: true
+          body: ${{ needs.calculate-version.outputs.changelog }}
