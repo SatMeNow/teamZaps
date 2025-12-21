@@ -1,0 +1,30 @@
+services:
+  teamzaps:
+    image: ghcr.io/satmenow/teamzaps:latest
+    container_name: teamzaps
+    restart: unless-stopped
+    environment:
+      - DOTNET_ENVIRONMENT=Production
+      
+      # Bot Behavior
+      - BotBehavior__MaxBudget=${MAX_BUDGET}
+      - BotBehavior__MaxParallelSessions=${MAX_PARALLEL_SESSIONS}
+      
+      # Telegram Settings
+      - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}
+      - Telegram__RootUsers__0=${TELEGRAM_ROOT_USER_ID_1}
+      - Telegram__RootUsers__1=${TELEGRAM_ROOT_USER_ID_2}
+      - Telegram__RootUsers__2=${TELEGRAM_ROOT_USER_ID_3}
+      
+      # Backend: AlbyHub (NWC)
+      - Backends__AlbyHub__ConnectionString=${ALBYHUB_CONNECTION_STRING}
+      
+      # Backend: LNBits (Alternative)
+      # - Backends__LNBits__LndhubUrl=${LNBITS_URL}
+      # - Backends__LNBits__ApiKey=${LNBITS_API_KEY}
+      
+    volumes:
+      # Mount appsettings.json if you want to configure it from the host
+      - ./appsettings.json:/app/appsettings.json
+      # Mount data directory if the app writes logs or data
+      - ./data:/app/data
