@@ -660,6 +660,34 @@ COPY publish/ .
 ENTRYPOINT ["dotnet", "teamZaps.dll"]
 ```
 
+## 🔄 CI/CD & Versioning
+
+The project uses GitHub Actions for Continuous Integration and Deployment.
+
+### Automated Pipeline
+The pipeline (`.github/workflows/deploy.yml`) automatically runs on:
+- Pushes to `master`
+- Pull Requests to `master`
+- Tag pushes (`v*`)
+
+**It performs the following steps:**
+1. **Build & Test**: Compiles the code and runs tests (if any).
+2. **Auto-Tagging**: Calculates the next semantic version based on commit messages.
+3. **Docker Build**: Builds a multi-stage Docker image with the new version tag.
+4. **Publish**: Pushes the image to GitHub Container Registry (GHCR).
+5. **Release**: Creates a GitHub Release with binaries and changelog.
+
+### Controlling Version Bumps
+The versioning system follows [Semantic Versioning](https://semver.org/). You can control the version bump by including specific keywords in your **commit messages** or **PR titles**:
+
+| Keyword | Effect | Example |
+|---------|--------|---------|
+| `#major` | Major version bump (X.0.0) | `feat: rewrite core engine #major` |
+| `#minor` | Minor version bump (0.X.0) | `feat: add new payment method #minor` |
+| (none) | Patch version bump (0.0.X) | `fix: typo in readme` |
+
+*Default behavior is a **Patch** bump if no keyword is found.*
+
 ## ✅ User-facing Commands (quick reference)
 
 Use the commands below in the appropriate context — group chats or private/direct messages with the bot.
