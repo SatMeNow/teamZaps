@@ -651,13 +651,42 @@ export ASPNETCORE_ENVIRONMENT="Production"
 export BotBehaviorOptions__AllowNonAdminSessionStart="false"
 ```
 
-### Docker Support
-```dockerfile
-# Dockerfile (create if needed)
-FROM mcr.microsoft.com/dotnet/aspnet:9.0
-WORKDIR /app
-COPY publish/ .
-ENTRYPOINT ["dotnet", "teamZaps.dll"]
+### Docker Deployment (Recommended)
+
+The repository includes a production-ready `docker-compose.yml` and `Dockerfile`.
+
+**To deploy on a server:**
+
+1. Copy `docker-compose.yml` and `.env.example` to your server.
+   ```bash
+   wget https://raw.githubusercontent.com/SatMeNow/teamZaps/refs/heads/master/docker-compose.yml
+   wget https://raw.githubusercontent.com/SatMeNow/teamZaps/refs/heads/master/.env.example
+   ```
+2. Rename `.env.example` to `.env` and fill in your secrets (Bot Token, NWC connection string, etc.).
+   ```bash
+   mv .env.example .env
+   ```
+3. Customize by changing environment variables in `.env` to suit your own needs.
+4. Create the required `appsettings.json` file and `data` directory:
+   ```bash
+   # Create data directory for logs/persistence
+   mkdir -p /app/data
+
+   # Create an empty appsettings.json (required for volume mount)
+   # Note: You can also copy src/appsettings.json from the repo for a full template
+   echo "{}" > /app/appsettings.json
+   ```
+5. Run:
+   ```bash
+   docker compose up -d
+   ```
+
+This will pull the latest pre-built image from **GitHub Container Registry** (`ghcr.io/satmenow/teamzaps`) and start the bot.
+
+**Manual Build:**
+If you prefer to build the image locally:
+```bash
+docker build -t teamzaps .
 ```
 
 ## 🔄 CI/CD & Versioning
@@ -687,6 +716,19 @@ The versioning system follows [Semantic Versioning](https://semver.org/). You ca
 | (none) | Patch version bump (0.0.X) | `fix: typo in readme` |
 
 *Default behavior is a **Patch** bump if no keyword is found.*
+
+### Beta & RC Builds
+You can create pre-release builds (e.g., `v1.0.1-beta.0`) from the `nextMaster` branch without affecting the stable `master` branch.
+
+1. Go to **GitHub Actions** -> **Build and Deploy**.
+2. Click **Run workflow**.
+3. Select Branch: `nextMaster`.
+4. Select Release Type: `beta` or `rc`.
+
+This will:
+- Create a pre-release tag (e.g., `v1.0.1-beta.0`).
+- Build and push a Docker image with that tag.
+- Create a GitHub "Pre-release" with artifacts.
 
 ## ✅ User-facing Commands (quick reference)
 
