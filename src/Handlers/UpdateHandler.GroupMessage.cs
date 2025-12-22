@@ -28,6 +28,9 @@ public partial class UpdateHandler
             case "/status":
                 await HandleStatusAsync(botClient, command.ChatId, cancellationToken).ConfigureAwait(false);
                 break;
+            case "/config":
+                await HandleConfigCommandAsync(botClient, command, cancellationToken).ConfigureAwait(false);
+                break;
 
             default: return (false);
         }
@@ -36,17 +39,25 @@ public partial class UpdateHandler
 
     private async Task HandleStartSessionAsync(ITelegramBotClient botClient, CommandMessage command, CancellationToken cancellationToken)
     {
-        // Check if request was done for a group chat:
         var chat = await botClient.GetChat(command.ChatId).ConfigureAwait(false);
         if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
             throw new InvalidOperationException("Sessions can only be started in group chats.");
 
-        // Check if only admins can start sessions
-        if ((!botBehaviour.AllowNonAdminSessionStart) && (!await IsUserAdminAsync(botClient, command.ChatId, command.From, cancellationToken).ConfigureAwait(false)))
-            throw new UnauthorizedAccessException("Only group administrators can start a session.");
+        // Load admin options for this chat
+        var adminOptions = await adminOptionsService.ReadAsync(command.ChatId).ConfigureAwait(false);
 
-        if (workflowService.TryStartSession(chat, command.From, out var session))
+        // Check permissions - use saved options or default
+        var allowNonAdminSessionStart = adminOptions?.AllowNonAdminSessionStart ?? false;
+        if ((!allowNonAdminSessionStart) && (!await IsUserAdminAsync(botClient, command.ChatId, command.From, cancellationToken).ConfigureAwait(false)))
+            throw new InvalidOperationException("Only group administrators can start a session.")
+                .AddLogLevel(LogLevel.Warning);
+
+        var session = workflowService.TryStartSession(chat, command.From);
+        if (session is not null)
         {
+            if (adminOptions is not null)
+                session.AdminOptions = adminOptions;
+
             // Check if messages can be pinned
             session.BotCanPinMessages = await botClient.BotCanPinMessagesAsync(chat.Id, cancellationToken).ConfigureAwait(false);
             
@@ -58,16 +69,14 @@ public partial class UpdateHandler
     }
     private async Task HandleCloseSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
-        // Check permissions
-        if (!botBehaviour.AllowNonAdminSessionClose)
-        {
-            if (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false))
-                throw new UnauthorizedAccessException("Only group administrators can close a session.");
-        }
-
         var session = workflowService.GetSessionByChat(chatId);
         if (session is null)
             throw new InvalidOperationException("No active session in this group.")
+                .AddLogLevel(LogLevel.Warning);
+
+        // Check permissions
+        if ((!session.AdminOptions.AllowNonAdminSessionClose) && (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false)))
+            throw new InvalidOperationException("Only group administrators can close a session.")
                 .AddLogLevel(LogLevel.Warning);
 
         if (session.Phase > SessionPhase.AcceptingPayments)
@@ -114,13 +123,13 @@ public partial class UpdateHandler
             return;
 
         // Check permissions
-        if (session?.HasPayments == false)
-            ; // Skip (No need to check)
-        else if (!botBehaviour.AllowNonAdminSessionCancel)
+        if (session.HasPayments == false)
         {
-            if (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false))
-                throw new UnauthorizedAccessException("Only group administrators can cancel a session.");
+            // Skip permission check for empty sessions
         }
+        else if ((!session.AdminOptions.AllowNonAdminSessionCancel) && (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false)))
+            throw new InvalidOperationException("Only group administrators can cancel a session.")
+                .AddLogLevel(LogLevel.Warning);
 
         if (workflowService.TryCloseSession(chatId, true))
         {
@@ -295,7 +304,9 @@ public partial class UpdateHandler
         if (session is null)
             throw new InvalidOperationException("No active session found.")
                 .AddLogLevel(LogLevel.Warning);
-        
+        if ((!session.AdminOptions.AllowNonAdminSessionClose) && (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false)))
+            throw new InvalidOperationException("Only group administrators can close a session.")
+                .AddLogLevel(LogLevel.Warning);        
         var keyboard = new InlineKeyboardMarkup(botBehaviour.TipChoices
             .Prepend((byte)0)
             .Select(t => InlineKeyboardButton.WithCallbackData(t.FormatTip(), $"{CallbackActions.SelectTip}_{t}"))
@@ -352,6 +363,63 @@ public partial class UpdateHandler
         await SessionStatusMessage.SendAsync(session, botClient, workflowService, cancellationToken).ConfigureAwait(false);
     }
 
+    private async Task HandleConfigCommandAsync(ITelegramBotClient botClient, CommandMessage command, CancellationToken cancellationToken)
+    {
+        var chatId = command.ChatId;
+        var chatTitle = command.Source.Chat.Title!;
+        var user = command.From;
+
+        // Check if user is admin
+        if (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false))
+            throw new InvalidOperationException("Only group administrators can change settings.")
+                .AddLogLevel(LogLevel.Warning);
+
+        var session = workflowService.GetSessionByChat(chatId);
+        var options = await GetAdminOptions(session, chatId).ConfigureAwait(false);
+
+        // Respond to user's private bot chat
+        var message = await ConfigMessage.SendAsync(botClient, user.Id, chatTitle, options, cancellationToken).ConfigureAwait(false);
+        
+        // Store mapping from config message ID to group chat ID
+        configMessageMap[message.MessageId] = chatId;
+
+        // [Bug?] Fails to delete (Telegram responds `Bad request: message can't be deleted`)
+        // await DeleteMessageAsync(botClient, chatId, command.Source.MessageId, cancellationToken).ConfigureAwait(false);
+    }
+    private async Task HandleSetOptionsAsync(ITelegramBotClient botClient, CallbackQuery query, CancellationToken cancellationToken)
+    {
+        if (!configMessageMap.TryGetValue(query.Message!.MessageId, out var groupChatId))
+            throw new InvalidOperationException("Sorry, can't associate config message with group. Please run `/config` again.");
+            
+        var chatId = query.Message!.Chat.Id;
+        var chatTitle = query.Message!.Chat.Title!;
+
+        var session = workflowService.GetSessionByChat(groupChatId);
+        var options = await GetAdminOptions(session, groupChatId).ConfigureAwait(false);
+
+        // Toggle the selected option
+        var optionName = query.Data!.Split('_').Last();
+        switch (optionName)
+        {
+            case "start": options.AllowNonAdminSessionStart = !options.AllowNonAdminSessionStart; break;
+            case "close": options.AllowNonAdminSessionClose = !options.AllowNonAdminSessionClose; break;
+            case "cancel": options.AllowNonAdminSessionCancel = !options.AllowNonAdminSessionCancel; break;
+
+            default: return;
+        }
+
+        // Save options
+        await adminOptionsService.WriteAsync(options, groupChatId).ConfigureAwait(false);
+
+        // Update session if active
+        if (session is not null)
+            session.AdminOptions = options;
+
+        await ConfigMessage.UpdateAsync(botClient, chatId, query.Message.MessageId, chatTitle, options, cancellationToken).ConfigureAwait(false);
+
+        await botClient.AnswerCallbackQuery(query.Id, "✅ Setting updated", cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
 
     #region Helper
     private int SelectWinners(SessionState session)
@@ -399,5 +467,24 @@ public partial class UpdateHandler
         var totalSats = session.SatsAmount;
         return (long)(totalSats * (fiatAmount / totalFiat));
     }
+
+    private async Task<BotAdminOptions> GetAdminOptions(SessionState? session, long chatId)
+    {
+        BotAdminOptions? options = null;
+        if (options is null)
+            // Take options from active session:
+            options = session?.AdminOptions;
+        if (options is null)
+            // Load saved options:
+            options = await adminOptionsService.ReadAsync(chatId).ConfigureAwait(false);
+        if (options is null)
+            // Create new options:
+            options = new BotAdminOptions();
+
+        return (options);
+    }
     #endregion
+
+    
+    private readonly Dictionary<int, long> configMessageMap = new(); // Config message ID -> group chat ID
 }

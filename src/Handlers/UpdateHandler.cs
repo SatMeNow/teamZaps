@@ -10,13 +10,14 @@ namespace teamZaps.Handlers;
 
 public partial class UpdateHandler : IUpdateHandler
 {
-    public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, ILightningBackend lightningBackend, SessionManager sessionManager, SessionWorkflowService workflowService, RecoveryService recoveryService)
-        : this(logger, botBehaviour, debugSettings, telegramSettings, hostEnvironment, lightningBackend, null, sessionManager, workflowService, recoveryService)
+    public UpdateHandler(ILogger<UpdateHandler> logger, FileService<BotAdminOptions> adminOptionsService, IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, ILightningBackend lightningBackend, SessionManager sessionManager, SessionWorkflowService workflowService, RecoveryService recoveryService)
+        : this(logger, adminOptionsService, botBehaviour, debugSettings, telegramSettings, hostEnvironment, lightningBackend, null, sessionManager, workflowService, recoveryService)
     {
     }
-    public UpdateHandler(ILogger<UpdateHandler> logger,  IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, ILightningBackend lightningBackend, IExchangeRateBackend? exchangeRateBackend, SessionManager sessionManager, SessionWorkflowService workflowService, RecoveryService recoveryService)
+    public UpdateHandler(ILogger<UpdateHandler> logger, FileService<BotAdminOptions> adminOptionsService, IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, ILightningBackend lightningBackend, IExchangeRateBackend? exchangeRateBackend, SessionManager sessionManager, SessionWorkflowService workflowService, RecoveryService recoveryService)
     {
         this.logger = logger;
+        this.adminOptionsService = adminOptionsService;
         this.debugSettings = debugSettings.Value;
         this.botBehaviour = botBehaviour.Value;
         this.telegramSettings = telegramSettings.Value;
@@ -189,6 +190,10 @@ public partial class UpdateHandler : IUpdateHandler
                     var tip = int.Parse(data[1]);
                     await HandleSetTipAsync(botClient, chatId, query.From!, tip, cancellationToken).ConfigureAwait(false);
                     break;
+                    
+                case CallbackActions.AdminOptions:
+                    await HandleSetOptionsAsync(botClient, query, cancellationToken).ConfigureAwait(false);
+                    break;
             }
         }
         catch (Exception ex)
@@ -204,7 +209,7 @@ public partial class UpdateHandler : IUpdateHandler
     private async Task<bool> DeleteMessageAsync(ITelegramBotClient botClient, long chatId, int? messageId, CancellationToken cancellationToken)
     {
         if (messageId is null)
-            return false;
+            return (false);
             
         try
         {
@@ -221,7 +226,7 @@ public partial class UpdateHandler : IUpdateHandler
     {
         try
         {
-            var member = await botClient.GetChatMember(chatId, userId, cancellationToken); // TODO: es fehlt oft `configureAwait(false)`...
+            var member = await botClient.GetChatMember(chatId, userId, cancellationToken).ConfigureAwait(false);
             return member.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator;
         }
         catch
@@ -233,6 +238,7 @@ public partial class UpdateHandler : IUpdateHandler
 
 
     private readonly ILogger<UpdateHandler> logger;
+    private readonly FileService<BotAdminOptions> adminOptionsService;
     private readonly DebugSettings debugSettings;
     private readonly BotBehaviorOptions botBehaviour;
     private readonly TelegramSettings telegramSettings;

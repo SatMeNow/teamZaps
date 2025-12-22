@@ -83,7 +83,8 @@ The bot accepts various payment formats:
 |---------|-------------|-------------|
 | `/startsession` | Start a new payment session | Admins (configurable) |
 | `/closesession` | Close payments and draw winner | Admins (configurable) |
-| `/cancelsession` | Cancel the current session | Admins |
+| `/cancelsession` | Cancel the current session | Admins (configurable) |
+| `/config` | Change options (e.g. permissions) | Admins |
 | `/status` | View current session status | Anyone |
 
 ### Private (use in direct messages with the bot)

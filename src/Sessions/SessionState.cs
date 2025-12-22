@@ -2,11 +2,13 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using teamZaps.Configuration;
 using teamZaps.Services;
+using teamZaps.Sessions;
 using teamZaps.Utils;
 using Telegram.Bot.Types;
 
-namespace teamZaps.Sessions;
+namespace teamZaps;
 
 public class SessionState : ITipableAmount
 {
@@ -15,6 +17,7 @@ public class SessionState : ITipableAmount
     public required ParticipantState StartedByUser { get; init; }
     public required DateTimeOffset StartedAt { get; init; }
 
+    public BotAdminOptions AdminOptions { get; set; } = new();
     public bool BotCanPinMessages { get; set; }
 
     public SessionPhase Phase { get; set; } = SessionPhase.AcceptingPayments;
@@ -48,12 +51,14 @@ public class SessionState : ITipableAmount
     public override string ToString() => $"{ChatTitle} ({ChatId})";
 
 
+    #region Management
     public void Close(bool cancel)
     {
         Phase = (cancel ? SessionPhase.Canceled : SessionPhase.Completed);
         PendingJoins.Clear();
     }
     public ParticipantState? GetWinnerUser(long userId) => WinnerUsers.FirstOrDefault(u => u.UserId.Equals(userId));
+    #endregion
 }
 
 public class ParticipantState : IUser, ITipableAmount

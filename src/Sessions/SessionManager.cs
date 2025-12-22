@@ -32,13 +32,13 @@ public class SessionManager : IFormattableAmount
 
 
     #region Events
-    public event EventHandler OnFirstSessionCreated;
-    public event EventHandler OnLastSessionRemoved;
+    public event EventHandler? OnFirstSessionCreated;
+    public event EventHandler? OnLastSessionRemoved;
     #endregion
 
 
     #region Management
-    public bool TryCreateSession(ChatFullInfo chat, User user, out SessionState session)
+    public SessionState? TryCreateSession(ChatFullInfo chat, User user)
     {
         // Check if maximum parallel sessions limit is reached:
         if (botBehaviour.MaxParallelSessions is not null)
@@ -54,7 +54,7 @@ public class SessionManager : IFormattableAmount
         var firstSession = sessions.IsEmpty();
         var startedByUser = new ParticipantState(user);
         
-        session = new SessionState
+        var session = new SessionState
         {
             ChatId = chat.Id,
             ChatTitle = (chat.Title ?? ""),
@@ -68,13 +68,10 @@ public class SessionManager : IFormattableAmount
             logger.LogInformation("Session {Session} created by user {User}", session, user);
             if (firstSession)
                 OnFirstSessionCreated?.Invoke(this, EventArgs.Empty);
-            return (true);
+            return (session);
         }
         else
-        {
-            session = GetSessionByChat(chat.Id)!;
-            return (false);
-        }
+            return (null);
     }
 
     public SessionState? GetSessionByChat(long chatId) => sessions.TryGetValue(chatId, out var session) ? session : null;
