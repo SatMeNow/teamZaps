@@ -6,6 +6,8 @@ services:
     image: ghcr.io/satmenow/teamzaps:${DOCKER_TAG:-latest}
     container_name: teamzaps
     restart: unless-stopped
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
     environment:
       - DOTNET_ENVIRONMENT=Production
       
@@ -31,3 +33,15 @@ services:
       - ./appsettings.json:/app/appsettings.json
       # Mount data directory if the app writes logs or data
       - ./data:/app/data
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    depends_on:
+      - teamzaps
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=1800

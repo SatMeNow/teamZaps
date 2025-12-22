@@ -16,12 +16,14 @@ WORKDIR "/src/src"
 
 # Build the application
 ARG VERSION=0.0.0.0-local
-RUN dotnet build "teamZaps.csproj" -c Release -o /app/build /p:Version=${VERSION}
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet build "teamZaps.csproj" -c ${BUILD_CONFIGURATION} -o /app/build /p:Version=${VERSION}
 
 # Publish the application
 FROM build AS publish
 ARG VERSION=0.0.0.0-local
-RUN dotnet publish "teamZaps.csproj" -c Release -o /app/publish /p:UseAppHost=false /p:Version=${VERSION}
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "teamZaps.csproj" -c ${BUILD_CONFIGURATION} -o /app/publish /p:UseAppHost=false /p:Version=${VERSION}
 
 # Final stage/image
 FROM base AS final
