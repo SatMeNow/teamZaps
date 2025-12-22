@@ -4,6 +4,7 @@ using teamZaps.Services;
 using teamZaps.Backend;
 using teamZaps.Sessions;
 using teamZaps.Utils;
+using Serilog;
 
 namespace teamZaps;
 

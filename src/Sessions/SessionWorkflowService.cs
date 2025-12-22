@@ -15,12 +15,17 @@ public class SessionWorkflowService
 
     public SessionState? GetSessionByChat(long chatId) => sessionManager.GetSessionByChat(chatId);
     public SessionState? GetSessionByUser(long userId) => sessionManager.GetSessionByUser(userId);
+    public bool TryGetSession(long chatId, [NotNullWhen(true)] out SessionState? session)
+    {
+        session = sessionManager.GetSessionByChat(chatId);
+        return (session is not null);
+    }
     public bool TryGetSessionByUser(long userId, [NotNullWhen(true)] out SessionState? session)
     {
         session = sessionManager.GetSessionByUser(userId);
         return (session is not null);
     }
-    public bool TryStartSession(ChatFullInfo chat, User user, out SessionState session) => sessionManager.TryCreateSession(chat, user, out session);
+    public SessionState? TryStartSession(ChatFullInfo chat, User user) => sessionManager.TryCreateSession(chat, user);
     public bool TryCloseSession(long chatId, bool cancel) => sessionManager.RemoveSession(chatId, cancel);
 
     public ParticipantState EnsureParticipant(SessionState session, User user) => sessionManager.GetOrAddParticipant(session, user);
@@ -41,7 +46,8 @@ public static class CallbackActions
     public const string SelectBudget = "selectBudget";
     public const string SetTip = "setTip";
     public const string SelectTip = "selectTip";
-    public const string RecoverCreate = "recover_create";
-    public const string RecoverCancel = "recover_cancel";
-    public const string RecoverInvoice = "recover_invoice";
+    public const string AdminOptions = "adminOptions";
+    public const string RecoverCreate = "recoverCreate";
+    public const string RecoverCancel = "recoverCancel";
+    public const string RecoverInvoice = "recoverInvoice";
 }
