@@ -2,11 +2,20 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "nextMaster" ]
     tags: [ "v*" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "nextMaster" ]
   workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release Type (for nextMaster)'
+        required: true
+        default: 'beta'
+        type: choice
+        options:
+        - beta
+        - rc
 
 env:
   # Use docker.io for Docker Hub if empty
@@ -18,10 +27,14 @@ jobs:
   # 1. Calculate the next version based on commits
   calculate-version:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # Run on master push OR manual trigger on nextMaster
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/nextMaster')
     outputs:
       new_tag: ${{ steps.tag_version.outputs.new_tag }}
       changelog: ${{ steps.tag_version.outputs.changelog }}
+      is_prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }}
     permissions:
       contents: write
     steps:
@@ -29,12 +42,27 @@ jobs:
         with:
           fetch-depth: 0 # Required to calculate version history
 
+      - name: Determine Pre-release Suffix
+        id: check_prerelease
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "suffix=${{ inputs.release_type }}" >> $GITHUB_OUTPUT
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "suffix=" >> $GITHUB_OUTPUT
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Bump version and push tag
         id: tag_version
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          default_bump: patch # Default to patch (v1.0.0 -> v1.0.1) if no #major/#minor found
+          default_bump: patch
+          # If suffix is set (e.g. 'beta'), it creates v1.0.1-beta.0
+          append_to_pre_release_tag: ${{ steps.check_prerelease.outputs.suffix }}
+          # Treat nextMaster as a pre-release branch if triggered manually
+          pre_release_branches: nextMaster
 
   build-and-test:
     runs-on: ubuntu-latest
@@ -72,11 +100,17 @@ jobs:
   docker-build-push:
     needs: [build-and-test, calculate-version]
     runs-on: ubuntu-latest
-    # Only run if we are on master (auto-tagging) OR if a tag was pushed manually
+    # Run if:
+    # 1. Build passed
+    # 2. AND (Master push OR Tag push OR Manual trigger with new tag)
     if: |
       always() && 
       (needs.build-and-test.result == 'success') &&
-      (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+      (
+        (github.event_name == 'push' && github.ref == 'refs/heads/master') || 
+        startsWith(github.ref, 'refs/tags/v') ||
+        (github.event_name == 'workflow_dispatch' && needs.calculate-version.outputs.new_tag != '')
+      )
     permissions:
       contents: read
       packages: write
@@ -98,11 +132,19 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
+            # Branch tags (exclude master and nextMaster)
+            type=ref,event=branch,enable=${{ github.ref != 'refs/heads/master' && github.ref != 'refs/heads/nextMaster' }}
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
+            
+            # Master -> latest
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+            
+            # nextMaster manual trigger -> beta/rc
+            type=raw,value=${{ inputs.release_type }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.release_type != '' }}
+            
             # Add the auto-calculated tag if available
             type=raw,value=${{ needs.calculate-version.outputs.new_tag }},enable=${{ needs.calculate-version.outputs.new_tag != '' }}
 
@@ -116,11 +158,17 @@ jobs:
 
   create-release:
     needs: [build-and-test, docker-build-push, calculate-version]
-    # Run if we are on master (auto-tagging) OR if a tag was pushed manually
+    # Run if:
+    # 1. Build passed
+    # 2. AND (Master push OR Tag push OR Manual trigger with new tag)
     if: |
       always() &&
       (needs.build-and-test.result == 'success') &&
-      (needs.calculate-version.outputs.new_tag != '' || startsWith(github.ref, 'refs/tags/v'))
+      (
+        (github.event_name == 'push' && github.ref == 'refs/heads/master') || 
+        startsWith(github.ref, 'refs/tags/v') ||
+        (github.event_name == 'workflow_dispatch' && needs.calculate-version.outputs.new_tag != '')
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -152,3 +200,4 @@ jobs:
           files: teamZaps-${{ steps.tag_name.outputs.tag }}.zip
           generate_release_notes: true
           body: ${{ needs.calculate-version.outputs.changelog }}
+          prerelease: ${{ needs.calculate-version.outputs.is_prerelease == 'true' }}

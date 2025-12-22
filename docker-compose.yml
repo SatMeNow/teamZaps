@@ -1,6 +1,9 @@
 services:
   teamzaps:
-    image: ghcr.io/satmenow/teamzaps:latest
+    # Build locally if needed, otherwise pull from registry
+    build: .
+    # Use 'latest' by default, or override with DOCKER_TAG in .env
+    image: ghcr.io/satmenow/teamzaps:${DOCKER_TAG:-latest}
     container_name: teamzaps
     restart: unless-stopped
     environment:
