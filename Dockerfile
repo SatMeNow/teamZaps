@@ -15,11 +15,13 @@ COPY . .
 WORKDIR "/src/src"
 
 # Build the application
-RUN dotnet build "teamZaps.csproj" -c Release -o /app/build
+ARG VERSION=0.0.0.0-local
+RUN dotnet build "teamZaps.csproj" -c Release -o /app/build /p:Version=${VERSION}
 
 # Publish the application
 FROM build AS publish
-RUN dotnet publish "teamZaps.csproj" -c Release -o /app/publish /p:UseAppHost=false
+ARG VERSION=0.0.0.0-local
+RUN dotnet publish "teamZaps.csproj" -c Release -o /app/publish /p:UseAppHost=false /p:Version=${VERSION}
 
 # Final stage/image
 FROM base AS final
