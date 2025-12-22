@@ -730,6 +730,58 @@ This will:
 - Build and push a Docker image with that tag.
 - Create a GitHub "Pre-release" with artifacts.
 
+### Manual Dev & Debug Builds
+Manual workflow dispatches can be started from *any* branch. When you run the workflow, pick the branch you need and choose the release type:
+
+1. Go to **GitHub Actions** -> **Build and Deploy**.
+2. Click **Run workflow**.
+3. Select your branch.
+4. Select Release Type: `debug`.
+
+The pipeline builds a Debug-mode Docker image, publishes it to GHCR, and skips pushing git tags/releases (the workflow runs `dry_run` during the tagging step).
+
+The pipeline still calculates the semantic version for you, and the Docker build picks up the resolved version via `/p:Version` so `/diag` and other diagnostics show the same version that shipped. Debug builds produce Docker images tagged both `debug` and `v<version>-debug.<run>` (e.g., `v0.0.2-debug.123`), making it easy to identify the exact debug build.
+
+### Available Docker Tags
+
+The following tags are published to GHCR (`ghcr.io/satmenow/teamzaps`):
+
+| Tag Pattern | Source | Description |
+|-------------|--------|-------------|
+| `latest` | `master` branch | Stable production releases |
+| `v1.2.3` | `master` branch | Specific stable version (semver) |
+| `v1.2` | `master` branch | Major.minor version tag |
+| `beta` | `nextMaster` manual | Latest beta pre-release |
+| `v1.2.3-beta.0` | `nextMaster` manual | Specific beta version |
+| `rc` | `nextMaster` manual | Latest release candidate |
+| `v1.2.3-rc.0` | `nextMaster` manual | Specific RC version |
+| `debug` | Any branch manual | Latest debug build |
+| `v1.2.3-debug.123` | Any branch manual | Specific debug build with run number |
+| `sha-<hash>` | Any build | Git commit-specific image |
+
+**To use a specific tag in docker-compose:**
+```bash
+# In .env file:
+DOCKER_TAG=beta
+# or
+DOCKER_TAG=v1.2.3-debug.123
+```
+
+### Automatic Updates with Watchtower
+
+The `docker-compose.yml` includes Watchtower, which automatically pulls and deploys new images when they're published to GHCR.
+
+**Default behavior:**
+- Polls GHCR every 30 minutes for image updates
+- Only updates containers with the `com.centurylinklabs.watchtower.enable=true` label
+- Automatically cleans up old images
+
+**To disable auto-updates:**
+Remove or comment out the `watchtower` service in `docker-compose.yml`.
+
+**To change update frequency:**
+Adjust `WATCHTOWER_POLL_INTERVAL` (in seconds) in the watchtower service environment variables.
+
 ## ✅ User-facing Commands (quick reference)
 
 Use the commands below in the appropriate context — group chats or private/direct messages with the bot.
