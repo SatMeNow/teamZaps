@@ -68,8 +68,10 @@ public partial class UpdateHandler : IUpdateHandler
     private async Task<bool> HandleMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
     {
         var chatId = message.Chat.Id;
+        #if DEBUG
         logger.LogInformation("Received message from {User} in chat {ChatId}: {MessageText}", message.From, chatId, message.Text);
-
+        #endif
+        
         var res = true;
         var isCmd = message.TryGetCommand(out var cmd);
         try

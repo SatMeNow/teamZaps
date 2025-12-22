@@ -317,9 +317,11 @@ public partial class UpdateHandler
         else
         {
             var consumed = sessionManager.ConsumedServerBudget;
+            if (consumed > 0)
+                diagnostics.AppendLine($"• Server budget: *{consumed.Format()}* / *{botBehaviour.MaxBudget!.Value.Format()}*");
             var available = sessionManager.AvailableServerBudget ?? 0;
-            diagnostics.AppendLine($"• Server budget: *{consumed.Format()}* / *{botBehaviour.MaxBudget!.Value.Format()}*");
-            diagnostics.AppendLine($"• Available budget: *{available.Format()}*");
+            if (available > 0)
+                diagnostics.AppendLine($"• Available budget: *{available.Format()}*");
         }
         diagnostics.AppendLineIfNotNull("• Total locked amount: *{0}*", sessionManager.FormatAmount(), "💤 none");
 
