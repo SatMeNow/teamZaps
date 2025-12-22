@@ -22,15 +22,15 @@ public static class Program
         try
         {
             Log.Information("Starting Team Zaps application");
-            await CreateHostBuilder(args).Build().RunAsync();
+            await CreateHostBuilder(args).Build().RunAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            Log.Fatal(ex, "Application terminated unexpectedly");
+            Log.Fatal(ex, "TeamZaps bot terminated unexpectedly");
         }
         finally
         {
-            await Log.CloseAndFlushAsync();
+            await Log.CloseAndFlushAsync().ConfigureAwait(false);
         }
     }
 

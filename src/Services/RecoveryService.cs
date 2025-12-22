@@ -59,7 +59,7 @@ public class RecoveryService : BackgroundService
             logger.LogInformation("Created recovery directory: {Directory}", RecoverDirectory);
         }
 
-        await Task.Delay(InitTimeout);
+        await Task.Delay(InitTimeout).ConfigureAwait(false);
 
         // Schedule periodic scans:
         logger.LogInformation("Recovery service starting periodic scans");
@@ -68,14 +68,14 @@ public class RecoveryService : BackgroundService
         {
             try
             {
-                await ScanForLostSatsAsync();
+                await ScanForLostSatsAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Error during periodic scan for lost sats.");
             }
             
-        } while ((!stoppingToken.IsCancellationRequested) && (await timer.WaitForNextTickAsync(stoppingToken)));
+        } while ((!stoppingToken.IsCancellationRequested) && (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false)));
     }
 
 
@@ -102,7 +102,7 @@ public class RecoveryService : BackgroundService
                 Reason = reason,
                 LastNotified = null // Reset notification timestamp for new payment
             };
-            await WriteRecordAsync(record);
+            await WriteRecordAsync(record).ConfigureAwait(false);
 
             //logger.LogInformation("Recorded lost sats for user {User}): {SatsAmount}", participant, participant.SatsAmount.Format());
         }
@@ -126,7 +126,7 @@ public class RecoveryService : BackgroundService
     public async Task ClearLostSatsAsync(SessionState session)
     {
         foreach (var participant in session.Participants.Values)
-            await ClearLostSatsAsync(participant.UserId);
+            await ClearLostSatsAsync(participant.UserId).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -153,7 +153,7 @@ public class RecoveryService : BackgroundService
             var files = Directory.GetFiles(RecoverDirectory, GetRecoveryFileName(null));
             foreach (var file in files)
             {
-                var record = await ReadRecordAsync(file);
+                var record = await ReadRecordAsync(file).ConfigureAwait(false);
                 if (record is not null)
                     records.Add(record);
             }
@@ -173,7 +173,7 @@ public class RecoveryService : BackgroundService
             return;
         #endif
 
-        var lostSatsRecords = await GetAllLostSatsAsync();
+        var lostSatsRecords = await GetAllLostSatsAsync().ConfigureAwait(false);
         if (lostSatsRecords.IsEmpty())
             return;
 
@@ -190,13 +190,13 @@ public class RecoveryService : BackgroundService
                     .AppendRecoveryMessage(record)
                     .ToString();
                 await botClient.SendMessage(record.UserId, message, 
-                    parseMode: ParseMode.Markdown);
+                    parseMode: ParseMode.Markdown).ConfigureAwait(false);
                     
                 logger.LogInformation("Notified user {User} about {SatsAmount} of lost funds", record.DisplayName(), record.SatsAmount.Format());
                 
                 // Update the record with notification timestamp:
                 record.LastNotified = DateTimeOffset.Now;
-                await WriteRecordAsync(record);
+                await WriteRecordAsync(record).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -210,7 +210,7 @@ public class RecoveryService : BackgroundService
     {
         var filePath = GetRecoveryFilePath(record.UserId);
         var json = JsonSerializer.Serialize(record, JsonOptions);
-        await File.WriteAllTextAsync(filePath, json);
+        await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
     }
     private Task<LostSatsRecord?> ReadRecordAsync(long userId) => ReadRecordAsync(GetRecoveryFilePath(userId));
     private async Task<LostSatsRecord?> ReadRecordAsync(string filePath)
@@ -220,7 +220,7 @@ public class RecoveryService : BackgroundService
             if (!File.Exists(filePath))
                 return (null);
 
-            var json = await File.ReadAllTextAsync(filePath);
+            var json = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
             return (JsonSerializer.Deserialize<LostSatsRecord>(json, JsonOptions));
         }
         catch (Exception ex)

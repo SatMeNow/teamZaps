@@ -65,7 +65,7 @@ public class PaymentMonitorService : BackgroundService
                         pending.PaidAt = DateTimeOffset.Now;
 
                         // Update the payment message to show paid status
-                        await PaymentMessage.UpdateAsync(pending, PaymentStatus.Paid, botClient, logger, cancellationToken);
+                        await PaymentMessage.UpdateAsync(pending, PaymentStatus.Paid, botClient, logger, cancellationToken).ConfigureAwait(false);
 
                         var payment = new PaymentRecord()
                         {
@@ -85,19 +85,19 @@ public class PaymentMonitorService : BackgroundService
                         participant.Payments.Add(payment);
 
                         // Record lost sats for crash recovery:
-                        await recoveryService.RecordLostSatsAsync(participant, $"Payment in session: *{session.ChatTitle}*");
+                        await recoveryService.RecordLostSatsAsync(participant, $"Payment in session: *{session.ChatTitle}*").ConfigureAwait(false);
 
-                        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+                        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
                         
                         // Update user status messages for affected participant
-                        await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken);
+                        await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
                         
                         // Delete payment help message if it exists
                         if (participant.PaymentHelpMessageId is not null)
                         {
                             try
                             {
-                                await botClient.DeleteMessage(participant.UserId, participant.PaymentHelpMessageId!.Value, cancellationToken);
+                                await botClient.DeleteMessage(participant.UserId, participant.PaymentHelpMessageId!.Value, cancellationToken).ConfigureAwait(false);
                             }
                             catch (Exception)
                             {

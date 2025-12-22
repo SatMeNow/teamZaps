@@ -52,11 +52,11 @@ public class TelegramBotService : BackgroundService
     {
         try
         {
-            User me = await botClient.GetMe(stoppingToken);
+            User me = await botClient.GetMe(stoppingToken).ConfigureAwait(false);
             logger.LogInformation("Bot {BotUsername} initialized successfully", me);
 
             var receiverOptions = new ReceiverOptions { AllowedUpdates = Array.Empty<UpdateType>() };
-            await botClient.ReceiveAsync(updateHandler, receiverOptions, stoppingToken);
+            await botClient.ReceiveAsync(updateHandler, receiverOptions, stoppingToken).ConfigureAwait(false);
 
             this.Ready = true;
         }
@@ -71,7 +71,7 @@ public class TelegramBotService : BackgroundService
         this.Ready = false;
 
         logger.LogInformation("Stopping Team Zaps Telegram Bot...");
-        await base.StopAsync(cancellationToken);
+        await base.StopAsync(cancellationToken).ConfigureAwait(false);
     }
 
 
@@ -117,8 +117,8 @@ internal static partial class Ext
     {
         try
         {
-            var me = await botClient.GetMe(cancellationToken);
-            var member = await botClient.GetChatMember(chatId, me.Id, cancellationToken);
+            var me = await botClient.GetMe(cancellationToken).ConfigureAwait(false);
+            var member = await botClient.GetChatMember(chatId, me.Id, cancellationToken).ConfigureAwait(false);
             if (member is ChatMemberOwner)
                 return (true);
             if (member is ChatMemberAdministrator admin)

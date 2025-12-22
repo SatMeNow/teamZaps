@@ -61,7 +61,7 @@ public class LnbitsService : ILightningBackend
     {
         try
         {
-            return (await RequestAsync<LnbitsInvoice>(HttpMethod.Post, "/api/v1/payments", invoiceRequest, cancellationToken));
+            return (await RequestAsync<LnbitsInvoice>(HttpMethod.Post, "/api/v1/payments", invoiceRequest, cancellationToken).ConfigureAwait(false));
         }
         catch (Exception ex)
         {
