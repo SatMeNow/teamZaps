@@ -48,7 +48,7 @@ public class AlbyHubService : ILightningBackend, IDisposable
                 Params = new { }
             };
 
-            var response = await nostr.SendNwcRequestAsync<GetBalanceResult>(request, cancellationToken);
+            var response = await nostr.SendNwcRequestAsync<GetBalanceResult>(request, cancellationToken).ConfigureAwait(false);
             if (response is not null)
                 return (response.Balance / 1000);
         }
@@ -78,7 +78,7 @@ public class AlbyHubService : ILightningBackend, IDisposable
                 }
             };
 
-            var response = await nostr.SendNwcRequestAsync<MakeInvoiceResult>(request, cancellationToken);
+            var response = await nostr.SendNwcRequestAsync<MakeInvoiceResult>(request, cancellationToken).ConfigureAwait(false);
             if (response is not null)
                 return (new AlbyHubInvoice {
                     PaymentRequest = response.Invoice,
@@ -105,7 +105,7 @@ public class AlbyHubService : ILightningBackend, IDisposable
                 }
             };
 
-            var response = await nostr.SendNwcRequestAsync<PayInvoiceResult>(request, cancellationToken);
+            var response = await nostr.SendNwcRequestAsync<PayInvoiceResult>(request, cancellationToken).ConfigureAwait(false);
             if (response is not null)
                 return (new AlbyHubPaymentResponse {
                     PaymentHash = response.PaymentHash
@@ -130,7 +130,7 @@ public class AlbyHubService : ILightningBackend, IDisposable
                 }
             };
 
-                var response = await nostr.SendNwcRequestAsync<LookupInvoiceResult>(request, cancellationToken);
+                var response = await nostr.SendNwcRequestAsync<LookupInvoiceResult>(request, cancellationToken).ConfigureAwait(false);
             if (response is not null)
             {
                 var isSettled = ((string.Equals(response.State, "settled", StringComparison.OrdinalIgnoreCase)) || (response.Settled == true));

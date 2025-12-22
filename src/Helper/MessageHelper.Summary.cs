@@ -25,7 +25,7 @@ internal static class SessionSummaryMessage
                     winnerUser.UserId,
                     text: BuildSummary(session, winnerUser.UserId, winnerInfo),
                     parseMode: ParseMode.Markdown,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
                     
                 logger.LogDebug("Summary message sent to winner {Winner} for session {Session}", winnerUser, session);
             }

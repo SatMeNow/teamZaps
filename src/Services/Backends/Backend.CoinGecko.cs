@@ -61,12 +61,12 @@ public class CoinGeckoService : BackgroundService, IDisposable, IExchangeRateBac
         while (!stoppingToken.IsCancellationRequested)
         {
             if (!sessionManager.ActiveSessions.IsEmpty())
-                await RefreshRatesAsync(stoppingToken);
+                await RefreshRatesAsync(stoppingToken).ConfigureAwait(false);
 
             try
             {
                 using var delay = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, forceRefresh.Token);
-                await timer.WaitForNextTickAsync(delay.Token);
+                await timer.WaitForNextTickAsync(delay.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -94,7 +94,7 @@ public class CoinGeckoService : BackgroundService, IDisposable, IExchangeRateBac
             var firstUpdate = (LastRateUpdate is null);
 
             // Refresh exchange rates:
-            var response = await httpClient.GetStringAsync(ApiUrl, cancellationToken);
+            var response = await httpClient.GetStringAsync(ApiUrl, cancellationToken).ConfigureAwait(false);
             SentRequests++;
             var jsonDoc = JsonSerializer.Deserialize<JsonElement>(response);
             if (!jsonDoc.TryGetProperty("bitcoin", out var bitcoinRates))

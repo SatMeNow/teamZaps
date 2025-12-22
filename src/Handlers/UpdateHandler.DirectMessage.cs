@@ -27,15 +27,15 @@ public partial class UpdateHandler
                     "4️⃣ One random participant wins the pot!\n\n" +
                     "Use `/help` for detailed instructions.", 
                     parseMode: ParseMode.Markdown,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 // Check if user has a pending session join
                 foreach (var session in sessionManager.ActiveSessions)
                 {
                     if (session.PendingJoins.TryRemove(command.UserId, out var joinInfo))
                     {
-                        await DeleteMessageAsync(botClient, joinInfo.ChatId, joinInfo.MessageId, cancellationToken);
-                        await HandleJoinSessionAsync(botClient, joinInfo.ChatId, command.Source.From!, cancellationToken);
+                        await DeleteMessageAsync(botClient, joinInfo.ChatId, joinInfo.MessageId, cancellationToken).ConfigureAwait(false);
+                        await HandleJoinSessionAsync(botClient, joinInfo.ChatId, command.Source.From!, cancellationToken).ConfigureAwait(false);
                         break;
                     }
                 }
@@ -60,15 +60,15 @@ public partial class UpdateHandler
                     "💡 *Payments and invoices are handled in private messages for privacy.*\n\n" +
                     "ℹ️ For *detailed info*, check out the [GitHub Repository](https://github.com/SatMeNow/teamZaps).",
                     parseMode: ParseMode.Markdown,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
                 break;
 
             case "/diag":
-                await HandleDiagnosisAsync(botClient, command, cancellationToken);
+                await HandleDiagnosisAsync(botClient, command, cancellationToken).ConfigureAwait(false);
                 break;
 
             case "/recover":
-                await HandleRecoverCommandAsync(botClient, command, cancellationToken);
+                await HandleRecoverCommandAsync(botClient, command, cancellationToken).ConfigureAwait(false);
                 break;
 
             default: return (false);
@@ -88,10 +88,10 @@ public partial class UpdateHandler
             // Check if this is a recovery invoice
             if (text.IsLightningInvoice(out var recoveryInvoice))
             {
-                var lostSats = await recoveryService.TryGetLostSatsAsync(user.Id);
+                var lostSats = await recoveryService.TryGetLostSatsAsync(user.Id).ConfigureAwait(false);
                 if (lostSats is not null)
                 {
-                    await ProcessRecoveryInvoiceAsync(botClient, user, recoveryInvoice, lostSats, cancellationToken);
+                    await ProcessRecoveryInvoiceAsync(botClient, user, recoveryInvoice, lostSats, cancellationToken).ConfigureAwait(false);
                     return (true);
                 }
             }
@@ -109,7 +109,7 @@ public partial class UpdateHandler
                     // Try to parse as payment from session participant
                     if (PaymentParser.TryParse(text, out var tokens, out var error))
                     {
-                        await ProcessPrivatePaymentAsync(botClient, session, user, tokens, text, cancellationToken);
+                        await ProcessPrivatePaymentAsync(botClient, session, user, tokens, text, cancellationToken).ConfigureAwait(false);
                         return (true);   
                     }
                     break;
@@ -122,7 +122,7 @@ public partial class UpdateHandler
                         // This looks like an invoice submission
                         if (text.IsLightningInvoice(out var invoice))
                         {
-                            await ProcessWinnerInvoiceAsync(botClient, session, winnerUser, invoice, cancellationToken);
+                            await ProcessWinnerInvoiceAsync(botClient, session, winnerUser, invoice, cancellationToken).ConfigureAwait(false);
                             return (true);
                         }
                     }
@@ -202,7 +202,7 @@ public partial class UpdateHandler
         catch (Exception ex)
         {
             logger.LogError(ex, "Error creating invoice for private payment");
-            await botClient.SendException(user, ex, cancellationToken);
+            await botClient.SendException(user, ex, cancellationToken).ConfigureAwait(false);
         }
     }
     private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, ParticipantState winnerUser, string bolt11, CancellationToken cancellationToken)
@@ -217,27 +217,27 @@ public partial class UpdateHandler
 
         winnerUser!.SubmittedInvoice = true;
 
-        await botClient.SendMessage(winnerUser.UserId, "✅ Invoice received!\n⏳ Processing payout...", cancellationToken: cancellationToken);
+        await botClient.SendMessage(winnerUser.UserId, "✅ Invoice received!\n⏳ Processing payout...", cancellationToken: cancellationToken).ConfigureAwait(false);
 
         try
         {
-            var paymentResult = await lightningBackend.PayInvoiceAsync(bolt11!, cancellationToken);
+            var paymentResult = await lightningBackend.PayInvoiceAsync(bolt11!, cancellationToken).ConfigureAwait(false);
             if (paymentResult is not null)
             {
                 if (session.PayoutCompleted)
                 {
                     session.Phase = SessionPhase.Completed;
 
-                    await WinnerMessage.UpdateAsync(session, PaymentStatus.Paid, paymentResult, botClient, workflowService, logger, cancellationToken);
+                    await WinnerMessage.UpdateAsync(session, PaymentStatus.Paid, paymentResult, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
                 }
 
                 // Update the pinned status message
-                await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken);
+                await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
                 
                 // Update user status messages for all participants
                 foreach (var participant in session.Participants.Values)
                 {
-                    await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken);
+                    await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
                 }
                 
                 if (session.Phase.IsClosed())
@@ -254,11 +254,11 @@ public partial class UpdateHandler
         catch (Exception ex)
         {
             logger.LogError(ex, "Error executing payout by {User} for session {Session}", winnerUser, session);
-            await botClient.SendMessage(session.ChatId, "❌ Error during payout. Please contact support.", cancellationToken: cancellationToken);
+            await botClient.SendMessage(session.ChatId, "❌ Error during payout. Please contact support.", cancellationToken: cancellationToken).ConfigureAwait(false);
             return;
         }
         
-        await botClient.SendMessage(winnerUser.UserId, "✅ Payout completed.", cancellationToken: cancellationToken);
+        await botClient.SendMessage(winnerUser.UserId, "✅ Payout completed.", cancellationToken: cancellationToken).ConfigureAwait(false);
     }
     /// <summary>
     /// Shows diagnostic information about the current session and system state.
@@ -273,7 +273,7 @@ public partial class UpdateHandler
             return;
 
         // Check if command is used in private chat
-        var chat = await botClient.GetChat(command.ChatId, cancellationToken);
+        var chat = await botClient.GetChat(command.ChatId, cancellationToken).ConfigureAwait(false);
         if (chat.Type != ChatType.Private)
             throw new InvalidOperationException("This command is only available in private chat with the bot.");
 
@@ -327,7 +327,7 @@ public partial class UpdateHandler
 
         // Lost and Found Recovery Information
         diagnostics.AppendLine("\n🔍 *Lost and Found recovery:*");
-        var allLostSats = await recoveryService.GetAllLostSatsAsync();
+        var allLostSats = await recoveryService.GetAllLostSatsAsync().ConfigureAwait(false);
         if (allLostSats.IsEmpty())
             diagnostics.AppendLine("• Lost sats records: ✅ *None*");
         else
@@ -364,7 +364,7 @@ public partial class UpdateHandler
         await botClient.SendMessage(command.ChatId,
             diagnostics.ToString(),
             parseMode: ParseMode.Markdown,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -373,14 +373,14 @@ public partial class UpdateHandler
     private async Task HandleRecoverCommandAsync(ITelegramBotClient botClient, CommandMessage command, CancellationToken cancellationToken)
     {
         // Check if command is used in private chat
-        var chat = await botClient.GetChat(command.ChatId, cancellationToken);
+        var chat = await botClient.GetChat(command.ChatId, cancellationToken).ConfigureAwait(false);
         if (chat.Type != ChatType.Private)
             throw new InvalidOperationException("The recover command is only available in private chat with the bot.\n\n" +
                 "Please send me `/recover` as a direct message.")
                 .AddLogLevel(LogLevel.Warning);
 
         // Get lost sats for this user
-        var lostSats = await recoveryService.TryGetLostSatsAsync(command.UserId);
+        var lostSats = await recoveryService.TryGetLostSatsAsync(command.UserId).ConfigureAwait(false);
         if (lostSats is null)
             throw new Exception("You *don't have any lost sats* to recover.\n\n" +
                 "All your previous payments were successfully processed.")
@@ -392,7 +392,7 @@ public partial class UpdateHandler
             .ToString();
         await botClient.SendMessage(command.ChatId, message, 
             parseMode: ParseMode.Markdown,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -412,20 +412,20 @@ public partial class UpdateHandler
 
         await botClient.SendMessage(user.Id, 
             "✅ Recovery invoice received!\n⏳ Processing recovery payment...", 
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         // Attempt to pay the invoice
-        var paymentResult = await lightningBackend.PayInvoiceAsync(bolt11, cancellationToken);
+        var paymentResult = await lightningBackend.PayInvoiceAsync(bolt11, cancellationToken).ConfigureAwait(false);
         if (paymentResult is not null)
         {
-            await recoveryService.ClearLostSatsAsync(user.Id);
+            await recoveryService.ClearLostSatsAsync(user.Id).ConfigureAwait(false);
             
             await botClient.SendMessage(user.Id,
                 $"🎉 *Recovery Completed!*\n\n" +
                 $"✅ Successfully claimed *{expectedSats.Format()}*\n" +
                 $"Your lost sats have been sent to your Lightning wallet! 🚀",
                 parseMode: ParseMode.Markdown,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             logger.LogInformation("Successfully processed recovery payment for user {User}: {SatsAmount} sats from {Timestamp}", user, expectedSats.Format(), lostSats.Timestamp);
         }

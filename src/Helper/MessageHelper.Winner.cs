@@ -16,7 +16,7 @@ internal static class WinnerMessage
             chatId: session.ChatId,
             text: Build(session, workflowService, PaymentStatus.Pending),
             parseMode: ParseMode.Markdown,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         session.WinnerMessageId = message.MessageId;
         return message;
@@ -33,7 +33,7 @@ internal static class WinnerMessage
                 messageId: session.WinnerMessageId.Value,
                 text: Build(session, workflowService, status, paymentResult),
                 parseMode: ParseMode.Markdown,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (ApiRequestException ex) when (ex.ErrorCode == 400 && 
             (ex.Message.Contains("message to edit not found") || ex.Message.Contains("message can't be edited")))

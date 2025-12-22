@@ -80,15 +80,15 @@ public partial class UpdateHandler : IUpdateHandler
             {
                 case ChatType.Private:
                     if (isCmd)
-                        res = await HandleDirectCommandAsync(botClient, cmd!.Value, cancellationToken);
+                        res = await HandleDirectCommandAsync(botClient, cmd!.Value, cancellationToken).ConfigureAwait(false);
                     else
-                        res = await HandleDirectMessageAsync(botClient, message, cancellationToken);
+                        res = await HandleDirectMessageAsync(botClient, message, cancellationToken).ConfigureAwait(false);
                     break;
 
                 case ChatType.Group:
                 case ChatType.Supergroup:
                     if (isCmd)
-                        res = await HandleGroupCommandAsync(botClient, cmd!.Value, cancellationToken);
+                        res = await HandleGroupCommandAsync(botClient, cmd!.Value, cancellationToken).ConfigureAwait(false);
                     else
                         res = true; // Just ignore regular group messages.
                     break;
@@ -109,7 +109,7 @@ public partial class UpdateHandler : IUpdateHandler
             else
                 logger.LogError(ex, "Error handling message");
 
-            await botClient.SendException(chatId, ex.AddHelp("Use /help to see available commands."), cancellationToken);
+            await botClient.SendException(chatId, ex.AddHelp("Use /help to see available commands."), cancellationToken).ConfigureAwait(false);
         }
         
         return (res);
@@ -127,7 +127,7 @@ public partial class UpdateHandler : IUpdateHandler
         var action = data.First();
         try
         {
-            await botClient.AnswerCallbackQuery(query.Id, cancellationToken: cancellationToken);
+            await botClient.AnswerCallbackQuery(query.Id, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             switch (action)
             {
@@ -136,31 +136,31 @@ public partial class UpdateHandler : IUpdateHandler
                     // [Debug] Join lottery instant with fix budget
                     if (debugSettings.FixBudget is not null)
                     {
-                        await HandleJoinLotteryWithBudgetAsync(botClient, chatId, query.From!, debugSettings.FixBudget.Value, cancellationToken);
+                        await HandleJoinLotteryWithBudgetAsync(botClient, chatId, query.From!, debugSettings.FixBudget.Value, cancellationToken).ConfigureAwait(false);
                         return;
                     }
                     #endif
 
-                    await HandleJoinLotteryAsync(botClient, chatId, query.From!, cancellationToken);
+                    await HandleJoinLotteryAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
                     break;
 
                 case CallbackActions.SelectBudget when (data.Length == 2):
                     var budget = double.Parse(data[1]);
-                    await HandleJoinLotteryWithBudgetAsync(botClient, chatId, query.From!, budget, cancellationToken);
+                    await HandleJoinLotteryWithBudgetAsync(botClient, chatId, query.From!, budget, cancellationToken).ConfigureAwait(false);
                     break;
 
                 case CallbackActions.ViewStatus:
-                    await HandleStatusAsync(botClient, chatId, cancellationToken);
+                    await HandleStatusAsync(botClient, chatId, cancellationToken).ConfigureAwait(false);
                     break;
 
                 case CallbackActions.JoinSession:
-                    await HandleJoinSessionAsync(botClient, chatId, query.From!, cancellationToken);
+                    await HandleJoinSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
                     break;
                 case CallbackActions.CloseSession:
-                    await HandleCloseSessionAsync(botClient, chatId, query.From!, cancellationToken);
+                    await HandleCloseSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
                     break;
                 case CallbackActions.CancelSession:
-                    await HandleCancelSessionAsync(botClient, chatId, query.From!, cancellationToken);
+                    await HandleCancelSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
                     break;
 
                 case CallbackActions.MakePayment:
@@ -177,17 +177,17 @@ public partial class UpdateHandler : IUpdateHandler
                             "⚡ I'll create Lightning invoices for you to pay!\n" +
                             "ℹ️ You can also send amounts without using the `payment` button.", 
                             parseMode: ParseMode.Markdown,
-                            cancellationToken: cancellationToken);
+                            cancellationToken: cancellationToken).ConfigureAwait(false);
 
                         participant.PaymentHelpMessageId = message.MessageId;
                     }
                     break;
                 case CallbackActions.SetTip:
-                    await HandleTipSelectionAsync(botClient, chatId, query.From!, cancellationToken);
+                    await HandleTipSelectionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
                     break;
                 case CallbackActions.SelectTip when (data.Length == 2):
                     var tip = int.Parse(data[1]);
-                    await HandleSetTipAsync(botClient, chatId, query.From!, tip, cancellationToken);
+                    await HandleSetTipAsync(botClient, chatId, query.From!, tip, cancellationToken).ConfigureAwait(false);
                     break;
             }
         }
@@ -195,7 +195,7 @@ public partial class UpdateHandler : IUpdateHandler
         {
             logger.LogError(ex, "Error handling callback query '{Action}'", action);
 
-            await botClient.SendException(userId, ex, cancellationToken);
+            await botClient.SendException(userId, ex, cancellationToken).ConfigureAwait(false);
         }
     }
     
@@ -208,7 +208,7 @@ public partial class UpdateHandler : IUpdateHandler
             
         try
         {
-            await botClient.DeleteMessage(chatId, messageId.Value, cancellationToken);
+            await botClient.DeleteMessage(chatId, messageId.Value, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

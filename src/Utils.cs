@@ -64,7 +64,7 @@ namespace teamZaps.Utils
             
             bool result;
             while ((result = condition()) && (!cancel.Token.IsCancellationRequested))
-                await Task.Delay(1000, cancel.Token);
+                await Task.Delay(1000, cancel.Token).ConfigureAwait(false);
                 
             return (result);
         }

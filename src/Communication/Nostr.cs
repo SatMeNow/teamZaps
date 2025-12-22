@@ -71,7 +71,7 @@ public class NostrWalletConnector : IDisposable
 	{
 		try
 		{
-			await nostrClient.ConnectAndWaitUntilConnected(cancellationToken);
+			await nostrClient.ConnectAndWaitUntilConnected(cancellationToken).ConfigureAwait(false);
 			var requestJson = JsonSerializer.Serialize(request);
 			var encryptedContent = EncryptNip04(requestJson, walletPubkeyBytes);
 
@@ -85,7 +85,7 @@ public class NostrWalletConnector : IDisposable
 					new NostrEventTag { TagIdentifier = "p", Data = new List<string> { walletPubkey } }
 				}
 			};
-			await evt.ComputeIdAndSignAsync(clientPrivateKey);
+			await evt.ComputeIdAndSignAsync(clientPrivateKey).ConfigureAwait(false);
 
 			var responseReceived = new TaskCompletionSource<NostrEvent>();
 			var subscriptionId = Guid.NewGuid().ToString();
@@ -117,15 +117,15 @@ public class NostrWalletConnector : IDisposable
 						Kinds = new[] { 23195 },
 						Authors = new[] { walletPubkey }
 					}
-				});
+				}).ConfigureAwait(false);
 
-				await nostrClient.PublishEvent(evt, cancellationToken);
+				await nostrClient.PublishEvent(evt, cancellationToken).ConfigureAwait(false);
 				SentRequests++;
 
 				using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 				using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
-				var responseEvent = await responseReceived.Task.WaitAsync(linkedCts.Token);
+				var responseEvent = await responseReceived.Task.WaitAsync(linkedCts.Token).ConfigureAwait(false);
 				var decryptedContent = DecryptNip04(responseEvent!.Content!, walletPubkeyBytes);
 				var response = JsonSerializer.Deserialize<NwcResponse<TResult>>(decryptedContent);
 
@@ -140,7 +140,7 @@ public class NostrWalletConnector : IDisposable
 			finally
 			{
 				nostrClient.EventsReceived -= OnEventsReceived;
-				await nostrClient.CloseSubscription(subscriptionId);
+				await nostrClient.CloseSubscription(subscriptionId).ConfigureAwait(false);
 			}
 		}
 		catch (OperationCanceledException)

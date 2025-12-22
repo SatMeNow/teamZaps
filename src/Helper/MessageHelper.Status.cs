@@ -21,12 +21,12 @@ internal static class SessionStatusMessage
             text: Build(session),
             parseMode: ParseMode.Markdown,
             replyMarkup: BuildKeyboard(session, 0),
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         session.StatusMessageId = statusMessage.MessageId;
 
         if (session.BotCanPinMessages)
-            await botClient.PinChatMessage(session.ChatId, statusMessage.MessageId, cancellationToken: cancellationToken);
+            await botClient.PinChatMessage(session.ChatId, statusMessage.MessageId, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return (statusMessage);
     }
@@ -43,14 +43,14 @@ internal static class SessionStatusMessage
                 text: Build(session),
                 parseMode: ParseMode.Markdown,
                 replyMarkup: BuildKeyboard(session, 0),
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (ApiRequestException ex) when (ex.ErrorCode == 400 && 
             (ex.Message.Contains("message to edit not found") || ex.Message.Contains("message can't be edited")))
         {
             // Message was deleted, recreate it
             logger.LogInformation("Status message deleted for session {Session}, recreating...", session);
-            await RecreateAsync(session, botClient, workflowService, logger, cancellationToken);
+            await RecreateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
         }
         catch (ApiRequestException ex) when (ex.Message.Contains("message is not modified"))
         {
@@ -66,13 +66,13 @@ internal static class SessionStatusMessage
             await botClient.UnpinChatMessage(
                 chatId: session.ChatId,
                 messageId: session.StatusMessageId.Value,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
     }
     private static async Task RecreateAsync<TLogger>(SessionState session, ITelegramBotClient botClient, SessionWorkflowService workflowService, ILogger<TLogger> logger, CancellationToken cancellationToken)
     {
         try
         {
-            var message = await SendAsync(session, botClient, workflowService, cancellationToken);
+            var message = await SendAsync(session, botClient, workflowService, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -171,9 +171,9 @@ internal static class UserStatusMessage
                 text: Build(session),
                 parseMode: ParseMode.Markdown,
                 replyMarkup: BuildKeyboard(session),
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            await botClient.PinChatMessage(message.Chat.Id, message.MessageId, cancellationToken: cancellationToken);
+            await botClient.PinChatMessage(message.Chat.Id, message.MessageId, cancellationToken: cancellationToken).ConfigureAwait(false);
                 
             // Store message ID
             participant.StatusMessageId = message.MessageId;
@@ -193,21 +193,21 @@ internal static class UserStatusMessage
 
         try
         {
-            var chat = await botClient.GetChat(session.ChatId, cancellationToken);
+            var chat = await botClient.GetChat(session.ChatId, cancellationToken).ConfigureAwait(false);
             await botClient.EditMessageText(
                 chatId: participant.UserId,
                 messageId: messageId,
                 text: Build(session, participant),
                 parseMode: ParseMode.Markdown,
                 replyMarkup: BuildKeyboard(session, participant),
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (ApiRequestException ex) when (ex.ErrorCode == 400 && 
             (ex.Message.Contains("message to edit not found") || ex.Message.Contains("message can't be edited")))
         {
             // Message was deleted, recreate it
             logger.LogInformation("User status message deleted for user {User}, recreating...", participant);
-            await RecreateAsync(session, participant, botClient, workflowService, logger, cancellationToken);
+            await RecreateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
         }
         catch (ApiRequestException ex) when (ex.Message.Contains("message is not modified"))
         {
@@ -222,7 +222,7 @@ internal static class UserStatusMessage
     {
         try
         {
-            await SendAsync(session, participant, botClient, workflowService, logger, cancellationToken);
+            await SendAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
             logger.LogInformation("User status message recreated for user {User}", participant);
         }
         catch (Exception ex)

@@ -14,7 +14,7 @@ internal static class PaymentMessage
             chatId: payment.UserId,
             text: Build(payment, PaymentStatus.Pending),
             parseMode: ParseMode.Markdown,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return message;
     }
@@ -30,7 +30,7 @@ internal static class PaymentMessage
                 messageId: payment.MessageId.Value,
                 text: Build(payment, status),
                 parseMode: ParseMode.Markdown,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (ApiRequestException ex) when (ex.ErrorCode == 400 && 
             (ex.Message.Contains("message to edit not found") || ex.Message.Contains("message can't be edited")))
