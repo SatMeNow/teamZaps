@@ -1,4 +1,5 @@
 using teamZaps.Configuration;
+using teamZaps.Services;
 using teamZaps.Sessions;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
@@ -23,7 +24,7 @@ internal static class ConfigMessage
         cancellationToken: cancellationToken);
     private static string BuildText(string chatTitle)
     {
-        return ($"⚙️ *Session Configuration*\n\n" +
+        return ($"⚙️ *Session configuration*\n\n" +
             $"Configure who can manage sessions in *{chatTitle}*:\n\n" +
             "• *Non-admin start*: Allow any member to start a session\n" +
             "• *Non-admin close*: Allow any member to close a session and start the lottery\n" +

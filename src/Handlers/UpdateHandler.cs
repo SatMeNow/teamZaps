@@ -110,7 +110,7 @@ public partial class UpdateHandler : IUpdateHandler
             else
                 logger.LogError(ex, "Error handling message");
 
-            await botClient.SendException(chatId, ex.AddHelp("Use /help to see available commands."), cancellationToken).ConfigureAwait(false);
+            await botClient.SendException(chatId, ex.AddHelp($"Use {BotPmCommand.Help} to see available commands."), cancellationToken).ConfigureAwait(false);
         }
         
         return (res);
@@ -293,3 +293,4 @@ internal static partial class Ext
         return source.SendMessage(userId, message, parseMode: ParseMode.Markdown, cancellationToken: cancellationToken);
     }
 }
+

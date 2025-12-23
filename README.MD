@@ -38,7 +38,7 @@ Once the bot is added and has necessary permissions, users can interact:
 
 In the group chat:
 ```
-/startsession    # Admins only (configurable)
+/startzap        # Admins only (configurable)
 /status          # Show current session status
 /help            # Show help and commands
 ```
@@ -81,9 +81,9 @@ The bot accepts various payment formats:
 ### Group (use in group chats)
 | Command | Description | Who can Use |
 |---------|-------------|-------------|
-| `/startsession` | Start a new payment session | Admins (configurable) |
-| `/closesession` | Close payments and draw winner | Admins (configurable) |
-| `/cancelsession` | Cancel the current session | Admins (configurable) |
+| `/startzap` | Start a new payment session | Admins (configurable) |
+| `/closezap` | Close payments and draw winner | Admins (configurable) |
+| `/cancelzap` | Cancel the current session | Admins (configurable) |
 | `/config` | Change options (e.g. permissions) | Admins |
 | `/status` | View current session status | Anyone |
 

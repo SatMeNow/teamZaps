@@ -35,6 +35,37 @@ record struct CommandMessage(Message Source, string Value, string[] Arguments)
     public override string ToString() => Value;
 }
 
+public static class BotGroupCommand
+{
+    public const string StartSession = "/startzap";
+    public const string CloseSession = "/closezap";
+    public const string CancelSession = "/cancelzap";
+    public const string Status = "/status";
+    public const string Config = "/config";
+}
+public static class BotPmCommand
+{
+    public const string Start = "/start";
+    public const string Help = "/help";
+    public const string Recover = "/recover";
+}
+public static class CallbackActions
+{
+    public const string JoinLottery = "joinLottery";
+    public const string ViewStatus = "viewStatus";
+    public const string JoinSession = "joinSession";
+    public const string CloseSession = "closeSession";
+    public const string CancelSession = "cancelSession";
+    public const string MakePayment = "makePayment";
+    public const string SelectBudget = "selectBudget";
+    public const string SetTip = "setTip";
+    public const string SelectTip = "selectTip";
+    public const string AdminOptions = "adminOptions";
+    public const string RecoverCreate = "recoverCreate";
+    public const string RecoverCancel = "recoverCancel";
+    public const string RecoverInvoice = "recoverInvoice";
+}
+
 public class TelegramBotService : BackgroundService
 {
     public TelegramBotService(ILogger<TelegramBotService> logger, ITelegramBotClient botClient, UpdateHandler updateHandler)

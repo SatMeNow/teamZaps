@@ -50,7 +50,7 @@ public class PaymentMonitorService : BackgroundService
                     if (status.Paid && !pending.NotifiedPaid)
                     {
                         #if DEBUG
-                        if (status!.SatsAmount > 0)
+                        if ((status!.SatsAmount > 0) && (pending.SatsAmount is not null))
                             Debug.Assert(status.SatsAmount == pending.SatsAmount);
                         if (status!.FiatAmount > 0)
                         {

@@ -15,20 +15,20 @@ public partial class UpdateHandler
     {
         switch (command.Value)
         {
-            case "/startsession":
+            case BotGroupCommand.StartSession:
                 await HandleStartSessionAsync(botClient, command, cancellationToken).ConfigureAwait(false);
                 break;
-            case "/closesession":
+            case BotGroupCommand.CloseSession:
                 await HandleCloseSessionAsync(botClient, command.ChatId, command.From, cancellationToken).ConfigureAwait(false);
                 break;
-            case "/cancelsession":
+            case BotGroupCommand.CancelSession:
                 await HandleCancelSessionAsync(botClient, command.ChatId, command.From, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case "/status":
+            case BotGroupCommand.Status:
                 await HandleStatusAsync(botClient, command.ChatId, cancellationToken).ConfigureAwait(false);
                 break;
-            case "/config":
+            case BotGroupCommand.Config:
                 await HandleConfigCommandAsync(botClient, command, cancellationToken).ConfigureAwait(false);
                 break;
 
@@ -272,7 +272,7 @@ public partial class UpdateHandler
             .ToArray();
 
         var budgetMessage = await botClient.SendMessage(chatId, 
-            "🎰 *Enter Lottery* 🎰\n\n" +
+            "🎰 *Enter lottery* 🎰\n\n" +
             "How much are you willing to pay in fiat at maximum?\n\n" +
             "💡 *Multiple winners possible!* If total payments exceed your budget, " +
             "we'll select multiple winners to share the cost.", 
@@ -314,7 +314,7 @@ public partial class UpdateHandler
             .ToArray());
 
         var tipMessage = await botClient.SendMessage(chatId, 
-            "🎩 *Setup Tip*\n\n" +
+            "🎩 *Setup tip*\n\n" +
             "Choose your *tip percentage* to be added to each payment:\n\n",
             //"💭 Tips help support Lightning Network infrastructure and development!"
             parseMode: ParseMode.Markdown,
@@ -354,7 +354,7 @@ public partial class UpdateHandler
     {
         var session = workflowService.GetSessionByChat(chatId);
         if (session is null)
-            throw new InvalidOperationException("No active session in this group.\n\nUse /startsession to start one!");
+            throw new InvalidOperationException($"No active session in this group.\n\nUse {BotGroupCommand.StartSession} to start one!");
 
         // Delete previous message (should exist, but we don't really know):
         if (session.StatusMessageId is not null)
@@ -389,7 +389,7 @@ public partial class UpdateHandler
     private async Task HandleSetOptionsAsync(ITelegramBotClient botClient, CallbackQuery query, CancellationToken cancellationToken)
     {
         if (!configMessageMap.TryGetValue(query.Message!.MessageId, out var groupChatId))
-            throw new InvalidOperationException("Sorry, can't associate config message with group. Please run `/config` again.");
+            throw new InvalidOperationException($"Sorry, can't associate config message with group. Please run `{BotGroupCommand.Config}` again.");
             
         var chatId = query.Message!.Chat.Id;
         var chatTitle = query.Message!.Chat.Title!;
