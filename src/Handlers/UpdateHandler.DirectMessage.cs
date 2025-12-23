@@ -16,7 +16,7 @@ public partial class UpdateHandler
     {
         switch (command.Value)
         {
-            case "/start":
+            case BotPmCommand.Start:
                 await botClient.SendMessage(command.ChatId, 
                     "Welcome to Team Zaps! 🎯\n\n" +
                     "I help groups split bills using Bitcoin Lightning!\n\n" +
@@ -25,7 +25,7 @@ public partial class UpdateHandler
                     "2️⃣ Join the session using the _Join_ button\n" +
                     "3️⃣ Send me payments as direct message\n" +
                     "4️⃣ One random participant wins the pot!\n\n" +
-                    "Use `/help` for detailed instructions.", 
+                    $"Use `{BotPmCommand.Help}` for detailed instructions.", 
                     parseMode: ParseMode.Markdown,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -41,17 +41,17 @@ public partial class UpdateHandler
                 }
                 break;
 
-            case "/help":
+            case BotPmCommand.Help:
                 await botClient.SendMessage(command.ChatId,
-                    "🎯 *Team Zaps Help*\n\n" +
+                    "🎯 *Team Zaps help*\n\n" +
                     "*Group commands* (use in a group chat):\n" +
-                    "/startsession - Start a new payment session (maybe for admins only)\n" +
-                    "/closesession - Close payments and start lottery (maybe for admins only)\n" +
-                    "/cancelsession - Cancel session (maybe for admins only)\n\n" +
+                    $"{BotGroupCommand.StartSession} - Start a new payment session (maybe for admins only)\n" +
+                    $"{BotGroupCommand.CloseSession} - Close payments and start lottery (maybe for admins only)\n" +
+                    $"{BotGroupCommand.CancelSession} - Cancel session (maybe for admins only)\n\n" +
                     "*Private commands* (use in direct message with the bot):\n" +
-                    "/status - View session details (in group or private)\n" +
-                    "/recover - Recover lost sats from interrupted sessions (private chat)\n" +
-                    "/help - Show this help message\n\n" +
+                    $"{BotGroupCommand.Status} - View session details (in group or private)\n" +
+                    $"{BotPmCommand.Recover} - Recover lost sats from interrupted sessions (private chat)\n" +
+                    $"{BotPmCommand.Help} - Show this help message\n\n" +
                     "*How to participate:*\n" +
                     "1️⃣ Join the session using the button on the status message in the group\n" +
                     "2️⃣ Send payment amounts here in *private chat*\n" +
@@ -67,7 +67,7 @@ public partial class UpdateHandler
                 await HandleDiagnosisAsync(botClient, command, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case "/recover":
+            case BotPmCommand.Recover:
                 await HandleRecoverCommandAsync(botClient, command, cancellationToken).ConfigureAwait(false);
                 break;
 
@@ -222,43 +222,42 @@ public partial class UpdateHandler
         try
         {
             var paymentResult = await lightningBackend.PayInvoiceAsync(bolt11!, cancellationToken).ConfigureAwait(false);
-            if (paymentResult is not null)
-            {
-                if (session.PayoutCompleted)
-                {
-                    session.Phase = SessionPhase.Completed;
-
-                    await WinnerMessage.UpdateAsync(session, PaymentStatus.Paid, paymentResult, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
-                }
-
-                // Update the pinned status message
-                await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
-                
-                // Update user status messages for all participants
-                foreach (var participant in session.Participants.Values)
-                {
-                    await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
-                }
-                
-                if (session.Phase.IsClosed())
-                {
-                    // Clean up session
-                    workflowService.TryCloseSession(session.ChatId, false);
-
-                    logger.LogInformation("Payout executed successfully by {User} for session {Session}", winnerUser, session);
-                }
-            }
-            else
+            if (paymentResult is null)
                 throw new InvalidOperationException("Failed to execute payout. Please try again later.");
+                
+            if (session.PayoutCompleted)
+            {
+                session.Phase = SessionPhase.Completed;
+
+                await WinnerMessage.UpdateAsync(session, PaymentStatus.Paid, paymentResult, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+            }
+
+            // Update the pinned status message
+            await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+            
+            // Update user status messages for all participants
+            foreach (var participant in session.Participants.Values)
+                await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+            
+            if (session.Phase.IsClosed())
+            {
+                // Clean up session
+                workflowService.TryCloseSession(session.ChatId, false);
+
+                logger.LogInformation("Payout executed successfully by {User} for session {Session}", winnerUser, session);
+            }
+        
+            await botClient.SendMessage(winnerUser.UserId,
+                $"🎉 *Session completed!*\n\n" +
+                $"✅ Successfully paid out *{invoiceSats.Format()}*.",
+                parseMode: ParseMode.Markdown,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error executing payout by {User} for session {Session}", winnerUser, session);
             await botClient.SendMessage(session.ChatId, "❌ Error during payout. Please contact support.", cancellationToken: cancellationToken).ConfigureAwait(false);
-            return;
         }
-        
-        await botClient.SendMessage(winnerUser.UserId, "✅ Payout completed.", cancellationToken: cancellationToken).ConfigureAwait(false);
     }
     /// <summary>
     /// Shows diagnostic information about the current session and system state.
@@ -421,7 +420,7 @@ public partial class UpdateHandler
             await recoveryService.ClearLostSatsAsync(user.Id).ConfigureAwait(false);
             
             await botClient.SendMessage(user.Id,
-                $"🎉 *Recovery Completed!*\n\n" +
+                $"🎉 *Recovery completed!*\n\n" +
                 $"✅ Successfully claimed *{expectedSats.Format()}*\n" +
                 $"Your lost sats have been sent to your Lightning wallet! 🚀",
                 parseMode: ParseMode.Markdown,
@@ -451,3 +450,4 @@ public partial class UpdateHandler
     }
     #endregion
 }
+

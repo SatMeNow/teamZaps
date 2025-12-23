@@ -167,7 +167,7 @@ internal static partial class Ext
     }
     public static void AppendSessionState(this StringBuilder source, SessionState session)
     {
-        source.AppendLine("📊 *Session Status*\n");
+        source.AppendLine("📊 *Session status*\n");
         source.AppendLine($"• Phase: *{session.Phase.GetDescription()}*");
         source.AppendLine($"• Started: {session.StartedAt:f}");
     }

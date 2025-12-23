@@ -34,20 +34,3 @@ public class SessionWorkflowService
     private readonly SessionManager sessionManager;
     private readonly BotBehaviorOptions botBehaviour;
 }
-
-public static class CallbackActions
-{
-    public const string JoinLottery = "joinLottery";
-    public const string ViewStatus = "viewStatus";
-    public const string JoinSession = "joinSession";
-    public const string CloseSession = "closeSession";
-    public const string CancelSession = "cancelSession";
-    public const string MakePayment = "makePayment";
-    public const string SelectBudget = "selectBudget";
-    public const string SetTip = "setTip";
-    public const string SelectTip = "selectTip";
-    public const string AdminOptions = "adminOptions";
-    public const string RecoverCreate = "recoverCreate";
-    public const string RecoverCancel = "recoverCancel";
-    public const string RecoverInvoice = "recoverInvoice";
-}
