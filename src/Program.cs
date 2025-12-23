@@ -67,6 +67,7 @@ public static class Program
                 services.AddHostedService<TelegramBotService>();
                 services.AddHostedService<PaymentMonitorService>();
 
+                services.AddSingleton(typeof(FileService<>));
                 services.AddSingleton<RecoveryService>();
                 services.AddSingleton<SessionManager>();
                 services.AddSingleton<SessionWorkflowService>();

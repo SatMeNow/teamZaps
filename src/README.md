@@ -283,7 +283,7 @@ Team Zaps includes a comprehensive **Lost and Found** recovery system to protect
 **Automatic Detection:**
 - When sessions fail or are cancelled unexpectedly, user payments are automatically recorded as "lost sats"
 - Background service scans for lost payments periodically
-- Recovery records are stored as JSON files in the `lostSats/` directory
+- Recovery records are stored as JSON files in the `data/lostSats/` directory
 
 **User Notification:**
 - Users with lost sats receive automatic notifications via direct message
@@ -393,7 +393,7 @@ var participant = sessionManager.GetOrAddParticipant(session, userId, displayNam
 // Background service for lost sats recovery
 // - Runs periodic scans every 6 hours
 // - Notifies users about pending recoveries
-// - Manages recovery file storage in lostSats/ directory
+// - Manages recovery file storage in data/lostSats/ directory
 // - Registered as both Singleton and HostedService
 public class RecoveryService : BackgroundService
 {

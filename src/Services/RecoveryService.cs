@@ -19,30 +19,15 @@ public class RecoveryService : BackgroundService
     static readonly TimeSpan InitTimeout = TimeSpan.FromSeconds(5);
     static readonly TimeSpan ScanPeriod = TimeSpan.FromHours(6);
     #endregion
-    #region Constants
-    private const string RecoverFolder = "lostSats";
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() }
-    };
-    #endregion
 
 
-    public RecoveryService(ILogger<RecoveryService> logger, ITelegramBotClient botClient, IOptions<DebugSettings> debugSettings)
+    public RecoveryService(ILogger<RecoveryService> logger, FileService<LostSatsRecord> fileService, ITelegramBotClient botClient, IOptions<DebugSettings> debugSettings)
     {
         this.logger = logger;
+        this.fileService = fileService;
         this.botClient = botClient;
         this.debugSettings = debugSettings.Value;
-
-        this.RecoverDirectory = Path.Combine(AppContext.BaseDirectory, RecoverFolder);
     }
-
-
-    #region Properties.Management
-    string RecoverDirectory { get; }
-    #endregion
 
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -51,13 +36,6 @@ public class RecoveryService : BackgroundService
         if (debugSettings.EnableRecovery == false)
             return;
         #endif
-
-        // Ensure recovery directory exists:
-        if (!Directory.Exists(RecoverDirectory))
-        {
-            Directory.CreateDirectory(RecoverDirectory);
-            logger.LogInformation("Created recovery directory: {Directory}", RecoverDirectory);
-        }
 
         await Task.Delay(InitTimeout).ConfigureAwait(false);
 
@@ -102,7 +80,7 @@ public class RecoveryService : BackgroundService
                 Reason = reason,
                 LastNotified = null // Reset notification timestamp for new payment
             };
-            await WriteRecordAsync(record).ConfigureAwait(false);
+            await fileService.WriteAsync(record, record.UserId).ConfigureAwait(false);
 
             //logger.LogInformation("Recorded lost sats for user {User}): {SatsAmount}", participant, participant.SatsAmount.Format());
         }
@@ -111,59 +89,38 @@ public class RecoveryService : BackgroundService
             logger.LogError(ex, "Failed to record lost sats for user {User}", participant);
         }
     }
-    /// <summary>
-    /// Clears a lost sats records.
-    /// </summary>
-    public Task ClearLostSatsAsync(long userId) => DeleteRecordAsync(userId);
-    /// <inheritdoc cref="ClearLostSatsAsync(SessionState)"/> 
-    public void ClearLostSats(SessionState session)
-    {
-        _ = Task.Run(async () => ClearLostSatsAsync(session));
-    }
-    /// <summary>
-    /// Clears all lost sats records of a session.
-    /// </summary>
-    public async Task ClearLostSatsAsync(SessionState session)
-    {
-        foreach (var participant in session.Participants.Values)
-            await ClearLostSatsAsync(participant.UserId).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Gets a lost sats records.
-    /// </summary>
-    public Task<LostSatsRecord?> TryGetLostSatsAsync(long userId) => ReadRecordAsync(GetRecoveryFilePath(userId));
-    /// <summary>
-    /// Gets all lost sats records.
-    /// </summary>
-    public async Task<ICollection<LostSatsRecord>> GetAllLostSatsAsync()
+    public Task ClearLostSatsAsync(long userId)
     {
         #if DEBUG
         if (debugSettings.EnableRecovery == false)
-            return (Array.Empty<LostSatsRecord>());
+            return (Task.CompletedTask);
         #endif
 
-        var records = new List<LostSatsRecord>();
-        try
-        {
-            if (!Directory.Exists(RecoverDirectory))
-                return (records);
+        return (fileService.DeleteAsync(userId));
+    }
+    public void ClearLostSats(SessionState session)
+    {
+        #if DEBUG
+        if (debugSettings.EnableRecovery == false)
+            return;
+        #endif
 
-            // Process each recovery file:
-            var files = Directory.GetFiles(RecoverDirectory, GetRecoveryFileName(null));
-            foreach (var file in files)
-            {
-                var record = await ReadRecordAsync(file).ConfigureAwait(false);
-                if (record is not null)
-                    records.Add(record);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to scan recovery directory");
-        }
+        fileService.Delete(session.Participants.Values
+            .Select(p => p.UserId));
+    }
 
-        return (records);
+    public Task<LostSatsRecord?> TryGetLostSatsAsync(long userId) => fileService.ReadAsync(userId);
+    /// <summary>
+    /// Gets all lost sats records.
+    /// </summary>
+    public Task<ICollection<LostSatsRecord>> GetAllLostSatsAsync()
+    {
+        #if DEBUG
+        if (debugSettings.EnableRecovery == false)
+            return (Task.FromResult<ICollection<LostSatsRecord>>(Array.Empty<LostSatsRecord>()));
+        #endif
+
+        return (fileService.ReadAllAsync());
     }
 
     public async Task ScanForLostSatsAsync()
@@ -196,7 +153,7 @@ public class RecoveryService : BackgroundService
                 
                 // Update the record with notification timestamp:
                 record.LastNotified = DateTimeOffset.Now;
-                await WriteRecordAsync(record).ConfigureAwait(false);
+                await fileService.WriteAsync(record, record.UserId).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -205,61 +162,10 @@ public class RecoveryService : BackgroundService
         }
     }
     #endregion
-    #region I/O
-    private async Task WriteRecordAsync(LostSatsRecord record)
-    {
-        var filePath = GetRecoveryFilePath(record.UserId);
-        var json = JsonSerializer.Serialize(record, JsonOptions);
-        await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
-    }
-    private Task<LostSatsRecord?> ReadRecordAsync(long userId) => ReadRecordAsync(GetRecoveryFilePath(userId));
-    private async Task<LostSatsRecord?> ReadRecordAsync(string filePath)
-    {
-        try
-        {
-            if (!File.Exists(filePath))
-                return (null);
-
-            var json = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
-            return (JsonSerializer.Deserialize<LostSatsRecord>(json, JsonOptions));
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to read lost sats from recovery file {File}", filePath);
-            return (null);
-        }
-    }
-    private async Task DeleteRecordAsync(long userId)
-    {
-        #if DEBUG
-        if (debugSettings.EnableRecovery == false)
-            return;
-        #endif
-
-        try
-        {
-            var filePath = GetRecoveryFilePath(userId);
-            if (File.Exists(filePath))
-            {
-                File.Delete(filePath);
-                //logger.LogInformation("Deleted recovery file for user {UserId}", userId);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to delete recovery file for user {UserId}", userId);
-        }
-    }
-    #endregion
-
-
-    #region Helper
-    private string GetRecoveryFileName(long? userId) => $"user_{userId?.ToString() ?? "*"}.json";
-    private string GetRecoveryFilePath(long? userId) => Path.Combine(RecoverDirectory, GetRecoveryFileName(userId));
-    #endregion
 
 
     private readonly ILogger<RecoveryService> logger;
+    private readonly FileService<LostSatsRecord> fileService;
     private readonly ITelegramBotClient botClient;
     private readonly DebugSettings debugSettings;
 }
@@ -268,6 +174,7 @@ public class RecoveryService : BackgroundService
 /// <summary>
 /// Record of lost sats for a user.
 /// </summary>
+[Storage("lostSats", "user_{0}.json")]
 public class LostSatsRecord : IUserName
 {
     #region Constants.Settings
