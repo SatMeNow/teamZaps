@@ -62,10 +62,10 @@ jobs:
           default_bump: patch
           # If suffix is set (e.g. 'beta'), it creates v1.0.1-beta.0
           append_to_pre_release_tag: ${{ steps.check_prerelease.outputs.suffix }}
-          # Treat nextMaster as a pre-rele
-          # Don't push tags for debug builds
-          dry_run: ${{ inputs.release_type == 'debug' }}ase branch if triggered manually
+          # Treat nextMaster as a pre-release branch
           pre_release_branches: nextMaster
+          # Don't push tags for debug builds or nextMaster
+          dry_run: ${{ inputs.release_type == 'debug' || github.ref == 'refs/heads/nextMaster' }}
 
   build-and-test:
     needs: calculate-version
@@ -73,6 +73,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version_output }}
+      base_version: ${{ steps.version.outputs.base_version_output }}
     permissions:
       contents: read
 
@@ -92,16 +93,22 @@ jobs:
       id: version
       run: |
         VERSION="0.0.0-ci"
+        BASE_VERSION="0.0.0-ci"
         if [ "${{ needs.calculate-version.result }}" == "success" ] && [ -n "${{ needs.calculate-version.outputs.new_version }}" ]; then
           VERSION="${{ needs.calculate-version.outputs.new_version }}"
+          # Extract base version without pre-release suffix for debug tag generation
+          BASE_VERSION=$(echo "$VERSION" | sed 's/-.*$//')
         elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
           VERSION="${{ github.ref_name }}"
           # Strip 'v' prefix if present
           VERSION="${VERSION#v}"
+          BASE_VERSION="$VERSION"
         fi
         echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "BASE_VERSION=$BASE_VERSION" >> $GITHUB_ENV
         echo "version_output=$VERSION" >> $GITHUB_OUTPUT
-        echo "Determined version: $VERSION"
+        echo "base_version_output=$BASE_VERSION" >> $GITHUB_OUTPUT
+        echo "Determined version: $VERSION (base: $BASE_VERSION)"
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
@@ -176,7 +183,7 @@ jobs:
             # Add the auto-calculated tag if available (skip for debug, since we emit a debug version tag)
             type=raw,value=${{ needs.calculate-version.outputs.new_tag }},enable=${{ needs.calculate-version.outputs.new_tag != '' && (github.event_name != 'workflow_dispatch' || inputs.release_type != 'debug') }}
             # Make sure debug runs still publish a semver-style tag that includes the suffix and run number
-            type=raw,value=v${{ needs.build-and-test.outputs.version }}-debug.${{ github.run_number }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.release_type == 'debug' }}
+            type=raw,value=v${{ needs.build-and-test.outputs.base_version }}-debug.${{ github.run_number }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.release_type == 'debug' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
