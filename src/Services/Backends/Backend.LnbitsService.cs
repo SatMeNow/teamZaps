@@ -11,6 +11,16 @@ namespace teamZaps.Backend;
 [BackendDescription("LNBits")]
 public class LnbitsService : ILightningBackend
 {
+    #region Constants
+    private static readonly IReadOnlyDictionary<PaymentCurrency, string> SupportedCurrencies = new Dictionary<PaymentCurrency, string>
+    {
+        { PaymentCurrency.Sats, "sat" },
+        { PaymentCurrency.Dollar, "USD" },
+        { PaymentCurrency.Euro, "EUR" }
+    };
+    #endregion
+
+
     public LnbitsService(ILogger<LnbitsService> logger, IOptions<LnbitsSettings> settings)
     {
         this.logger = logger;
@@ -47,14 +57,14 @@ public class LnbitsService : ILightningBackend
     public Task<ILightningInvoice?> CreateInvoiceAsync(double amount, PaymentCurrency currency, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
     {
         amount = amount,
-        unit = currency.ToUnitName(),
-        memo = memo ?? "",
+        unit = GetUnitName(currency),
+        memo = (memo ?? ""),
         @out = false
     }, cancellationToken);
     public Task<ILightningInvoice?> CreateInvoiceAsync(long amount, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
     {
         amount = amount,
-        memo = memo ?? "",
+        memo = (memo ?? ""),
         @out = false
     }, cancellationToken);
     private async Task<ILightningInvoice?> CreateInvoiceAsync(object invoiceRequest, CancellationToken cancellationToken)
@@ -111,6 +121,13 @@ public class LnbitsService : ILightningBackend
 
 
     #region Helper
+    private string GetUnitName(PaymentCurrency currency)
+    {
+        if (SupportedCurrencies.TryGetValue(currency, out var unitName))
+            return (unitName);
+        else
+            throw new NotSupportedException($"Currency '{currency}' is not supported by {(this as ILightningBackend).BackendType} backend!");
+    }
     private Task<T?> RequestAsync<T>(HttpMethod method, string? requestUri, CancellationToken cancellationToken) => RequestAsync<T>(method, requestUri, null, cancellationToken);
     private async Task<T?> RequestAsync<T>(HttpMethod method, string? requestUri, object? request, CancellationToken cancellationToken)
     {
