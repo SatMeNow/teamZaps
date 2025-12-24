@@ -54,18 +54,31 @@ namespace teamZaps.Utils
     }
     internal static partial class UtilTask
     {
-        /// <inheritdoc cref="DelayWhileAsync(Func{bool}, TimeSpan, CancellationToken)"/> 
-        public static Task<bool> DelayWhileAsync(Func<bool> condition, int timeout, CancellationToken cancellationToken) => DelayWhileAsync(condition, TimeSpan.FromMilliseconds(timeout), cancellationToken);
+        /// <inheritdoc cref="DelayWhileAsync{TRes}(Func{Task{TRes?}}, int, int, CancellationToken)"/>
+        public static async Task<bool> DelayWhileAsync(Func<Task<bool>> condition, int timeout = 5000, int delay = 1000, CancellationToken cancellationToken = default)
+        {
+            var result = await DelayWhileAsync<object>(async () => (await condition().ConfigureAwait(false)) ? true : null, timeout, delay, cancellationToken).ConfigureAwait(false);
+
+            return (result is not null);
+        }
         /// <param name="timeout">Max. timeout (in [ms]).</param>
-        public static async Task<bool> DelayWhileAsync(Func<bool> condition, TimeSpan timeout, CancellationToken cancellationToken)
+        /// <param name="delay">Delay between condition checks (in [ms]).</param>
+        public static async Task<TRes?> DelayWhileAsync<TRes>(Func<Task<TRes?>> condition, int timeout = 5000, int delay = 1000, CancellationToken cancellationToken = default)
         {
             using var timeoutCts = new CancellationTokenSource(timeout);
             using var cancel = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
             
-            bool result;
-            while ((result = condition()) && (!cancel.Token.IsCancellationRequested))
-                await Task.Delay(1000, cancel.Token).ConfigureAwait(false);
-                
+            TRes? result;
+            do
+            {
+                result = await condition().ConfigureAwait(false);
+                if ((result is null) && (!cancel.Token.IsCancellationRequested))
+                    await Task.Delay(delay, cancel.Token).ConfigureAwait(false);
+                else 
+                    break;
+
+            } while (true);
+
             return (result);
         }
     }

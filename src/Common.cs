@@ -147,4 +147,6 @@ public static partial class Extensions
         else
             return ($"{source:F2}{currency.ToSymbol()}");
     }
+    public static string? Format(this IBlockHeader source) => $"{source.FormatHeight()} ({source.BlockTime:G})";
+    public static string? FormatHeight(this IBlockHeader source) => $"[{source.Height.ToString("N0")}](https://mempool.space/block/{source.Hash})";
 }

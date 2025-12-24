@@ -58,6 +58,7 @@ public static class Program
                 services.Configure<TelegramSettings>(hostContext.Configuration.GetSection(TelegramSettings.SectionName));
                 services.Configure<DebugSettings>(hostContext.Configuration.GetSection(DebugSettings.SectionName));
                 var backendsSection = hostContext.Configuration.GetSection("Backends");
+                services.Configure<ElectrumXSettings>(backendsSection.GetSection(ElectrumXSettings.SectionName));
                 services.Configure<LnbitsSettings>(backendsSection.GetSection(LnbitsSettings.SectionName));
                 services.Configure<AlbyHubSettings>(backendsSection.GetSection(AlbyHubSettings.SectionName));
 
@@ -88,6 +89,9 @@ public static class Program
                     .GetChildren()
                     .Select(c => c.Key)
                     .ToArray();
+
+                // Inject backends:
+                services.AddSingleton(typeof(IIndexerBackend), typeof(ElectrumXService));
 
                 // Inject lightning backend:
                 var lightningBackend = TryGetBackendType<ILightningBackend>(configuredBackends);

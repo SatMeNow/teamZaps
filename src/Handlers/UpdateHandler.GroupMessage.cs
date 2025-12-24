@@ -43,6 +43,9 @@ public partial class UpdateHandler
         if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
             throw new InvalidOperationException("Sessions can only be started in group chats.");
 
+        // Obtain block header at session start
+        var currentBlock = await indexerBackend.GetCurrentBlockAsync(cancellationToken).ConfigureAwait(false);
+
         // Load admin options for this chat
         var adminOptions = await adminOptionsService.ReadAsync(command.ChatId).ConfigureAwait(false);
 
@@ -57,8 +60,7 @@ public partial class UpdateHandler
         {
             if (adminOptions is not null)
                 session.AdminOptions = adminOptions;
-
-            // Check if messages can be pinned
+            session.StartedAtBlock = currentBlock;
             session.BotCanPinMessages = await botClient.BotCanPinMessagesAsync(chat.Id, cancellationToken).ConfigureAwait(false);
             
             await SessionStatusMessage.SendAsync(session, botClient, workflowService, cancellationToken).ConfigureAwait(false);

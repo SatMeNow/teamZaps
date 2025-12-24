@@ -342,6 +342,12 @@ public partial class UpdateHandler
             }
         }
 
+        // Indexer backend Information
+        diagnostics.AppendLine("\n🗂️ *Indexer backend status:*");
+        diagnostics.AppendLine($"• Backend type: *{indexerBackend.BackendType}*");
+        diagnostics.AppendLine($"• Sent requests: *{indexerBackend.SentRequests}*");
+        diagnostics.AppendLineIfNotNull("• Last block: {0}", indexerBackend.LastBlock?.FormatHeight());
+
         // Lightning backend Information
         diagnostics.AppendLine("\n⚡ *Lightning backend status:*");
         diagnostics.AppendLine($"• Backend type: *{lightningBackend.BackendType}*");
@@ -363,6 +369,7 @@ public partial class UpdateHandler
         await botClient.SendMessage(command.ChatId,
             diagnostics.ToString(),
             parseMode: ParseMode.Markdown,
+            linkPreviewOptions: true,
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
