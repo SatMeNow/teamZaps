@@ -20,15 +20,13 @@ public class IconAttribute : Attribute
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]
 public class CurrencyAttribute : Attribute, IEquatable<string>
 {
-    public CurrencyAttribute(string Symbol, string unitName, string[] abbreviations)
+    public CurrencyAttribute(string Symbol, string[] abbreviations)
     {
         this.Symbol = Symbol;
-        this.UnitName = unitName;
         this.Abbreviations = abbreviations;
     }
 
     public string Symbol { get; }
-    public string UnitName { get; }
     public string[] Abbreviations { get; }
 
     public bool Equals(string? other)
@@ -53,16 +51,16 @@ public enum PaymentStatus
 }
 public enum PaymentCurrency
 {
-    [Description("Satoshis"), Currency("丰", "sat", [ "s", "sat", "sats" ])] // Alternative signs: ⓢ ₛ 𝕤 丰
+    [Description("Satoshis"), Currency("丰", [ "s", "sat", "sats" ])] // Alternative signs: ⓢ ₛ 𝕤 丰
     Sats,
-    [Description("Bitcoin"), Currency("₿", "BTC", [ "btc", "bitcoin" ])]
+    [Description("Bitcoin"), Currency("₿", [ "btc", "bitcoin" ])]
     Bitcoin,
-    [Description("Euro"), Currency("€", "EUR", [ "eur", "euro" ])]
+    [Description("Euro"), Currency("€", [ "eur", "euro" ])]
     Euro,
-    [Description("US Dollar"), Currency("$", "USD", [ "usd" ])]
+    [Description("US Dollar"), Currency("$", [ "usd" ])]
     Dollar,
 
-    [Description("Cent"), Currency("¢", "", [ "c", "cnt", "cent", "cents" ])]
+    [Description("Cent"), Currency("¢", [ "c", "cnt", "cent", "cents" ])]
     Cent
 }
 
@@ -97,7 +95,6 @@ public static partial class Extensions
         return (CurrencyMap.TryGetKeyOf(c => c.Equals(source), out var currency) ? currency : null);
     }
     public static string ToSymbol(this PaymentCurrency source) => (CurrencyMap.TryGetValue(source, out var attr) ? attr.Symbol : "");
-    public static string ToUnitName(this PaymentCurrency source) => (CurrencyMap.TryGetValue(source, out var attr) ? attr.UnitName : "");
     public static IEnumerable<string> GetAbbreviations(this PaymentCurrency source)
     {
         if (CurrencyMap.TryGetValue(source, out var attr))
