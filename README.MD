@@ -148,7 +148,13 @@ Want to run your own Team Zaps bot? Check the [developer documentation](src/READ
 ### Requirements
 - .NET 9.0 SDK
 - Telegram Bot Token (from [@BotFather](https://t.me/botfather))
-- LNbits instance for Lightning payments
+- Lightning Backend:
+  - LNbits instance, OR
+  - AlbyHub with NWC connection
+- Bitcoin backend:
+  - ElectrumX server connection for blockchain data
+- Exchange services:
+  - CoinGecko for exchange rates
 
 ## 🤝 Contributing
 

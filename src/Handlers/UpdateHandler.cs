@@ -10,23 +10,38 @@ namespace teamZaps.Handlers;
 
 public partial class UpdateHandler : IUpdateHandler
 {
-    public UpdateHandler(ILogger<UpdateHandler> logger, FileService<BotAdminOptions> adminOptionsService, IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, ILightningBackend lightningBackend, SessionManager sessionManager, SessionWorkflowService workflowService, RecoveryService recoveryService)
-        : this(logger, adminOptionsService, botBehaviour, debugSettings, telegramSettings, hostEnvironment, lightningBackend, null, sessionManager, workflowService, recoveryService)
-    {
-    }
-    public UpdateHandler(ILogger<UpdateHandler> logger, FileService<BotAdminOptions> adminOptionsService, IOptions<BotBehaviorOptions> botBehaviour,  IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings, IHostEnvironment hostEnvironment, ILightningBackend lightningBackend, IExchangeRateBackend? exchangeRateBackend, SessionManager sessionManager, SessionWorkflowService workflowService, RecoveryService recoveryService)
+    public UpdateHandler(
+        ILogger<UpdateHandler> logger, IHostEnvironment hostEnvironment,
+        IOptions<BotBehaviorOptions> botBehaviour, IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings,
+        FileService<BotAdminOptions> adminOptionsService, RecoveryService recoveryService,
+        SessionManager sessionManager, SessionWorkflowService workflowService,
+        // Backends:
+        IIndexerBackend indexerBackend, ILightningBackend lightningBackend)
+        : this(logger, hostEnvironment, botBehaviour, debugSettings, telegramSettings, adminOptionsService, recoveryService, sessionManager, workflowService, indexerBackend, lightningBackend, null) { }
+    public UpdateHandler(
+        ILogger<UpdateHandler> logger, IHostEnvironment hostEnvironment,
+        IOptions<BotBehaviorOptions> botBehaviour, IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings,
+        FileService<BotAdminOptions> adminOptionsService, RecoveryService recoveryService,
+        SessionManager sessionManager, SessionWorkflowService workflowService,
+        // Backends:
+        IIndexerBackend indexerBackend, ILightningBackend lightningBackend, IExchangeRateBackend? exchangeRateBackend)
     {
         this.logger = logger;
-        this.adminOptionsService = adminOptionsService;
-        this.debugSettings = debugSettings.Value;
-        this.botBehaviour = botBehaviour.Value;
-        this.telegramSettings = telegramSettings.Value;
         this.hostEnvironment = hostEnvironment;
-        this.lightningBackend = lightningBackend;
-        this.exchangeRateBackend = exchangeRateBackend;
+
+        this.botBehaviour = botBehaviour.Value;
+        this.debugSettings = debugSettings.Value;
+        this.telegramSettings = telegramSettings.Value;
+
+        this.adminOptionsService = adminOptionsService;
+        this.recoveryService = recoveryService;
+        
         this.sessionManager = sessionManager;
         this.workflowService = workflowService;
-        this.recoveryService = recoveryService;
+
+        this.indexerBackend = indexerBackend;
+        this.lightningBackend = lightningBackend;
+        this.exchangeRateBackend = exchangeRateBackend;
     }
 
 
@@ -238,16 +253,21 @@ public partial class UpdateHandler : IUpdateHandler
 
 
     private readonly ILogger<UpdateHandler> logger;
-    private readonly FileService<BotAdminOptions> adminOptionsService;
-    private readonly DebugSettings debugSettings;
-    private readonly BotBehaviorOptions botBehaviour;
-    private readonly TelegramSettings telegramSettings;
     private readonly IHostEnvironment hostEnvironment;
-    private readonly ILightningBackend lightningBackend;
-    private readonly IExchangeRateBackend? exchangeRateBackend;
+
+    private readonly BotBehaviorOptions botBehaviour;
+    private readonly DebugSettings debugSettings;
+    private readonly TelegramSettings telegramSettings;
+
+    private readonly FileService<BotAdminOptions> adminOptionsService;
+    private readonly RecoveryService recoveryService;
+
     private readonly SessionManager sessionManager;
     private readonly SessionWorkflowService workflowService;
-    private readonly RecoveryService recoveryService;
+
+    private readonly IIndexerBackend indexerBackend;
+    private readonly ILightningBackend lightningBackend;
+    private readonly IExchangeRateBackend? exchangeRateBackend;
 }
 
 internal static partial class Ext

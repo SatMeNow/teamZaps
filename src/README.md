@@ -195,6 +195,34 @@ CoinGecko provides free BTC exchange rate data for fiat currency support.
 - Automatically fetches fiat exchange rates
 - Used by AlbyHub backend to support fiat currency invoices
 
+#### ElectrumX Backend (Blockchain Data)
+
+ElectrumX provides real-time Bitcoin blockchain data including current block height and timestamps. This is useful for monitoring network health and verifying transaction confirmations.
+
+```json
+{
+  "Backends": {
+    "ElectrumX": {
+      "Host": "electrum.blockstream.info",
+      "Port": 50001,
+      "UseSsl": false,
+      "TimeoutMs": 10000
+    }
+  }
+}
+```
+
+**Configuration:**
+- `Host` - ElectrumX server hostname
+- `Port` - Server port (50001 for TCP, 50002 for SSL)
+- `UseSsl` - Whether to use SSL/TLS connection
+- `TimeoutMs` - Connection and request timeout in milliseconds
+
+**Public ElectrumX Servers:**
+- `electrum.blockstream.info:50001` (TCP) / `:50002` (SSL)
+- `electrum.qtornado.com:50001` / `:50002`
+- `bitcoin.aranguren.org:50001` / `:50002`
+
 ### Bot Behavior Options
 
 The `BotBehaviorOptions` section controls various aspects of bot behavior:
@@ -342,6 +370,14 @@ All backends must:
   - API: CoinGecko public API (no authentication required)
   - Features: BTC/USD and BTC/EUR rates with 5-minute caching
   - Rate limits: 30 calls/minute on free tier
+
+**Blockchain Data Backends:**
+- **ElectrumX** - Bitcoin blockchain information via ElectrumX protocol
+  - Implements: `IBackend` (can be extended for specific interfaces)
+  - Configuration: `Backends:ElectrumX` section
+  - Protocol: JSON-RPC 2.0 over TCP
+  - Features: Current block height/time, block headers, server info
+  - Note: NBitcoin does NOT include ElectrumX support - this is a custom implementation
 
 #### Backend Selection
 

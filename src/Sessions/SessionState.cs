@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using teamZaps.Backend;
 using teamZaps.Configuration;
 using teamZaps.Services;
 using teamZaps.Sessions;
@@ -15,7 +16,7 @@ public class SessionState : ITipableAmount
     public required long ChatId { get; init; }
     public required string ChatTitle { get; init; }
     public required ParticipantState StartedByUser { get; init; }
-    public required DateTimeOffset StartedAt { get; init; }
+    public IBlockHeader? StartedAtBlock { get; set; }
 
     public BotAdminOptions AdminOptions { get; set; } = new();
     public bool BotCanPinMessages { get; set; }
@@ -37,9 +38,6 @@ public class SessionState : ITipableAmount
     /// </summary>
     public double Budget => LotteryParticipants.Values.Sum();
 
-    public DateTimeOffset? LotteryOpenedAt { get; set; }
-    public DateTimeOffset? LotteryClosesAt { get; set; }
-    public int? LotteryMessageId { get; set; }
     public Dictionary<long, double> LotteryParticipants { get; } = new(); // UserId -> MaxBudget
     public Dictionary<long, WinnerInfo> Winners { get; } = new(); // UserId -> Winner info
     public IEnumerable<ParticipantState> WinnerUsers => Winners.Keys.Select(id => Participants[id]);
@@ -169,7 +167,8 @@ internal static partial class Ext
     {
         source.AppendLine("📊 *Session status*\n");
         source.AppendLine($"• Phase: *{session.Phase.GetDescription()}*");
-        source.AppendLine($"• Started: {session.StartedAt:f}");
+        source.AppendLine($"• Started at block: {session.StartedAtBlock.FormatHeight()}");
+        source.AppendLine($"• Started at time: {session.StartedAtBlock.LocalTime:G}");
     }
     public static bool IsClosed(this SessionPhase source) => ((source == SessionPhase.Canceled) || (source == SessionPhase.Completed));
 }

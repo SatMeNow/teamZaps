@@ -49,6 +49,16 @@ public interface IBackend
     #endregion
 }
 /// <summary>
+/// Interface for indexer backend services.
+/// </summary>
+public interface IIndexerBackend : IBackend
+{
+    IBlockHeader? LastBlock { get; }
+
+
+    Task<IBlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default);
+}
+/// <summary>
 /// Interface for exchange-rate backend services.
 /// </summary>
 public interface IExchangeRateBackend : IBackend
@@ -135,6 +145,17 @@ public interface ILightningBackend : IBackend
             return (sats!.Value);
     }
     #endregion
+}
+
+/// <summary>
+/// Represents a Bitcoin block.
+/// </summary>
+public interface IBlockHeader
+{
+    int Height { get; }
+    string Hash { get; }
+    public DateTimeOffset BlockTime { get; }
+    public DateTimeOffset LocalTime { get; }
 }
 
 /// <summary>

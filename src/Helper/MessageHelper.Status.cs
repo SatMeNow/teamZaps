@@ -20,6 +20,7 @@ internal static class SessionStatusMessage
         var statusMessage = await botClient.SendMessage(session.ChatId,
             text: Build(session),
             parseMode: ParseMode.Markdown,
+            linkPreviewOptions: true,
             replyMarkup: BuildKeyboard(session, 0),
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -42,6 +43,7 @@ internal static class SessionStatusMessage
                 messageId: session.StatusMessageId.Value,
                 text: Build(session),
                 parseMode: ParseMode.Markdown,
+                linkPreviewOptions: true,
                 replyMarkup: BuildKeyboard(session, 0),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
@@ -170,6 +172,7 @@ internal static class UserStatusMessage
             var message = await botClient.SendMessage(participant.UserId,
                 text: Build(session),
                 parseMode: ParseMode.Markdown,
+                linkPreviewOptions: true,
                 replyMarkup: BuildKeyboard(session),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -199,6 +202,7 @@ internal static class UserStatusMessage
                 messageId: messageId,
                 text: Build(session, participant),
                 parseMode: ParseMode.Markdown,
+                linkPreviewOptions: true,
                 replyMarkup: BuildKeyboard(session, participant),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }

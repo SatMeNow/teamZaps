@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using teamZaps.Backend;
 using teamZaps.Configuration;
 using teamZaps.Services;
 using teamZaps.Utils;
@@ -59,7 +60,6 @@ public class SessionManager : IFormattableAmount
             ChatId = chat.Id,
             ChatTitle = (chat.Title ?? ""),
             StartedByUser = startedByUser,
-            StartedAt = DateTimeOffset.Now,
             Phase = SessionPhase.WaitingForLotteryParticipants
         };
 
@@ -94,7 +94,7 @@ public class SessionManager : IFormattableAmount
                     recoveryService.ClearLostSats(session);
                 
                 lastSummaries[chatId] = new SessionSummary(
-                    session.StartedAt,
+                    session.StartedAtBlock,
                     DateTimeOffset.Now,
                     session.SatsAmount,
                     session.FiatAmount,
@@ -124,7 +124,7 @@ public class SessionManager : IFormattableAmount
 }
 
 public record SessionSummary(
-    DateTimeOffset StartedAt,
+    IBlockHeader StartedAtBlock,
     DateTimeOffset EndedAt,
     long TotalSats,
     double TotalFiat,
