@@ -30,12 +30,18 @@ public class BotBehaviorOptions
     #region Constants
     public const string SectionName = "BotBehavior";
     #endregion
-    
+
     
     /// <summary>
     /// Accepted fiat currency used for payments.
     /// </summary>
     public const PaymentCurrency AcceptedFiatCurrency = PaymentCurrency.Euro;
+    
+    /// <summary>
+    /// Current locale/culture used system-wide for formatting and localization (e.g., "en-US", "de-DE", "it-IT").
+    /// Defaults to invariant culture if not specified.
+    /// </summary>
+    public string? Locale { get; set; }
     
     /// <summary>
     /// Tip (in [%]) choices, if the user wants to give a tip.
