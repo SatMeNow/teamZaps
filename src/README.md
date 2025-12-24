@@ -255,6 +255,25 @@ When the limit is reached, new sessions cannot be started until existing session
 }
 ```
 
+#### CurrentLocale
+Controls the locale/culture used system-wide for formatting and localization.
+- **Default**: `en-US`
+
+This setting controls:
+- Number formatting (thousands separators, decimal separators)
+- Currency display
+- Date and time formatting
+
+```json
+{
+  "BotBehavior": {
+    "CurrentLocale": "de-DE"
+  }
+}
+```
+
+**Supported Locales:** `en-US`, `de-DE`, `it-IT`, `fr-FR`, `es-ES`, `pt-BR`, `ja-JP`, `ko-KR`, `zh-CN`, `zh-TW`, etc.
+
 ### EnableRecovery
 
 Disables the lost sats recovery system during development.

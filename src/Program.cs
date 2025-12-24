@@ -5,6 +5,7 @@ using teamZaps.Backend;
 using teamZaps.Sessions;
 using teamZaps.Utils;
 using Serilog;
+using System.Globalization;
 
 namespace teamZaps;
 
@@ -54,7 +55,22 @@ public static class Program
             })
             .ConfigureServices((hostContext, services) =>
             {
-                services.Configure<BotBehaviorOptions>(hostContext.Configuration.GetSection(BotBehaviorOptions.SectionName));
+                // Configure locale
+                var botBehaviorConfig = hostContext.Configuration.GetSection(BotBehaviorOptions.SectionName);
+                var locale = botBehaviorConfig.GetValue(nameof(BotBehaviorOptions.Locale), "en-US")!;
+                try
+                {
+                    var cultureInfo = new CultureInfo(locale);
+                    CultureInfo.DefaultThreadCurrentCulture = cultureInfo;
+                    CultureInfo.DefaultThreadCurrentUICulture = cultureInfo;
+                    Log.Information("Locale set to {Locale}", locale);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Failed to set locale to {Locale}, using default", locale);
+                }
+
+                services.Configure<BotBehaviorOptions>(botBehaviorConfig);
                 services.Configure<TelegramSettings>(hostContext.Configuration.GetSection(TelegramSettings.SectionName));
                 services.Configure<DebugSettings>(hostContext.Configuration.GetSection(DebugSettings.SectionName));
                 var backendsSection = hostContext.Configuration.GetSection("Backends");

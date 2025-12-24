@@ -14,6 +14,7 @@ services:
       # Bot Behavior
       - BotBehavior__MaxBudget=${MAX_BUDGET}
       - BotBehavior__MaxParallelSessions=${MAX_PARALLEL_SESSIONS}
+      - BotBehavior__CurrentLocale=${BOT_LOCALE:-en-US}
       
       # Telegram Settings
       - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}
