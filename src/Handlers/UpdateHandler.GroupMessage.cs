@@ -190,15 +190,17 @@ public partial class UpdateHandler
         catch (Exception)
         {
             var botUser = await botClient.GetMe(cancellationToken).ConfigureAwait(false);
-            var warningMessage = await botClient.SendMessage(chatId,
+            var welcomeMessage = await botClient.SendMessage(chatId,
                 $"Hey @{user.Username}, we did not meet before ✌️\n" +
                 "I'm a telegram bot, *helping you* and your friends *to coordinate lightning payments*.\n\n" +
                 $"ℹ️ Please *start a private chat* to interact with me, by clicking @{botUser.Username}. See you soon 👍",
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
-                
-            // Mark user as pending session join with message ID for later deletion
-            session.PendingJoins[user.Id] = (chatId, warningMessage.MessageId);
+
+            // Mark user as pending session join
+            sessionManager.PendingJoins[user.Id] = new PendingJoinInfo(chatId, welcomeMessage.MessageId);
+            // Remove user from participants to avoid inconsistencies
+            session.Participants.Remove(user.Id, out _);
 
             logger.LogInformation("Invited new user {User} to a private bot chat.", user.DisplayName());
             return;
@@ -209,6 +211,7 @@ public partial class UpdateHandler
 
         logger.LogInformation("User {User} joined session in chat {ChatId}", user, chatId);
     }
+    bool kill;
 
     private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, User user, double budget, CancellationToken cancellationToken)
     {
