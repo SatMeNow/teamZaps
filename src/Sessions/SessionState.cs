@@ -11,6 +11,22 @@ using Telegram.Bot.Types;
 
 namespace teamZaps;
 
+
+public enum SessionPhase
+{
+    [Description("⏳ Waiting for lottery entries")]
+    WaitingForLotteryParticipants,
+    [Description("💰 Accepting payments")]
+    AcceptingPayments,
+    [Description("⌛ Waiting for winner invoice")]
+    WaitingForInvoice,
+
+    [Description("❌ Canceled")]
+    Canceled,
+    [Description("✅ Completed")]
+    Completed
+}
+
 public class SessionState : ITipableAmount
 {
     public required long ChatId { get; init; }
@@ -25,7 +41,6 @@ public class SessionState : ITipableAmount
 
     public int? StatusMessageId { get; set; }
 
-    public ConcurrentDictionary<long, (long ChatId, int MessageId)> PendingJoins { get; } = new();
     public ConcurrentDictionary<long, ParticipantState> Participants { get; } = new();
     public ConcurrentDictionary<string, PendingPayment> PendingPayments { get; } = new();
     public IEnumerable<PaymentRecord> Payments => Participants.Values.SelectMany(p => p.Payments);
@@ -53,11 +68,12 @@ public class SessionState : ITipableAmount
     public void Close(bool cancel)
     {
         Phase = (cancel ? SessionPhase.Canceled : SessionPhase.Completed);
-        PendingJoins.Clear();
     }
     public ParticipantState? GetWinnerUser(long userId) => WinnerUsers.FirstOrDefault(u => u.UserId.Equals(userId));
     #endregion
 }
+
+public record PendingJoinInfo(long ChatId, int WelcomeMessageId);
 
 public class ParticipantState : IUser, ITipableAmount
 {
@@ -89,8 +105,6 @@ public class ParticipantState : IUser, ITipableAmount
 
     public bool JoinedLottery(SessionState session) => session.LotteryParticipants.ContainsKey(UserId);
 }
-
-public record WinnerInfo(double FiatAmount, long SatsAmount);
 
 public record PaymentRecord() : IUser, ITipableAmount
 {
@@ -137,20 +151,7 @@ public class PendingPayment : IUser, ITipableAmount
     public override string ToString() => $"{User}: {(this as ITipableAmount).FormatAmount()}";
 }
 
-public enum SessionPhase
-{
-    [Description("⏳ Waiting for lottery entries")]
-    WaitingForLotteryParticipants,
-    [Description("💰 Accepting payments")]
-    AcceptingPayments,
-    [Description("⌛ Waiting for winner invoice")]
-    WaitingForInvoice,
-
-    [Description("❌ Canceled")]
-    Canceled,
-    [Description("✅ Completed")]
-    Completed
-}
+public record WinnerInfo(double FiatAmount, long SatsAmount);
 
 
 internal static partial class Ext

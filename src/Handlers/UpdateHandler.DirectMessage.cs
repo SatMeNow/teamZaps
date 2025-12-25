@@ -17,27 +17,31 @@ public partial class UpdateHandler
         switch (command.Value)
         {
             case BotPmCommand.Start:
+                // Get pending join
+                sessionManager.PendingJoins.TryRemove(command.UserId, out var pendingJoin);
+
+                // Send welcome message
+                var welcomeMessage = new StringBuilder()
+                    .AppendLine("Welcome to Team Zaps! 🎯\n")
+                    .AppendLine("I help groups split bills using Bitcoin Lightning!\n")
+                    .AppendLine("*How it works:*")
+                    .AppendLine("1️⃣ Someone starts a session in your group")
+                    .AppendLine("2️⃣ Join the session using the _Join_ button")
+                    .AppendLine("3️⃣ Send me payments as direct message")
+                    .AppendLine("4️⃣ One random participant wins the pot!\n")
+                    .Append($"Use `{BotPmCommand.Help}` for detailed instructions.");
+                if (pendingJoin is not null)
+                    welcomeMessage.AppendLine("\n\n💡 Okay, let's continue and join the session 🏃‍➡️");
                 await botClient.SendMessage(command.ChatId, 
-                    "Welcome to Team Zaps! 🎯\n\n" +
-                    "I help groups split bills using Bitcoin Lightning!\n\n" +
-                    "*How it works:*\n" +
-                    "1️⃣ Someone starts a session in your group\n" +
-                    "2️⃣ Join the session using the _Join_ button\n" +
-                    "3️⃣ Send me payments as direct message\n" +
-                    "4️⃣ One random participant wins the pot!\n\n" +
-                    $"Use `{BotPmCommand.Help}` for detailed instructions.", 
+                    welcomeMessage.ToString(),
                     parseMode: ParseMode.Markdown,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                // Check if user has a pending session join
-                foreach (var session in sessionManager.ActiveSessions)
+                // Send private status message if pending
+                if (pendingJoin is not null)
                 {
-                    if (session.PendingJoins.TryRemove(command.UserId, out var joinInfo))
-                    {
-                        await DeleteMessageAsync(botClient, joinInfo.ChatId, joinInfo.MessageId, cancellationToken).ConfigureAwait(false);
-                        await HandleJoinSessionAsync(botClient, joinInfo.ChatId, command.Source.From!, cancellationToken).ConfigureAwait(false);
-                        break;
-                    }
+                    await HandleJoinSessionAsync(botClient, pendingJoin.ChatId, command.Source.From!, cancellationToken).ConfigureAwait(false);
+                    await DeleteMessageAsync(botClient, pendingJoin.ChatId, pendingJoin.WelcomeMessageId, cancellationToken).ConfigureAwait(false);
                 }
                 break;
 

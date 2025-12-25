@@ -19,6 +19,7 @@ public class SessionManager : IFormattableAmount
 
     #region Properties.Management
     public IEnumerable<SessionState> ActiveSessions => sessions.Values;
+    public ConcurrentDictionary<long, PendingJoinInfo> PendingJoins { get; } = new();
     #endregion
     #region Properties
     public double? AvailableServerBudget => (botBehaviour.MaxBudget - ConsumedServerBudget);
