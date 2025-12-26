@@ -31,7 +31,7 @@ public class ElectrumXService : IIndexerBackend, IDisposable
 
     #region Properties
 	public ulong SentRequests { get; private set; }
-    public IBlockHeader? LastBlock { get; private set; }
+    public BlockHeader? LastBlock { get; private set; }
     #endregion
 
 
@@ -127,7 +127,7 @@ public class ElectrumXService : IIndexerBackend, IDisposable
     /// <summary>
     /// Gets the current blockchain header information including block height and time.
     /// </summary>
-    public async Task<IBlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default)
+    public async Task<BlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -146,13 +146,12 @@ public class ElectrumXService : IIndexerBackend, IDisposable
             if (LastBlock?.Height != height)
                 logger.LogInformation("Current block: height={Height}, time={BlockTime}", height, blockTime);
 
-            return (this.LastBlock = new BlockHeader
+            return (this.LastBlock = new ElectrumBlockHeader
             {
                 Height = height,
                 HexHeader = hexHeader,
                 Hash = ComputeBlockHash(headerBytes),
-                BlockTime = blockTime,
-                LocalTime = blockTime.ToLocalTime()
+                BlockTime = blockTime
             });
         }
         catch (Exception ex)
@@ -228,14 +227,8 @@ public class ElectrumXService : IIndexerBackend, IDisposable
     #endregion
 }
 
-file record BlockHeader : IBlockHeader
+file class ElectrumBlockHeader : BlockHeader
 {
-    public int Height { init; get; }
-    public string HexHeader { init; get; } = string.Empty;
-    public string Hash { init; get; } = string.Empty;
-    public DateTimeOffset BlockTime { init; get; }
-    public DateTimeOffset LocalTime { init; get; }
-
-
-    public override string ToString() => $"{Height} ({BlockTime:f})";
+    [JsonIgnore]
+    public string HexHeader { get; set; } = string.Empty;
 }

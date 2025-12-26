@@ -6,21 +6,19 @@ using teamZaps.Utils;
 namespace teamZaps.Backend;
 
 
-public static partial class Common
+/// <summary>
+/// Represents a Bitcoin block.
+/// </summary>
+public class BlockHeader
 {
-    #region Constants
-    /// <summary>
-    /// Map of available backend types.
-    /// </summary>
-    public static readonly IReadOnlyDictionary<string, (Type Type, Type[] ProvidedInterfaces)> BackendTypes = UtilAssembly
-        .GetDefinedTypeMap<BackendDescriptionAttribute>()
-        .ToDictionary(
-            t => t.Value.BackendType.ToLowerInvariant(),
-            t => (t.Key, t.Key.GetInterfaces()
-                .Where(i => typeof(IBackend).IsAssignableFrom(i))
-                .ToArray()));
-    public static readonly string AcceptedFiatPerBitcoinSymbol = $"{BotBehaviorOptions.AcceptedFiatCurrency.ToSymbol()}/{PaymentCurrency.Bitcoin.ToSymbol()}";
-    #endregion
+    public int Height { get; set; }
+    public string Hash { get; set; } = string.Empty;
+    public DateTimeOffset BlockTime { get; set; }
+    [JsonIgnore]
+    public DateTimeOffset LocalTime => BlockTime.ToLocalTime();
+
+
+    public override string ToString() => this.Format();
 }
 
 /// <summary>
@@ -53,10 +51,10 @@ public interface IBackend
 /// </summary>
 public interface IIndexerBackend : IBackend
 {
-    IBlockHeader? LastBlock { get; }
+    BlockHeader? LastBlock { get; }
 
 
-    Task<IBlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default);
+    Task<BlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default);
 }
 /// <summary>
 /// Interface for exchange-rate backend services.
@@ -145,17 +143,6 @@ public interface ILightningBackend : IBackend
             return (sats!.Value);
     }
     #endregion
-}
-
-/// <summary>
-/// Represents a Bitcoin block.
-/// </summary>
-public interface IBlockHeader
-{
-    int Height { get; }
-    string Hash { get; }
-    public DateTimeOffset BlockTime { get; }
-    public DateTimeOffset LocalTime { get; }
 }
 
 /// <summary>

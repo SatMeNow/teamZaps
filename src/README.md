@@ -469,6 +469,58 @@ public class RecoveryService : BackgroundService
 }
 ```
 
+### StatisticService
+```csharp
+// Comprehensive statistics tracking for users, groups, and platform-wide metrics
+// Automatically updates after each completed session
+// Data persisted to disk in data/stats/ directory
+// Registered as both Singleton and HostedService
+
+public class StatisticService : IHostedService
+{
+    // Platform-wide statistics (null until first session completes)
+    public GeneralStatistics? GeneralStats { get; set; }
+    
+    // Per-group statistics indexed by chat ID
+    public IReadOnlyDictionary<long, GroupStatistics> GroupStats { get; }
+    
+    // Per-user statistics indexed by user ID
+    public IReadOnlyDictionary<long, UserStatistics> UserStats { get; }
+    
+    // Group rankings (null if fewer than 3 groups)
+    public GroupRankingStatistics? GroupRanking { get; set; }
+    
+    // Total unique participants across all sessions
+    public int Participants { get; }
+    
+    // Update statistics after session completion
+    public Task<bool> UpdateStatisticsAsync(SessionState session);
+}
+```
+
+**Statistics File Storage:**
+
+Statistics are persisted to disk using the `FileService<T>` pattern:
+
+```
+data/
+├── stats/
+    ├── general.json                    # GeneralStatistics
+    ├── group/
+    │   ├── group_{groupId}.json        # GroupStatistics per group
+    ├── user/
+        ├── user_{userId}.json          # UserStatistics per user
+```
+
+**Key Features:**
+
+1. **Automatic Updates**: Statistics update automatically after each session via `SessionWorkflowService`
+2. **Block-based Duration**: All durations measured in Bitcoin blocks for consistency
+3. **Monthly Trends**: Tracks monthly metrics with 5-year retention
+4. **Liquidity Metrics**: Tracks sats per block, per session and per participant to understand spending patterns
+5. **Performance Metrics**: Monitors max parallel sessions and peak concurrent sats
+6. **Group Rankings**: Top 10 groups by various metrics (requires ≥3 groups)
+
 ### Lightning Backend (ILightningBackend)
 ```csharp
 // Abstracted Lightning Network integration
@@ -846,16 +898,56 @@ Use the commands below in the appropriate context — group chats or private/dir
 
 ### Group commands (use inside the group chat)
 
+- `/stat` - Show group statistics
+
+  This command displays comprehensive statistics for the group where it's used. By default, anyone can use this command, but access can be restricted to admins via the `/config` command.
+  
+  **Permissions**: Controlled by `BotAdminOptions.AllowNonAdminStatistics` (default: `true`). When set to `false`, only group administrators can view statistics.
+  
+  **Statistics shown:**
+  - **Current Session**: If a session is active, shows duration, participants, and totals for the ongoing session
+  - **Group History**: All-time metrics including:
+    - Total sessions completed
+    - First session date (blockchain height)
+    - Total duration across all sessions (in blocks)
+    - Total unique participants
+    - Total sats spent and tips given
+    - Averages per block, per session, and per participant
+  - **Monthly Trends**: Recent participation metrics
+  
+  **Implementation**: Uses `HandleGroupStatisticsAsync()` which checks permissions via `BotAdminOptions` before calling `GroupStatisticsMessage.SendAsync()`. If the group has no completed sessions yet, an error message is returned. Statistics are automatically calculated after each session completion by the `StatisticService`.
+
 ### Private commands (use in a direct/private chat with the bot)
 - `/diag` - Show diagnostics (root users only)
 
-  This command returns detailed runtime diagnostics   intended for the bot operator (root user) only. It   includes:
+  This command returns detailed runtime diagnostics intended for the bot operator (root user) only. It includes:
   - Current host environment and process information
   - Active sessions and their phases
   - Recovery queue status and lost sats summary
   - Registered backends and their health status
   
-  Only root user IDs (configured in `appsettings.*.json` under `Telegram:RootUsers`) can run `/diag`. The   output may contain sensitive operational details — do   not share publicly.
+  Only root user IDs (configured in `appsettings.*.json` under `Telegram:RootUsers`) can run `/diag`. The output may contain sensitive operational details — do not share publicly.
+
+- `/stat` - Show personal and server statistics
+
+  This command displays comprehensive statistics about user activity and platform-wide metrics. It has two levels of access:
+  
+  **For all users:**
+  - Personal statistics
+  
+  **For root users only:**
+  - Server-wide statistics including:
+    - Platform activity (total sessions, participants, duration in blocks)
+    - Liquidity metrics (sats per block/session/participant, max parallel sats)
+    - Performance metrics (max parallel sessions, monthly trends)
+    - Started at block reference showing which group initiated the first session
+  
+  **Liquidity Planning**: The liquidity metrics are particularly useful for bot operators to understand Lightning wallet requirements. `MaxParallelSats` shows the peak liquidity needed across concurrent sessions, while `SatsPerBlock` indicates average throughput. These help admins size their Lightning backend appropriately.
+  
+  Statistics are calculated automatically after each completed session by the `StatisticService`. All data is persisted to disk in the `data/stats/` directory:
+  - `data/stats/general.json` - Platform-wide statistics
+  - `data/stats/group/group_{groupId}.json` - Per-group statistics
+  - `data/stats/user/user_{userId}.json` - Per-user statistics
 
 ## 🤝 Contributing
 

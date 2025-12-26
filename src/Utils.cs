@@ -230,6 +230,10 @@ namespace teamZaps.Utils
             else
                 return (default);
         }
+        public static U GetLatestValue<T, U>(this IReadOnlyDictionary<T, U> source) => GetLatest(source).Value;
+        public static KeyValuePair<T, U> GetLatest<T, U>(this IReadOnlyDictionary<T, U> source) => source
+            .OrderBy(s => s.Key)
+            .LastOrDefault();
     }
     internal static partial class ExtString
     {

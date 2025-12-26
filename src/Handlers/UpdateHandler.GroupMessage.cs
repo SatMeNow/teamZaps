@@ -28,6 +28,18 @@ public partial class UpdateHandler
             case BotGroupCommand.Status:
                 await HandleStatusAsync(botClient, command.ChatId, cancellationToken).ConfigureAwait(false);
                 break;
+            case BotGroupCommand.Statistics:
+                var chatId = command.ChatId;
+                var session = workflowService.GetSessionByChat(chatId);
+                var adminOptions = await GetAdminOptions(session, chatId).ConfigureAwait(false);
+
+                // Check permissions
+                if ((!adminOptions.AllowNonAdminStatistics) && (!await IsUserAdminAsync(botClient, chatId, command.From, cancellationToken).ConfigureAwait(false)))
+                    throw new InvalidOperationException("Only group administrators can view statistics.")
+                        .AddLogLevel(LogLevel.Warning);
+                
+                await GroupStatisticsMessage.SendAsync(botClient, statisticService, command.ChatId, cancellationToken).ConfigureAwait(false);
+                break;
             case BotGroupCommand.Config:
                 await HandleConfigCommandAsync(botClient, command, cancellationToken).ConfigureAwait(false);
                 break;
@@ -104,7 +116,7 @@ public partial class UpdateHandler
             SelectWinners(session);
             session.Phase = SessionPhase.WaitingForInvoice;
 
-            await SessionSummaryMessage.SendAsync(session, botClient, logger, cancellationToken).ConfigureAwait(false);
+            await SessionSummaryMessage.SendAsync(botClient, logger, session, cancellationToken).ConfigureAwait(false);
             
             await WinnerMessage.SendAsync(session, botClient, workflowService, cancellationToken).ConfigureAwait(false);
 
@@ -211,7 +223,6 @@ public partial class UpdateHandler
 
         logger.LogInformation("User {User} joined session in chat {ChatId}", user, chatId);
     }
-    bool kill;
 
     private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, User user, double budget, CancellationToken cancellationToken)
     {
@@ -408,13 +419,14 @@ public partial class UpdateHandler
         {
             case "start": options.AllowNonAdminSessionStart = !options.AllowNonAdminSessionStart; break;
             case "close": options.AllowNonAdminSessionClose = !options.AllowNonAdminSessionClose; break;
+            case "statistics": options.AllowNonAdminStatistics = !options.AllowNonAdminStatistics; break;
             case "cancel": options.AllowNonAdminSessionCancel = !options.AllowNonAdminSessionCancel; break;
 
             default: return;
         }
 
         // Save options
-        await adminOptionsService.WriteAsync(options, groupChatId).ConfigureAwait(false);
+        await adminOptionsService.WriteAsync(groupChatId, options).ConfigureAwait(false);
 
         // Update session if active
         if (session is not null)

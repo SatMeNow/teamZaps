@@ -14,7 +14,7 @@ namespace teamZaps.Session;
 /// </summary>
 internal static class SessionSummaryMessage
 {
-    public static async Task SendAsync(SessionState session, ITelegramBotClient botClient, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
+    public static async Task SendAsync(ITelegramBotClient botClient, ILogger logger, SessionState session, CancellationToken cancellationToken)
     {
         foreach (var winnerUser in session.WinnerUsers)
         {
@@ -23,7 +23,7 @@ internal static class SessionSummaryMessage
             {
                 await botClient.SendMessage(
                     winnerUser.UserId,
-                    text: BuildSummary(session, winnerUser.UserId, winnerInfo),
+                    text: BuildSummary(session, winnerInfo),
                     parseMode: ParseMode.Markdown,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
                     
@@ -36,7 +36,7 @@ internal static class SessionSummaryMessage
         }
     }
 
-    private static string BuildSummary(SessionState session, long winnerId, WinnerInfo winnerInfo)
+    private static string BuildSummary(SessionState session, WinnerInfo winnerInfo)
     {
         Debug.Assert(session.Winners.Count > 0);
         Debug.Assert(session.HasPayments);

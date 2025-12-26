@@ -4,6 +4,7 @@ using System.Text;
 using teamZaps.Backend;
 using teamZaps.Configuration;
 using teamZaps.Services;
+using teamZaps.Statistic;
 using teamZaps.Utils;
 using Telegram.Bot.Types;
 
@@ -27,10 +28,15 @@ public enum SessionPhase
 
 public class SessionState : ITipableAmount
 {
+    public bool IsValid => (Duration is not null);
+    
     public required long ChatId { get; init; }
     public required string ChatTitle { get; init; }
+
     public required ParticipantState StartedByUser { get; init; }
-    public IBlockHeader? StartedAtBlock { get; set; }
+    public int? Duration => (CompletedAtBlock?.Height - StartedAtBlock?.Height + 1);
+    public BlockHeader? StartedAtBlock { get; set; }
+    public BlockHeader? CompletedAtBlock { get; set; }
 
     public BotAdminOptions AdminOptions { get; set; } = new();
     public bool BotCanPinMessages { get; set; }
@@ -58,8 +64,11 @@ public class SessionState : ITipableAmount
     public bool PayoutCompleted => WinnerUsers.All(u => u.SubmittedInvoice);
     public int? WinnerMessageId { get; set; }
 
+    public SessionStatistics? Statistics { get; set; }
+
 
     public override string ToString() => $"{ChatTitle} ({ChatId})";
+    public static implicit operator long(SessionState session) => session.ChatId;
 
 
     #region Management
@@ -99,6 +108,8 @@ public class ParticipantState : IUser, ITipableAmount
 
 
     public override string ToString() => User.ToString();
+    public static implicit operator long(ParticipantState user) => user.UserId;
+    public static implicit operator User(ParticipantState user) => user.User;
 
 
     public bool JoinedLottery(SessionState session) => session.LotteryParticipants.ContainsKey(UserId);
@@ -166,8 +177,8 @@ internal static partial class Ext
     {
         source.AppendLine("📊 *Session status*\n");
         source.AppendLine($"• Phase: *{session.Phase.GetDescription()}*");
-        source.AppendLine($"• Started at block: {session.StartedAtBlock.FormatHeight()}");
-        source.AppendLine($"• Started at time: {session.StartedAtBlock.LocalTime:G}");
+        source.AppendLine($"• Started at block: {session.StartedAtBlock!.FormatHeight()}");
+        source.AppendLine($"• Started at time: {session.StartedAtBlock!.LocalTime:g}"); // `31.10.2008 17:04`
     }
     public static bool IsClosed(this SessionPhase source) => ((source == SessionPhase.Canceled) || (source == SessionPhase.Completed));
 }

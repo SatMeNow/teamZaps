@@ -3,7 +3,7 @@ using teamZaps.Utils;
 
 namespace teamZaps.Services;
 
-[AttributeUsage(AttributeTargets.Class)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
 public class StorageAttribute(string Folder, string FileFormat) : Attribute
 {
     public string Folder { get; } = Folder;
@@ -16,7 +16,6 @@ public class StorageAttribute(string Folder, string FileFormat) : Attribute
 public class FileService<T>
 {
     #region Constants
-    private const string DataFolder = "data";
     public static readonly IReadOnlyDictionary<Type, StorageAttribute> StorageTypes = UtilAssembly.GetDefinedTypeMap<StorageAttribute>();
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -46,13 +45,15 @@ public class FileService<T>
 
 
     #region Operation
-    public async Task WriteAsync(T dataSet, long id)
+    public Task WriteAsync(T dataSet) => WriteAsync(0, dataSet);
+    public async Task WriteAsync(long id, T dataSet)
     {
         var storageType = ValidateStorygeType();
         var filePath = GetFilePath(storageType, id);
         var json = JsonSerializer.Serialize(dataSet, JsonOptions);
-        await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
+        await File.WriteAllTextAsync(filePath, json, CancellationToken.None).ConfigureAwait(false);
     }
+    public Task<T?> ReadAsync() => ReadAsync(0);
     public Task<T?> ReadAsync(long id)
     {
         var storageType = ValidateStorygeType();
@@ -67,7 +68,7 @@ public class FileService<T>
             if (!File.Exists(filePath))
                 return (default);
 
-            var json = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
+            var json = await File.ReadAllTextAsync(filePath, CancellationToken.None).ConfigureAwait(false);
             return (JsonSerializer.Deserialize<T>(json, JsonOptions));
         }
         catch (Exception ex)
@@ -139,9 +140,14 @@ public class FileService<T>
         else
             throw new NotSupportedException($"Type {storageType.Name} is not a supported storage type!");
     }
-    private string GetStoragePath(Type storageType) => Path.Combine(AppContext.BaseDirectory, DataFolder, StorageTypes[storageType].Folder);
+    private string GetStoragePath(Type storageType) => Path.Combine(Common.DataPath, StorageTypes[storageType].Folder);
     private string GetFilePath(Type storageType, long? id = null) => Path.Combine(GetStoragePath(storageType), GetFileName(storageType, id));
-    private string GetFileName(Type storageType, long? id = null) => string.Format(StorageTypes[storageType].FileFormat, (id?.ToString() ?? "*"));
+    private string GetFileName(Type storageType, long? id = null)
+    {
+        if (id is not null)
+            id = Math.Abs(id.Value);
+        return (string.Format(StorageTypes[storageType].FileFormat, (id?.ToString() ?? "*")));
+    }
     #endregion
 
 

@@ -6,6 +6,7 @@ using teamZaps.Session;
 using teamZaps.Utils;
 using Serilog;
 using System.Globalization;
+using teamZaps.Statistic;
 
 namespace teamZaps;
 
@@ -81,12 +82,14 @@ public static class Program
                 // Register HttpClientFactory for backend services:
                 services.AddHttpClient();
 
-                services.AddHostedService<RecoveryService>();
                 services.AddHostedService<TelegramBotService>();
                 services.AddHostedService<PaymentMonitorService>();
+                services.AddHostedService<RecoveryService>();
+                services.AddHostedService(sp => sp.GetRequiredService<StatisticService>());
 
                 services.AddSingleton(typeof(FileService<>));
                 services.AddSingleton<RecoveryService>();
+                services.AddSingleton<StatisticService>();
                 services.AddSingleton<SessionManager>();
                 services.AddSingleton<SessionWorkflowService>();
                 services.AddSingleton<UpdateHandler>();

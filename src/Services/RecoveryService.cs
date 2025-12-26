@@ -21,10 +21,10 @@ public class RecoveryService : BackgroundService
     #endregion
 
 
-    public RecoveryService(ILogger<RecoveryService> logger, FileService<LostSatsRecord> fileService, ITelegramBotClient botClient, IOptions<DebugSettings> debugSettings)
+    public RecoveryService(ILogger<RecoveryService> logger, FileService<LostSatsRecord> lostSatsFile, ITelegramBotClient botClient, IOptions<DebugSettings> debugSettings)
     {
         this.logger = logger;
-        this.lostSatsService = fileService;
+        this.lostSatsFile = lostSatsFile;
         this.botClient = botClient;
         this.debugSettings = debugSettings.Value;
     }
@@ -80,7 +80,7 @@ public class RecoveryService : BackgroundService
                 Reason = reason,
                 LastNotified = null // Reset notification timestamp for new payment
             };
-            await lostSatsService.WriteAsync(record, record.UserId).ConfigureAwait(false);
+            await lostSatsFile.WriteAsync(record.UserId, record).ConfigureAwait(false);
 
             //logger.LogInformation("Recorded lost sats for user {User}): {SatsAmount}", participant, participant.SatsAmount.Format());
         }
@@ -96,7 +96,7 @@ public class RecoveryService : BackgroundService
             return (Task.CompletedTask);
         #endif
 
-        return (lostSatsService.DeleteAsync(userId));
+        return (lostSatsFile.DeleteAsync(userId));
     }
     public void ClearLostSats(SessionState session)
     {
@@ -105,11 +105,11 @@ public class RecoveryService : BackgroundService
             return;
         #endif
 
-        lostSatsService.Delete(session.Participants.Values
+        lostSatsFile.Delete(session.Participants.Values
             .Select(p => p.UserId));
     }
 
-    public Task<LostSatsRecord?> TryGetLostSatsAsync(long userId) => lostSatsService.ReadAsync(userId);
+    public Task<LostSatsRecord?> TryGetLostSatsAsync(long userId) => lostSatsFile.ReadAsync(userId);
     /// <summary>
     /// Gets all lost sats records.
     /// </summary>
@@ -120,7 +120,7 @@ public class RecoveryService : BackgroundService
             return (Task.FromResult<ICollection<LostSatsRecord>>(Array.Empty<LostSatsRecord>()));
         #endif
 
-        return (lostSatsService.ReadAllAsync());
+        return (lostSatsFile.ReadAllAsync());
     }
 
     public async Task ScanForLostSatsAsync()
@@ -153,7 +153,7 @@ public class RecoveryService : BackgroundService
                 
                 // Update the record with notification timestamp:
                 record.LastNotified = DateTimeOffset.Now;
-                await lostSatsService.WriteAsync(record, record.UserId).ConfigureAwait(false);
+                await lostSatsFile.WriteAsync(record.UserId, record).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -165,7 +165,7 @@ public class RecoveryService : BackgroundService
 
 
     private readonly ILogger<RecoveryService> logger;
-    private readonly FileService<LostSatsRecord> lostSatsService;
+    private readonly FileService<LostSatsRecord> lostSatsFile;
     private readonly ITelegramBotClient botClient;
     private readonly DebugSettings debugSettings;
 }

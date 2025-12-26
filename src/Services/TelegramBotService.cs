@@ -41,13 +41,19 @@ public static class BotGroupCommand
     public const string CloseSession = "/closezap";
     public const string CancelSession = "/cancelzap";
     public const string Status = "/status";
+    public const string Statistics = "/stat";
     public const string Config = "/config";
 }
 public static class BotPmCommand
 {
     public const string Start = "/start";
-    public const string Help = "/help";
+    public const string Statistics = "/stat";
     public const string Recover = "/recover";
+    public const string Help = "/help";
+}
+public static class BotRootCommand
+{
+    public const string Diagnosis = "/diag";
 }
 public static class CallbackActions
 {
