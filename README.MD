@@ -86,11 +86,13 @@ The bot accepts various payment formats:
 | `/cancelzap` | Cancel the current session | Admins (configurable) |
 | `/config` | Change options (e.g. permissions) | Admins |
 | `/status` | View current session status | Anyone |
+| `/stat` | View group statistics | Admins (configurable) |
 
 ### Private (use in direct messages with the bot)
 | Command | Description |
 |---------|-------------|
 | `/recover` | Recover lost sats from failed sessions | 
+| `/stat` | View your personal statistics |
 | `/help` | Show help information |
 
 ## 💰 Lost and Found Recovery
@@ -134,10 +136,52 @@ Lost sats are automatically recorded when:
 - 🔔 You'll receive weekly reminders about outstanding recoveries
 - 💬 Recovery only works in **private chat** with the bot
 
-## 🔒 Privacy & Security
+## 📊 Statistics & Insights
 
-- **Private Payments** - All payment amounts are handled in private chat
-- **No Custody** - Bot doesn't hold your Bitcoin, uses Lightning invoices
+Team Zaps provides statistics to help admins plan Lightning liquidity, enable friendly competition between groups, and give users a personal overview.
+
+**Privacy-first design**: Only numeric Telegram user IDs are stored. No names, usernames, or personal information is ever collected.
+
+### Personal Statistics
+
+**In private chat with the bot:**
+
+```
+/stat                        # View your personal statistics
+```
+
+**What you'll see:**
+- **Overall**: Total sessions joined, duration, total sats spent, tips given
+- **Averages**: Sats per session and per block
+- **History**: When you first used the bot (blockchain height)
+
+Statistics are calculated automatically after each completed session. They're purely for your own reference and planning.
+
+### Group Statistics
+
+**In the group chat:**
+
+```
+/stat                        # View group statistics anytime
+```
+
+**What the group sees:**
+- **Session Stats**: If a session is active, shows current session details
+- **Group History**: All-time totals including sessions, participant count, and sats spent
+- **Averages**: Sats per block, per session, and per participant
+- **Tips**: Total tips given and percentage
+- **Monthly Activity**: Recent participation trends
+
+Group statistics help:
+- ⚡ **For admins**: Estimate Lightning liquidity requirements based on actual usage patterns
+- 🏆 **For fun**: Friendly competition between groups
+- 📊 **For everyone**: Understand group activity and participation levels
+
+**Note**: Statistics are automatically posted to the group after each completed session. Admins can configure whether users can manually view statistics anytime using the `/stat` command.
+
+## �🔒 Privacy & Security
+
+- **Private Payments** - All payment amounts are handled in private chat- **No Personal Data** - Only numeric user IDs stored, no names or usernames- **No Custody** - Bot doesn't hold your Bitcoin, uses Lightning invoices
 - **Open Source** - Full source code available for audit
 - **Group Privacy** - Only final totals are shown in group chat
 

@@ -13,7 +13,6 @@ internal static class ConfigMessage
         text: BuildText(chatTitle),
         parseMode: ParseMode.Markdown,
         replyMarkup: BuildKeyboard(options),
-        disableNotification: true,
         cancellationToken: cancellationToken);
     public static Task UpdateAsync(ITelegramBotClient botClient, long chatId, int messageId, string chatTitle, BotAdminOptions options, CancellationToken cancellationToken) => botClient.EditMessageText(
         chatId: chatId,
@@ -28,7 +27,8 @@ internal static class ConfigMessage
             $"Configure who can manage sessions in *{chatTitle}*:\n\n" +
             "• *Non-admin start*: Allow any member to start a session\n" +
             "• *Non-admin close*: Allow any member to close a session and start the lottery\n" +
-            "• *Non-admin cancel*: Allow any member to cancel a session\n\n" +
+            "• *Non-admin cancel*: Allow any member to cancel a session\n" +
+            "• *Non-admin statistics*: Allow any member to view group statistics\n\n" +
             "Click the buttons below to toggle settings:");
     }
 
@@ -42,7 +42,8 @@ internal static class ConfigMessage
         {
             new[] { createButton(options.AllowNonAdminSessionStart, "start") },
             new[] { createButton(options.AllowNonAdminSessionClose, "close") },
-            new[] { createButton(options.AllowNonAdminSessionCancel, "cancel") }
+            new[] { createButton(options.AllowNonAdminSessionCancel, "cancel") },
+            new[] { createButton(options.AllowNonAdminStatistics, "statistics") }
         }));
     }
 }

@@ -4,6 +4,7 @@ using teamZaps.Services;
 using teamZaps.Backend;
 using teamZaps.Session;
 using teamZaps.Utils;
+using teamZaps.Statistic;
 
 namespace teamZaps.Handlers;
 
@@ -13,7 +14,7 @@ public partial class UpdateHandler : IUpdateHandler
         ILogger<UpdateHandler> logger, IHostEnvironment hostEnvironment,
         IOptions<BotBehaviorOptions> botBehaviour, IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings,
         FileService<BotAdminOptions> adminOptionsService, RecoveryService recoveryService,
-        SessionManager sessionManager, SessionWorkflowService workflowService,
+        SessionManager sessionManager, SessionWorkflowService workflowService, StatisticService statisticService,
         IEnumerable<IBackend> backends)
     {
         this.logger = logger;
@@ -28,6 +29,7 @@ public partial class UpdateHandler : IUpdateHandler
         
         this.sessionManager = sessionManager;
         this.workflowService = workflowService;
+        this.statisticService = statisticService;
 
         // Extract specific backend instances:
         this.indexerBackend = backends.GetMandatoryBackend<IIndexerBackend>();
@@ -255,6 +257,7 @@ public partial class UpdateHandler : IUpdateHandler
 
     private readonly SessionManager sessionManager;
     private readonly SessionWorkflowService workflowService;
+    private readonly StatisticService statisticService;
 
     private readonly IIndexerBackend indexerBackend;
     private readonly ILightningBackend lightningBackend;

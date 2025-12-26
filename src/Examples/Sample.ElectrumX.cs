@@ -8,25 +8,10 @@ namespace teamZaps.Examples;
 /// <summary>
 /// Example usage of the ElectrumX service to get current block time.
 /// </summary>
-public class ElectrumXExample
+public class Sample_ElectrumX
 {
-    public static async Task RunExample()
+    public static async Task RunExample(ElectrumXService electrumX)
     {
-        // Setup logging
-        using var loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddConsole();
-            builder.SetMinimumLevel(LogLevel.Information);
-        });
-        
-        var logger = loggerFactory.CreateLogger<ElectrumXService>();
-
-        // Configure ElectrumX settings
-        var settings = Options.Create(ElectrumXSettings.Default);
-
-        // Create the service
-        using var electrumX = new ElectrumXService(logger, settings);
-
         try
         {
             // Get current block header (includes height and time)

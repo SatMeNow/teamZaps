@@ -8,17 +8,12 @@ namespace teamZaps.Session;
 
 internal static class PaymentMessage
 {
-    public static async Task<Message> SendAsync(PendingPayment payment, ITelegramBotClient botClient, CancellationToken cancellationToken)
-    {
-        var message = await botClient.SendMessage(
-            chatId: payment.UserId,
-            text: Build(payment, PaymentStatus.Pending),
-            parseMode: ParseMode.Markdown,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return message;
-    }
-    public static async Task UpdateAsync<TLogger>( PendingPayment payment, PaymentStatus status, ITelegramBotClient botClient, ILogger<TLogger> logger, CancellationToken cancellationToken)
+    public static Task<Message> SendAsync(PendingPayment payment, ITelegramBotClient botClient, CancellationToken cancellationToken) => botClient.SendMessage(
+        chatId: payment.UserId,
+        text: Build(payment, PaymentStatus.Pending),
+        parseMode: ParseMode.Markdown,
+        cancellationToken: cancellationToken);
+    public static async Task UpdateAsync<TLogger>(PendingPayment payment, PaymentStatus status, ITelegramBotClient botClient, ILogger<TLogger> logger, CancellationToken cancellationToken)
     {
         if (payment.MessageId is null)
             return;

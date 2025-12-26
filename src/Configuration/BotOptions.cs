@@ -22,6 +22,11 @@ public class BotAdminOptions
     /// </summary>
     [JsonPropertyName("nonAdminSessionCancel")]
     public bool AllowNonAdminSessionCancel { get; set; } = true;
+    /// <summary>
+    /// If false, only chat administrators can view group statistics.
+    /// </summary>
+    [JsonPropertyName("nonAdminStatistics")]
+    public bool AllowNonAdminStatistics { get; set; } = true;
     #endregion
 }
 

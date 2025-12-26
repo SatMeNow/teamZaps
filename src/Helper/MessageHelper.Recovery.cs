@@ -11,7 +11,7 @@ internal static partial class Ext
     {
         source.AppendLine("🔍 *Lost and Found recovery*\n");
         source.AppendLine($"I found *{lostSats.SatsAmount.Format()}* of lost funds from a previously interrupted session.\n");
-        source.AppendLine($"📅 From: {lostSats.Timestamp:yyyy-MM-dd HH:mm}");
+        source.AppendLine($"📅 From: {lostSats.Timestamp:f}"); // Freitag, 31. Oktober 2008 17:04
         source.AppendLineIfNotNull("💬 Reason: {0}", lostSats.Reason);
         source.AppendLine();
         source.Append("Just *send me a lightning invoice* if you want to *claim now*.");

@@ -125,16 +125,6 @@ public class SessionManager : IFormattableAmount
                 if (!cancel)
                     // Clear recovery files for all participants:
                     recoveryService.ClearLostSats(session);
-                
-                lastSummaries[chatId] = new SessionSummary(
-                    session.StartedAtBlock,
-                    DateTimeOffset.Now,
-                    session.SatsAmount,
-                    session.FiatAmount,
-                    session.Participants.Count,
-                    session.WinnerUser?.UserId,
-                    session.WinnerUser?.DisplayName(),
-                    session.PayoutCompleted);
             }
 
             if (sessions.IsEmpty())
@@ -150,19 +140,7 @@ public class SessionManager : IFormattableAmount
     
 
     private readonly ConcurrentDictionary<long, SessionState> sessions = new();
-    private readonly ConcurrentDictionary<long, SessionSummary> lastSummaries = new();
     private readonly BotBehaviorOptions botBehaviour;
     private readonly ILogger<SessionManager> logger;
     private readonly RecoveryService recoveryService;
 }
-
-public record SessionSummary(
-    IBlockHeader StartedAtBlock,
-    DateTimeOffset EndedAt,
-    long TotalSats,
-    double TotalFiat,
-    int ParticipantCount,
-    long? WinnerUserId,
-    string? WinnerDisplayName,
-    bool PayoutCompleted
-);

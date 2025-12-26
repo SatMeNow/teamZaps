@@ -5,6 +5,7 @@ using teamZaps.Configuration;
 using teamZaps.Helper;
 using teamZaps.Services;
 using teamZaps.Session;
+using teamZaps.Statistic;
 using teamZaps.Utils;
 using Telegram.Bot.Types.ReplyMarkups;
 
@@ -67,12 +68,19 @@ public partial class UpdateHandler
                     cancellationToken: cancellationToken).ConfigureAwait(false);
                 break;
 
-            case "/diag":
-                await HandleDiagnosisAsync(botClient, command, cancellationToken).ConfigureAwait(false);
-                break;
-
             case BotPmCommand.Recover:
                 await HandleRecoverCommandAsync(botClient, command, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case BotPmCommand.Statistics:
+                if (await IsRootUserAsync(botClient, command, cancellationToken).ConfigureAwait(false))
+                    await ServerStatisticsMessage.SendAsync(botClient, statisticService, command.ChatId, cancellationToken).ConfigureAwait(false);
+                await UserStatisticsMessage.SendAsync(botClient, statisticService, command.From, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case BotRootCommand.Diagnosis:
+                if (await IsRootUserAsync(botClient, command, cancellationToken).ConfigureAwait(false))
+                    await HandleDiagnosisAsync(botClient, command, cancellationToken).ConfigureAwait(false);
                 break;
 
             default: return (false);
@@ -174,7 +182,6 @@ public partial class UpdateHandler
 
                 try
                 {
-                    // TODO: pass the enum here, not a currency string! 
                     var invoice = await lightningBackend.CreateInvoiceAsync(invoiceAmount, grpCurrency, memo, cancellationToken).ConfigureAwait(false);
                     // Store as pending payment
                     var pending = new PendingPayment
@@ -213,7 +220,10 @@ public partial class UpdateHandler
     {
         logger.LogInformation("Winner invoice submitted by {User} for session {Session}", winnerUser, session);
 
-        var winnerInfo = session.Winners[winnerUser.UserId];
+        var winnerInfo = session.Winners[winnerUser];
+
+        // Obtain block header at session end
+        var currentBlock = await indexerBackend.GetCurrentBlockAsync(cancellationToken).ConfigureAwait(false);
 
         // Decode and validate the invoice amount
         var invoiceSats = lightningBackend.GetInvoiceAmount(bolt11);
@@ -235,6 +245,8 @@ public partial class UpdateHandler
 
                 await WinnerMessage.UpdateAsync(session, PaymentStatus.Paid, paymentResult, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
             }
+            
+            session.CompletedAtBlock = currentBlock;
 
             // Update the pinned status message
             await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
@@ -246,7 +258,7 @@ public partial class UpdateHandler
             if (session.Phase.IsClosed())
             {
                 // Clean up session
-                workflowService.TryCloseSession(session.ChatId, false);
+                workflowService.TryCloseSession(session, false);
 
                 logger.LogInformation("Payout executed successfully by {User} for session {Session}", winnerUser, session);
             }
@@ -256,6 +268,14 @@ public partial class UpdateHandler
                 $"✅ Successfully paid out *{invoiceSats.Format()}*.",
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            await statisticService.OnSessionCompleteAsync(session).ConfigureAwait(false);
+            Debug.Assert(session.Statistics is not null);
+
+            // Send statistics
+            await GroupStatisticsMessage.SendIfAsync(botClient, statisticService, session, cancellationToken).ConfigureAwait(false);
+            foreach (var participant in session.Participants.Values)
+                await UserStatisticsMessage.SendIfAsync(botClient, statisticService, participant, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -271,107 +291,98 @@ public partial class UpdateHandler
     /// </remarks>
     private async Task HandleDiagnosisAsync(ITelegramBotClient botClient, CommandMessage command, CancellationToken cancellationToken)
     {
-        // Check if user is a root user
-        if (!telegramSettings.RootUsers.Contains(command.UserId))
-            return;
-
-        // Check if command is used in private chat
-        var chat = await botClient.GetChat(command.ChatId, cancellationToken).ConfigureAwait(false);
-        if (chat.Type != ChatType.Private)
-            throw new InvalidOperationException("This command is only available in private chat with the bot.");
-
-        var diagnostics = new StringBuilder();
-        diagnostics.AppendLine("🔍 *DIAGNOSTIC INFORMATION*");
+        var diag = new StringBuilder();
+        diag.AppendLine("🔍 *DIAGNOSTIC INFORMATION*");
         
         // Environment Information
-        diagnostics.AppendLine("\n🖥️ *Environment:*");
-        diagnostics.AppendLine($"• OS: *{Environment.OSVersion}*");
-        diagnostics.AppendLine($"• .NET: *{Environment.Version}*");
-        diagnostics.AppendLine($"• Host configuration: *{hostEnvironment.EnvironmentName}*");
+        diag.AppendLine("\n🖥️ *Environment:*");
+        diag.AppendLine($"• OS: *{Environment.OSVersion}*");
+        diag.AppendLine($"• .NET: *{Environment.Version}*");
+        diag.AppendLine($"• Host configuration: *{hostEnvironment.EnvironmentName}*");
         #if !DEBUG
-        diagnostics.AppendLine($"• Timezone: *{TimeZoneInfo.Local.DisplayName}*");
-        diagnostics.AppendLine($"• Machine: *{Environment.MachineName}*");
-        diagnostics.AppendLine($"• User: *{Environment.UserName}*");
+        diag.AppendLine($"• Timezone: *{TimeZoneInfo.Local.DisplayName}*");
+        diag.AppendLine($"• Machine: *{Environment.MachineName}*");
+        diag.AppendLine($"• User: *{Environment.UserName}*");
         #endif
 
         // Application Information
         var asmName = UtilAssembly.GetInfo();
-        diagnostics.AppendLine("\n🚀 *Application:*");
-        diagnostics.AppendLine($"• Version: *v{UtilAssembly.GetVersion()}*");
-        diagnostics.AppendLine($"• Process ID: *{Environment.ProcessId}*");
-        diagnostics.AppendLine($"• Is 64bit process: *{Environment.Is64BitProcess}*");
-        diagnostics.AppendLine($"• Is privileged process: *{Environment.IsPrivilegedProcess}*");
+        diag.AppendLine("\n🚀 *Application:*");
+        diag.AppendLine($"• Version: *v{UtilAssembly.GetVersion()}*");
+        diag.AppendLine($"• Process ID: *{Environment.ProcessId}*");
+        diag.AppendLine($"• Is 64bit process: *{Environment.Is64BitProcess}*");
+        diag.AppendLine($"• Is privileged process: *{Environment.IsPrivilegedProcess}*");
 
         // System Information
-        diagnostics.AppendLine("\n⚙️ *System status:*");
-        diagnostics.AppendLine($"• CPU usage: *{Environment.CpuUsage.TotalTime}*");
-        diagnostics.AppendLine($"• Memory usage: *{GC.GetTotalMemory(false) / 1024 / 1024:N0} MB*");
-        diagnostics.AppendLine($"• Uptime: *{DateTimeOffset.Now - Process.GetCurrentProcess().StartTime:dd\\.hh\\:mm\\:ss}*");
+        diag.AppendLine("\n⚙️ *System status:*");
+        diag.AppendLine($"• CPU usage: *{Environment.CpuUsage.TotalTime}*");
+        diag.AppendLine($"• Memory usage: *{GC.GetTotalMemory(false) / 1024 / 1024:N0} MB*");
+        diag.AppendLine($"• Uptime: *{DateTimeOffset.Now - Process.GetCurrentProcess().StartTime:dd\\.hh\\:mm\\:ss}*");
         
         // Bot Information
-        diagnostics.AppendLine("\n🤖 *Bot status:*");
+        diag.AppendLine("\n🤖 *Bot status:*");
         var maxSessions = "";
         if (botBehaviour.MaxParallelSessions > 0)
             maxSessions = $" of *{botBehaviour.MaxParallelSessions.Value}*";
-        diagnostics.AppendLine($"• Active sessions: *{sessionManager.ActiveSessions.Count()}*{maxSessions}");
+        diag.AppendLine($"• Active sessions: *{sessionManager.ActiveSessions.Count()}*{maxSessions}");
 
         if (botBehaviour.MaxBudget is null)
-            diagnostics.AppendLine("• Server budget: *Unlimited*");
+            diag.AppendLine("• Server budget: *Unlimited*");
         else
         {
             var consumed = sessionManager.ConsumedServerBudget;
             if (consumed > 0)
-                diagnostics.AppendLine($"• Server budget: *{consumed.Format()}* / *{botBehaviour.MaxBudget!.Value.Format()}*");
+                diag.AppendLine($"• Server budget: *{consumed.Format()}* / *{botBehaviour.MaxBudget!.Value.Format()}*");
             var available = sessionManager.AvailableServerBudget ?? 0;
             if (available > 0)
-                diagnostics.AppendLine($"• Available budget: *{available.Format()}*");
+                diag.AppendLine($"• Available budget: *{available.Format()}*");
         }
-        diagnostics.AppendLineIfNotNull("• Total locked amount: *{0}*", sessionManager.FormatAmount(), "💤 none");
+        diag.AppendLineIfNotNull("• Total locked amount: *{0}*", sessionManager.FormatAmount(), "💤 none");
 
         // Lost and Found Recovery Information
-        diagnostics.AppendLine("\n🔍 *Lost and Found recovery:*");
+        diag.AppendLine("\n🔍 *Lost and Found recovery:*");
         var allLostSats = await recoveryService.GetAllLostSatsAsync().ConfigureAwait(false);
         if (allLostSats.IsEmpty())
-            diagnostics.AppendLine("• Lost sats records: ✅ *None*");
+            diag.AppendLine("• Lost sats records: ✅ *None*");
         else
         {
             var totalLostSats = allLostSats.Sum(r => r.SatsAmount);
-            diagnostics.AppendLine($"• User(s) with lost sats: *{allLostSats.Count}*");
-            diagnostics.AppendLine($"• Total lost amount: ⚠️ *{totalLostSats.Format()}*");
+            diag.AppendLine($"• User(s) with lost sats: *{allLostSats.Count}*");
+            diag.AppendLine($"• Total lost amount: ⚠️ *{totalLostSats.Format()}*");
             var oldestRecord = allLostSats.OrderBy(r => r.Timestamp).FirstOrDefault();
             if (oldestRecord is not null)
             {
                 var age = (DateTimeOffset.Now - oldestRecord.Timestamp);
-                diagnostics.AppendLine($"• Oldest record: *{age.TotalDays:N0} days ago*");
+                diag.AppendLine($"• Oldest record: *{age.TotalDays:N0} days ago*");
             }
         }
 
         // Indexer backend Information
-        diagnostics.AppendLine("\n🗂️ *Indexer backend status:*");
-        diagnostics.AppendLine($"• Backend type: *{indexerBackend.BackendType}*");
-        diagnostics.AppendLine($"• Sent requests: *{indexerBackend.SentRequests}*");
-        diagnostics.AppendLineIfNotNull("• Last block: {0}", indexerBackend.LastBlock?.FormatHeight());
+        diag.AppendLine("\n🗂️ *Indexer backend status:*");
+        diag.AppendLine($"• Backend type: *{indexerBackend.BackendType}*");
+        diag.AppendLine($"• Sent requests: *{indexerBackend.SentRequests}*");
+        diag.AppendLineIfNotNull("• Last block: {0}", indexerBackend.LastBlock?.Format());
 
         // Lightning backend Information
-        diagnostics.AppendLine("\n⚡ *Lightning backend status:*");
-        diagnostics.AppendLine($"• Backend type: *{lightningBackend.BackendType}*");
-        diagnostics.AppendLine($"• Sent requests: *{lightningBackend.SentRequests}*");
+        diag.AppendLine("\n⚡ *Lightning backend status:*");
+        diag.AppendLine($"• Backend type: *{lightningBackend.BackendType}*");
+        diag.AppendLine($"• Sent requests: *{lightningBackend.SentRequests}*");
 
         // Exchange rate backend Information (optional)
-        diagnostics.AppendLine("\n💱 *Exchange rate backend status:* ");
+        diag.AppendLine("\n💱 *Exchange rate backend status:* ");
         if (exchangeRateBackend is null)
-            diagnostics.AppendLine("• Backend: 🚫 *none*");
+            diag.AppendLine("• Backend: 🚫 *none*");
         else
         {
-            diagnostics.AppendLine($"• Backend type: *{exchangeRateBackend.BackendType}*");
-            diagnostics.AppendLineIfNotNull("• Last update: *{0}*", exchangeRateBackend.LastRateUpdate?.ToString("f"), "⚠️ never");
+            diag.AppendLine($"• Backend type: *{exchangeRateBackend.BackendType}*");
+            diag.AppendLineIfNotNull("• Last update: *{0}*", exchangeRateBackend.LastRateUpdate?.ToString("f"), "⚠️ never");
             if (exchangeRateBackend.RatesReliable)
-                diagnostics.AppendLine($"• Fiat rate: *{exchangeRateBackend.FiatRate!.Value.FormatFiatRate()}*");
-            diagnostics.AppendLine($"• Sent requests: *{exchangeRateBackend.SentRequests}*");
+                diag.AppendLine($"• Fiat rate: *{exchangeRateBackend.FiatRate!.Value.FormatFiatRate()}*");
+            diag.AppendLine($"• Sent requests: *{exchangeRateBackend.SentRequests}*");
         }
 
         await botClient.SendMessage(command.ChatId,
-            diagnostics.ToString(),
+            diag.ToString(),
             parseMode: ParseMode.Markdown,
             linkPreviewOptions: true,
             cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -458,6 +469,19 @@ public partial class UpdateHandler
                 $"Expected: {expectedSats.Format()}\n" +
                 $"Your invoice: {invoiceSats.Format()}\n" +
                 "Please create a new invoice with the correct amount of sats.");
+    }
+    private async Task<bool> IsRootUserAsync(ITelegramBotClient botClient, CommandMessage command, CancellationToken cancellationToken)
+    {
+        // Check if user is a root user
+        if (!telegramSettings.RootUsers.Contains(command.UserId))
+            return (false);
+
+        // Check if command is used in private chat
+        var chat = await botClient.GetChat(command.ChatId, cancellationToken).ConfigureAwait(false);
+        if (chat.Type != ChatType.Private)
+            throw new InvalidOperationException("This command is only available in private chat with the bot.");
+
+        return (true);
     }
     #endregion
 }
