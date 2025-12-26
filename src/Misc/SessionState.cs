@@ -1,15 +1,13 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using teamZaps.Backend;
 using teamZaps.Configuration;
 using teamZaps.Services;
-using teamZaps.Sessions;
 using teamZaps.Utils;
 using Telegram.Bot.Types;
 
-namespace teamZaps;
+namespace teamZaps.Session;
 
 
 public enum SessionPhase

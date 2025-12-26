@@ -6,7 +6,7 @@ using teamZaps.Services;
 using teamZaps.Backend;
 using teamZaps.Utils;
 
-namespace teamZaps.Sessions;
+namespace teamZaps.Session;
 
 internal static class WinnerMessage
 {

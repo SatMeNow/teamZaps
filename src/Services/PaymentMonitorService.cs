@@ -2,7 +2,7 @@ using System.Diagnostics;
 using teamZaps.Configuration;
 using teamZaps.Services;
 using teamZaps.Backend;
-using teamZaps.Sessions;
+using teamZaps.Session;
 
 namespace teamZaps.Services;
 

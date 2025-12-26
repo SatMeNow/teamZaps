@@ -1,6 +1,6 @@
 using teamZaps.Configuration;
 using teamZaps.Services;
-using teamZaps.Sessions;
+using teamZaps.Session;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;

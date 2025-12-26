@@ -140,9 +140,9 @@ public static partial class Extensions
             return (null);
         
         if (currency == PaymentCurrency.Sats)
-            return ($"{source}{currency.ToSymbol()}");
+            return ($"{source:N0}{currency.ToSymbol()}");
         else
-            return ($"{source:F2}{currency.ToSymbol()}");
+            return ($"{source:N2}{currency.ToSymbol()}");
     }
     public static string? Format(this IBlockHeader source) => $"{source.FormatHeight()} ({source.BlockTime:G})";
     public static string? FormatHeight(this IBlockHeader source) => $"[{source.Height.ToString("N0")}](https://mempool.space/block/{source.Hash})";

@@ -1,5 +1,5 @@
 using teamZaps.Services;
-using teamZaps.Sessions;
+using teamZaps.Session;
 
 namespace teamZaps.Configuration;
 

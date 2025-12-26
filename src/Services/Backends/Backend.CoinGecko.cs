@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Text.Json.Serialization;
 using teamZaps.Backend;
 using teamZaps.Configuration;
-using teamZaps.Sessions;
+using teamZaps.Session;
 using teamZaps.Utils;
 
 namespace teamZaps.Backend;
