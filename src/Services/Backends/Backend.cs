@@ -188,3 +188,17 @@ public interface IPaymentStatus
     double FiatAmount { get; }
     double FiatRate { get; }
 }
+
+internal static partial class Ext
+{
+    public static T? GetOptionalBackend<T>(this IEnumerable<IBackend> source)
+        where T : IBackend
+    {
+        return (source.OfType<T>().FirstOrDefault());
+    }
+    public static T GetMandatoryBackend<T>(this IEnumerable<IBackend> source)
+        where T : IBackend
+    {
+        return (source.OfType<T>().First());
+    }
+}

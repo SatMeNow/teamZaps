@@ -107,13 +107,14 @@ public static class Program
                     .ToArray();
 
                 // Inject backends:
-                services.AddSingleton(typeof(IIndexerBackend), typeof(ElectrumXService));
+                services.AddBackend<IIndexerBackend>(typeof(ElectrumXService));
+                Log.Information($"Using '{typeof(ElectrumXService).Name}' as indexer backend");
 
                 // Inject lightning backend:
                 var lightningBackend = TryGetBackendType<ILightningBackend>(configuredBackends);
                 if (lightningBackend is null)
                     throw new InvalidOperationException("No lightning backend configured!");
-                services.AddSingleton(typeof(ILightningBackend), lightningBackend);
+                services.AddBackend<ILightningBackend>(lightningBackend);
                 Log.Information($"Using '{lightningBackend.Name}' as lightning backend");
 
                 // Inject exchange rate backend if required:
@@ -126,8 +127,7 @@ public static class Program
                         exchangeRateBackend = TryGetBackendType<IExchangeRateBackend>(configuredBackends);
                     if (exchangeRateBackend is null)
                         throw new InvalidOperationException("No exchange rate backend configured!");
-                    services.AddSingleton(typeof(IExchangeRateBackend), exchangeRateBackend);
-                    services.AddHostedService(f => (BackgroundService)f.GetRequiredService<IExchangeRateBackend>());
+                    services.AddBackend<IExchangeRateBackend>(exchangeRateBackend);
                     Log.Information($"Using '{exchangeRateBackend.Name}' as exchange rate backend");
                 }
                 else
@@ -153,4 +153,41 @@ public static class Program
         .SelectMany(c => c.GetParameters())
         .Any(p => (p.ParameterType == typeof(IExchangeRateBackend)));
     #endregion
+}
+
+internal static partial class Ext
+{
+    public static IServiceCollection AddBackend<T>(this IServiceCollection source)
+        where T : class, IBackend
+    {
+        return (AddBackend<IBackend>(source, typeof(T)));
+    }
+    public static IServiceCollection AddHostedServiceAsSingleton<T>(this IServiceCollection source)
+        where T : class, IHostedService
+    {
+        source.AddSingleton<T>();
+        source.AddHostedService(sp => sp.GetRequiredService<T>());
+
+        return (source);
+    }
+    public static IServiceCollection AddBackend<T>(this IServiceCollection source, Type backendType)
+        where T : class, IBackend
+    {
+        // Register the concrete backend type as singleton:
+        source.AddSingleton(backendType);
+
+        // Register interface 'T' to resolve the same singleton instance:
+        source.AddSingleton(typeof(T), sp => sp.GetRequiredService(backendType));
+
+        // Register interface 'IBackend' to resolve the same singleton instance:
+        if (typeof(T) != typeof(IBackend))
+            source.AddSingleton(typeof(IBackend), sp => sp.GetRequiredService(backendType));
+
+        // Register as hosted service if applicable:
+        // > Must(!) use typeof(IHostedService) to properly register as hosted service
+        if (backendType.IsAssignableTo<BackgroundService>())
+            source.AddSingleton<IHostedService>(sp => (IHostedService)sp.GetRequiredService(backendType));
+
+        return (source);
+    }
 }

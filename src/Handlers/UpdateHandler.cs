@@ -4,7 +4,6 @@ using teamZaps.Services;
 using teamZaps.Backend;
 using teamZaps.Sessions;
 using teamZaps.Utils;
-using Telegram.Bot.Types.ReplyMarkups;
 
 namespace teamZaps.Handlers;
 
@@ -15,16 +14,7 @@ public partial class UpdateHandler : IUpdateHandler
         IOptions<BotBehaviorOptions> botBehaviour, IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings,
         FileService<BotAdminOptions> adminOptionsService, RecoveryService recoveryService,
         SessionManager sessionManager, SessionWorkflowService workflowService,
-        // Backends:
-        IIndexerBackend indexerBackend, ILightningBackend lightningBackend)
-        : this(logger, hostEnvironment, botBehaviour, debugSettings, telegramSettings, adminOptionsService, recoveryService, sessionManager, workflowService, indexerBackend, lightningBackend, null) { }
-    public UpdateHandler(
-        ILogger<UpdateHandler> logger, IHostEnvironment hostEnvironment,
-        IOptions<BotBehaviorOptions> botBehaviour, IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings,
-        FileService<BotAdminOptions> adminOptionsService, RecoveryService recoveryService,
-        SessionManager sessionManager, SessionWorkflowService workflowService,
-        // Backends:
-        IIndexerBackend indexerBackend, ILightningBackend lightningBackend, IExchangeRateBackend? exchangeRateBackend)
+        IEnumerable<IBackend> backends)
     {
         this.logger = logger;
         this.hostEnvironment = hostEnvironment;
@@ -39,9 +29,10 @@ public partial class UpdateHandler : IUpdateHandler
         this.sessionManager = sessionManager;
         this.workflowService = workflowService;
 
-        this.indexerBackend = indexerBackend;
-        this.lightningBackend = lightningBackend;
-        this.exchangeRateBackend = exchangeRateBackend;
+        // Extract specific backend instances:
+        this.indexerBackend = backends.GetMandatoryBackend<IIndexerBackend>();
+        this.lightningBackend = backends.GetMandatoryBackend<ILightningBackend>();
+        this.exchangeRateBackend = backends.GetOptionalBackend<IExchangeRateBackend>();
     }
 
 
