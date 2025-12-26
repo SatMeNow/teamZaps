@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using teamZaps.Services;
 using teamZaps.Utils;
 
-namespace teamZaps.Sessions;
+namespace teamZaps.Session;
 
 internal static class PaymentMessage
 {

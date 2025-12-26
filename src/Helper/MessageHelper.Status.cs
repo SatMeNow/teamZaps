@@ -7,7 +7,7 @@ using teamZaps.Services;
 using teamZaps.Utils;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace teamZaps.Sessions;
+namespace teamZaps.Session;
 
 
 /// <summary>

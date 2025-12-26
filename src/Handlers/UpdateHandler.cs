@@ -2,7 +2,7 @@ using System.Text;
 using teamZaps.Configuration;
 using teamZaps.Services;
 using teamZaps.Backend;
-using teamZaps.Sessions;
+using teamZaps.Session;
 using teamZaps.Utils;
 
 namespace teamZaps.Handlers;

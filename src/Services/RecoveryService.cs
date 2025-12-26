@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Telegram.Bot;
 using teamZaps.Helper;
-using teamZaps.Sessions;
+using teamZaps.Session;
 using teamZaps.Utils;
 using teamZaps.Configuration;
 using teamZaps.Backend;

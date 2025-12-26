@@ -6,7 +6,7 @@ using teamZaps.Configuration;
 using teamZaps.Services;
 using teamZaps.Utils;
 
-namespace teamZaps.Sessions;
+namespace teamZaps.Session;
 
 
 /// <summary>

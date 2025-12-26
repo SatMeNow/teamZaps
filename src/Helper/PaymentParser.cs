@@ -7,7 +7,7 @@ using Microsoft.VisualBasic;
 using teamZaps.Configuration;
 using teamZaps.Utils;
 
-namespace teamZaps.Sessions;
+namespace teamZaps.Session;
 
 public record PaymentToken : IFormattableAmount
 {

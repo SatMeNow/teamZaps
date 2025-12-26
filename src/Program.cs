@@ -2,7 +2,7 @@ using teamZaps.Configuration;
 using teamZaps.Handlers;
 using teamZaps.Services;
 using teamZaps.Backend;
-using teamZaps.Sessions;
+using teamZaps.Session;
 using teamZaps.Utils;
 using Serilog;
 using System.Globalization;
