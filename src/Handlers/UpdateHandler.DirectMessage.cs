@@ -276,6 +276,8 @@ public partial class UpdateHandler
             await GroupStatisticsMessage.SendIfAsync(botClient, statisticService, session, cancellationToken).ConfigureAwait(false);
             foreach (var participant in session.Participants.Values)
                 await UserStatisticsMessage.SendIfAsync(botClient, statisticService, participant, cancellationToken).ConfigureAwait(false);
+            
+            await liquidityLogService.LogAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
