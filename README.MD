@@ -106,6 +106,7 @@ The bot accepts various payment formats:
 | `/recover` | Recover lost sats from failed sessions | 
 | `/stat` | View your personal statistics |
 | `/help` | Show help information |
+| `/about` | View bot information |
 
 ## 💰 Lost and Found Recovery
 
