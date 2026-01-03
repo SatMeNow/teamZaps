@@ -521,6 +521,55 @@ data/
 5. **Performance Metrics**: Monitors max parallel sessions and peak concurrent sats
 6. **Group Rankings**: Top 10 groups by various metrics (requires ≥3 groups)
 
+### LiquidityLogService
+```csharp
+// Lightweight CSV logging service for monitoring liquidity locked in active sessions
+// Appends timestamped snapshots to a CSV file for external analysis
+// File can be opened in Excel, Google Sheets, or any standard spreadsheet tool
+
+public class LiquidityLogService
+{
+    // Log current locked sats snapshot
+    public Task LogAsync(CancellationToken cancellationToken = default);
+}
+```
+
+**CSV Log Format:**
+
+```csv
+Timestamp,Sessions,Satoshis,Euros
+2026-01-03T14:30:45Z,3,45000,15.50
+2026-01-03T14:35:00Z,5,75000,25.80
+```
+
+**Log File Location:**
+
+```
+data/
+├── log/
+    └── liquidity.csv               # Time-series liquidity monitoring
+```
+
+**Key Features:**
+
+1. **Lightweight Design**: Single `AppendAllTextAsync` call per snapshot - minimal overhead
+2. **Standard Format**: CSV with comma delimiter (`,`) for European locale compatibility
+3. **ISO 8601 Timestamps**: Sortable, timezone-aware UTC timestamps
+4. **Thread-Safe**: Semaphore-based locking prevents concurrent write conflicts
+5. **External Analysis**: Can be opened in Excel, imported to databases, or analyzed with scripts
+6. **Liquidity Monitoring**: Track how many sats are locked across active sessions over time
+7. **Automatic Headers**: Creates file with column headers on first write
+
+**Use Cases:**
+- Monitor peak liquidity requirements for Lightning backend sizing
+- Analyze session concurrency patterns over time
+- Track historical liquidity trends for capacity planning
+- Export data to external monitoring/alerting systems
+- Generate time-series charts in Excel or data visualization tools
+
+**Implementation Notes:**
+- No automatic scheduling - must be invoked explicitly from calling code
+
 ### Lightning Backend (ILightningBackend)
 ```csharp
 // Abstracted Lightning Network integration

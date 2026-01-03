@@ -3,13 +3,15 @@ using teamZaps.Configuration;
 using teamZaps.Services;
 using teamZaps.Backend;
 using teamZaps.Session;
+using teamZaps.Logging;
 
 namespace teamZaps.Services;
 
 public class PaymentMonitorService : BackgroundService
 {
-    public PaymentMonitorService(SessionManager sessionManager, ILightningBackend lightningBackend, ITelegramBotClient botClient, ILogger<PaymentMonitorService> logger, SessionWorkflowService workflowService, RecoveryService recoveryService)
+    public PaymentMonitorService(LiquidityLogService liquidityLogService, SessionManager sessionManager, ILightningBackend lightningBackend, ITelegramBotClient botClient, ILogger<PaymentMonitorService> logger, SessionWorkflowService workflowService, RecoveryService recoveryService)
     {
+        this.liquidityLogService = liquidityLogService;
         this.sessionManager = sessionManager;
         this.lightningBackend = lightningBackend;
         this.botClient = botClient;
@@ -67,7 +69,6 @@ public class PaymentMonitorService : BackgroundService
 
                         // Update the payment message to show paid status
                         await PaymentMessage.UpdateAsync(pending, PaymentStatus.Paid, botClient, logger, cancellationToken).ConfigureAwait(false);
-
                         var payment = new PaymentRecord()
                         {
                             User = pending.User,
@@ -106,6 +107,9 @@ public class PaymentMonitorService : BackgroundService
                             
                             participant.PaymentHelpMessageId = null;
                         }
+                        
+                        // Update log
+                        await liquidityLogService.LogAsync(cancellationToken).ConfigureAwait(false);
                     }
                 }
                 catch (Exception ex)
@@ -117,6 +121,7 @@ public class PaymentMonitorService : BackgroundService
     }
 
 
+    private readonly LiquidityLogService liquidityLogService;
     private readonly SessionManager sessionManager;
     private readonly ILightningBackend lightningBackend;
     private readonly ITelegramBotClient botClient;

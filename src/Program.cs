@@ -7,6 +7,7 @@ using teamZaps.Utils;
 using Serilog;
 using System.Globalization;
 using teamZaps.Statistic;
+using teamZaps.Logging;
 
 namespace teamZaps;
 
@@ -88,6 +89,7 @@ public static class Program
                 services.AddHostedService(sp => sp.GetRequiredService<StatisticService>());
 
                 services.AddSingleton(typeof(FileService<>));
+                services.AddSingleton<LiquidityLogService>();
                 services.AddSingleton<RecoveryService>();
                 services.AddSingleton<StatisticService>();
                 services.AddSingleton<SessionManager>();

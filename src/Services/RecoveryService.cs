@@ -109,7 +109,15 @@ public class RecoveryService : BackgroundService
             .Select(p => p.UserId));
     }
 
-    public Task<LostSatsRecord?> TryGetLostSatsAsync(long userId) => lostSatsFile.ReadAsync(userId);
+    public Task<LostSatsRecord?> TryGetLostSatsAsync(long userId)
+    {
+        #if DEBUG
+        if (debugSettings.EnableRecovery == false)
+            return (Task.FromResult<LostSatsRecord?>(null));
+        #endif
+
+        return (lostSatsFile.ReadAsync(userId));
+    }
     /// <summary>
     /// Gets all lost sats records.
     /// </summary>
