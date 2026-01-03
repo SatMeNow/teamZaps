@@ -32,6 +32,8 @@ public class SessionState : ITipableAmount
     
     public required long ChatId { get; init; }
     public required string ChatTitle { get; init; }
+    public string? SessionTitle { get; init; }
+    public string DisplayTitle => (SessionTitle ?? ChatTitle);
 
     public required ParticipantState StartedByUser { get; init; }
     public int? Duration => (CompletedAtBlock?.Height - StartedAtBlock?.Height + 1);
@@ -175,7 +177,10 @@ internal static partial class Ext
     }
     public static void AppendSessionState(this StringBuilder source, SessionState session)
     {
-        source.AppendLine("📊 *Session status*\n");
+        var title = (session.SessionTitle ?? "Session status");
+
+        source.AppendLine($"📊 *{title}*");
+        source.AppendLine();
         source.AppendLine($"• Phase: *{session.Phase.GetDescription()}*");
         source.AppendLine($"• Started at block: {session.StartedAtBlock!.FormatHeight()}");
         source.AppendLine($"• Started at time: {session.StartedAtBlock!.LocalTime:g}"); // `31.10.2008 17:04`
