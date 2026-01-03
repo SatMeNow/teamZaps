@@ -46,6 +46,16 @@ public partial class UpdateHandler
                 }
                 break;
 
+            case BotPmCommand.Recover:
+                await HandleRecoverCommandAsync(botClient, command, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case BotPmCommand.Statistics:
+                if (await IsRootUserAsync(botClient, command, cancellationToken).ConfigureAwait(false))
+                    await ServerStatisticsMessage.SendAsync(botClient, statisticService, command.ChatId, cancellationToken).ConfigureAwait(false);
+                await UserStatisticsMessage.SendAsync(botClient, statisticService, command.From, cancellationToken).ConfigureAwait(false);
+                break;
+
             case BotPmCommand.Help:
                 await botClient.SendMessage(command.ChatId,
                     "🎯 *Team Zaps help*\n\n" +
@@ -68,14 +78,28 @@ public partial class UpdateHandler
                     cancellationToken: cancellationToken).ConfigureAwait(false);
                 break;
 
-            case BotPmCommand.Recover:
-                await HandleRecoverCommandAsync(botClient, command, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case BotPmCommand.Statistics:
-                if (await IsRootUserAsync(botClient, command, cancellationToken).ConfigureAwait(false))
-                    await ServerStatisticsMessage.SendAsync(botClient, statisticService, command.ChatId, cancellationToken).ConfigureAwait(false);
-                await UserStatisticsMessage.SendAsync(botClient, statisticService, command.From, cancellationToken).ConfigureAwait(false);
+            case BotPmCommand.About:
+                var aboutMessage = new StringBuilder()
+                    .AppendLine("ℹ️ *Team Zaps* 🎯⚡")
+                    .AppendLine()
+                    .AppendLine("*Split bills with Bitcoin Lightning in Telegram groups!*\n")
+                    .AppendLine("Team Zaps helps groups coordinate Lightning payments for shared expenses. " +
+                        "When Bitcoin isn't accepted at your favorite restaurant or bar, use Team Zaps to let everyone pay in sats while one person handles the fiat transaction.")
+                    .AppendLine()
+                    .AppendLine("🚀 *Application:*")
+                    .AppendLine($"• Version: *v{UtilAssembly.GetVersion()}*")
+                    .AppendLine($"• .NET: *{Environment.Version}*")
+                    .AppendLine()
+                    .AppendLine("🧑‍💻 *Open Source:*")
+                    .AppendLine("• [GitHub repository](https://github.com/SatMeNow/teamZaps)")
+                    .AppendLine()
+                    .Append($"Use `{BotPmCommand.Help}` for commands and instructions.");
+                
+                await botClient.SendMessage(command.ChatId,
+                    aboutMessage.ToString(),
+                    parseMode: ParseMode.Markdown,
+                    linkPreviewOptions: true,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
                 break;
 
             case BotRootCommand.Diagnosis:

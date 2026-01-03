@@ -51,6 +51,7 @@ public static class BotPmCommand
     public const string Statistics = "/stat";
     public const string Recover = "/recover";
     public const string Help = "/help";
+    public const string About = "/about";
 }
 public static class BotRootCommand
 {
