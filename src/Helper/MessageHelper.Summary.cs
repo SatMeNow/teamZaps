@@ -43,7 +43,7 @@ internal static class SessionSummaryMessage
 
         var summary = new StringBuilder();
         summary.AppendLine("📋 *PAYMENT SUMMARY*\n");
-        summary.AppendLine($"Session: *{session.ChatTitle}*\n");
+        summary.AppendLine($"Session: *{session.DisplayTitle}*\n");
 
         long winnerSats = winnerInfo.SatsAmount;
         if (session.Winners.Count > 1)

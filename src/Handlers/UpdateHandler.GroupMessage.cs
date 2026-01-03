@@ -67,7 +67,7 @@ public partial class UpdateHandler
             throw new InvalidOperationException("Only group administrators can start a session.")
                 .AddLogLevel(LogLevel.Warning);
 
-        var session = workflowService.TryStartSession(chat, command.From);
+        var session = workflowService.TryStartSession(chat, command);
         if (session is not null)
         {
             if (adminOptions is not null)

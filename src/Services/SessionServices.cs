@@ -29,7 +29,7 @@ public class SessionWorkflowService
         session = sessionManager.GetSessionByUser(userId);
         return (session is not null);
     }
-    public SessionState? TryStartSession(ChatFullInfo chat, User user) => sessionManager.TryCreateSession(chat, user);
+    public SessionState? TryStartSession(ChatFullInfo chat, CommandMessage command) => sessionManager.TryCreateSession(chat, command);
     public bool TryCloseSession(long chatId, bool cancel) => sessionManager.RemoveSession(chatId, cancel);
 
     public ParticipantState EnsureParticipant(SessionState session, User user) => sessionManager.GetOrAddParticipant(session, user);
@@ -72,7 +72,7 @@ public class SessionManager : IFormattableAmount
 
 
     #region Management
-    public SessionState? TryCreateSession(ChatFullInfo chat, User user)
+    public SessionState? TryCreateSession(ChatFullInfo chat, CommandMessage command)
     {
         // Check if maximum parallel sessions limit is reached:
         if (botBehaviour.MaxParallelSessions is not null)
@@ -85,6 +85,12 @@ public class SessionManager : IFormattableAmount
             }
         }
 
+        // Parse customized session title (optional)
+        string? sessionTitle = null;
+        if (command.Arguments.Length > 0)
+            sessionTitle = string.Join(" ", command.Arguments).ToMarkdownString();
+
+        var user = command.From;
         var firstSession = sessions.IsEmpty();
         var startedByUser = new ParticipantState(user);
         
@@ -92,6 +98,7 @@ public class SessionManager : IFormattableAmount
         {
             ChatId = chat.Id,
             ChatTitle = (chat.Title ?? ""),
+            SessionTitle = sessionTitle,
             StartedByUser = startedByUser,
             Phase = SessionPhase.WaitingForLotteryParticipants
         };

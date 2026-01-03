@@ -24,7 +24,7 @@ public interface IUser : IUserName
     string IUserName.UserName => User.Username.DisplayName(null);
 }
 
-record struct CommandMessage(Message Source, string Value, string[] Arguments)
+public record struct CommandMessage(Message Source, string Value, string[] Arguments)
 {
     #region  Properties
     public long ChatId => Source.Chat.Id;

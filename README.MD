@@ -44,6 +44,18 @@ In the group chat:
 ```
 
 How to participate:
+
+- Start a Session:
+  - Use `/startzap` in a group chat to start a session
+  - You can use `/startzap [some title]` alternatively to start a session with a custom title
+    - Custom titles are useful for describing the purpose (e.g., "Satoshi's birthday party", "Team Lunch")
+    - The session title is displayed in status messages, statistics, and all session-related communications
+
+    **Examples:**
+    - `/startzap` - Starts a session with the default name (group chat title)
+    - `/startzap Pizza 🍕 party` - Starts a session named "Pizza 🍕 party"
+    - `/startzap Team Lunch @ Joe's Restaurant` - Starts a session with a descriptive custom name
+  
 - Click the pinned session message's **🎯 Join** button to join a session.
 - If you're willing to pay the bill in fiat, click **🎰 Enter Lottery**.
 - For payments and private info, open a private chat with the bot and send amounts like:
