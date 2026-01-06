@@ -207,6 +207,9 @@ public partial class UpdateHandler
                 try
                 {
                     var invoice = await lightningBackend.CreateInvoiceAsync(invoiceAmount, grpCurrency, memo, cancellationToken).ConfigureAwait(false);
+                    if (invoice is null)
+                        throw new InvalidOperationException("Failed with internal error when creating invoice!");
+
                     // Store as pending payment
                     var pending = new PendingPayment
                     {

@@ -143,15 +143,13 @@ public class NostrWalletConnector : IDisposable
 				await nostrClient.CloseSubscription(subscriptionId).ConfigureAwait(false);
 			}
 		}
-		catch (OperationCanceledException)
+		catch (OperationCanceledException ex)
 		{
-			logger.LogWarning("Request timed out");
-			return (null);
+			throw new Exception("Request timed out!", ex);
 		}
 		catch (Exception ex)
 		{
-			logger.LogError(ex, "Error sending request");
-			return (null);
+			throw new Exception("Request sending request!", ex);
 		}
 	}
     #endregion

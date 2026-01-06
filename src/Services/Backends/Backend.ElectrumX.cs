@@ -17,6 +17,11 @@ namespace teamZaps.Backend;
 [BackendDescription("ElectrumX")]
 public class ElectrumXService : IIndexerBackend, IDisposable
 {
+    #region Constants
+    private static readonly TimeSpan BlockStaleThreshold = TimeSpan.FromSeconds(30);
+    #endregion
+
+
     public ElectrumXService(ILogger<ElectrumXService> logger, IOptions<ElectrumXSettings> settings)
     {
         this.logger = logger;
@@ -32,6 +37,7 @@ public class ElectrumXService : IIndexerBackend, IDisposable
     #region Properties
 	public ulong SentRequests { get; private set; }
     public BlockHeader? LastBlock { get; private set; }
+    private DateTime? lastRead = null;
     #endregion
 
 
@@ -131,8 +137,12 @@ public class ElectrumXService : IIndexerBackend, IDisposable
     {
         try
         {
+            // Return last read block if still fresh
+            if ((lastRead is not null) && ((DateTime.UtcNow - lastRead!) < BlockStaleThreshold))
+                return (LastBlock!);
+
             // Send block request
-            var result = await UtilTask.DelayWhileAsync(() => SendRequestAsync("blockchain.headers.subscribe", null, cancellationToken), 3000, 500, cancellationToken).ConfigureAwait(false);
+            var result = await UtilTask.DelayWhileAsync(() => SendRequestAsync("blockchain.headers.subscribe", null, cancellationToken), settings.TimeoutMs, 500, cancellationToken).ConfigureAwait(false);
             if (result is null)
                 throw new Exception("No response from ElectrumX server");
 
@@ -146,6 +156,7 @@ public class ElectrumXService : IIndexerBackend, IDisposable
             if (LastBlock?.Height != height)
                 logger.LogInformation("Current block: height={Height}, time={BlockTime}", height, blockTime);
 
+            this.lastRead = DateTime.UtcNow;
             return (this.LastBlock = new ElectrumBlockHeader
             {
                 Height = height,
