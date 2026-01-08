@@ -43,7 +43,7 @@ public interface IBackend
     /// <summary>
     /// Total number of requests sent to the backend.
     /// </summary>
-    ulong SentRequests { get; }
+    long SentRequests { get; }
     #endregion
 }
 /// <summary>

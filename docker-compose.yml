@@ -26,7 +26,7 @@ services:
       # - Backends__ElectrumX__Host=${ELECTRUMX_HOST}
       # - Backends__ElectrumX__Port=${ELECTRUMX_PORT}
       # - Backends__ElectrumX__UseSsl=${ELECTRUMX_USE_SSL}
-      # - Backends__ElectrumX__TimeoutMs=${ELECTRUMX_TIMEOUT_MS}
+      # - Backends__ElectrumX__Timeout=${ELECTRUMX_TIMEOUT}
       
       # Backend: AlbyHub (NWC)
       - Backends__AlbyHub__ConnectionString=${ALBYHUB_CONNECTION_STRING}

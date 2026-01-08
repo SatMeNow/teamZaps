@@ -34,7 +34,7 @@ public class LnbitsService : ILightningBackend
 
 
     #region Properties
-    public ulong SentRequests { get; private set; }
+    public long SentRequests { get; private set; }
     #endregion
 
 

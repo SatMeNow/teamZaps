@@ -40,7 +40,7 @@ public class CoinGeckoService : BackgroundService, IDisposable, IExchangeRateBac
 
 
     #region Properties
-    public ulong SentRequests { get; private set; }
+    public long SentRequests { get; private set; }
 
     public IReadOnlyDictionary<PaymentCurrency, double> Rates => rates;
     private ConcurrentDictionary<PaymentCurrency, double> rates = new();
