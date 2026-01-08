@@ -55,7 +55,7 @@ public class NostrWalletConnector : IDisposable
 	public Uri[] Relays { get; }
 	public string Pubkey => walletPubkey;
 
-	public ulong SentRequests { get; private set; }
+	public long SentRequests { get; private set; }
     #endregion
 
 

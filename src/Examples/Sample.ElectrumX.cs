@@ -14,6 +14,7 @@ public class Sample_ElectrumX
     {
         try
         {
+            #region Common backend tasks
             // Get current block header (includes height and time)
             Console.WriteLine("Getting current Bitcoin block header...");
             var header = await electrumX.GetCurrentBlockAsync();
@@ -26,17 +27,22 @@ public class Sample_ElectrumX
             var timeSinceBlock = DateTimeOffset.UtcNow - header.BlockTime;
             Console.WriteLine($"Time since last block: {timeSinceBlock.TotalMinutes:F1} minutes");
 
+            // Get a specific block header (e.g., block 100,000)
+            Console.WriteLine("\nGetting block 100,000...");
+            var historicHeader = await electrumX.GetBlockAsync(100_000);
+            Console.WriteLine($"Block 100,000 header: {historicHeader[..40]}...");
+            #endregion
+
+            #region Specific host tasks
+            var someHost = electrumX.Hosts.First();
+            
             // Get server features
             Console.WriteLine("\nGetting server features...");
-            var features = await electrumX.GetServerFeaturesAsync();
+            var features = await someHost.GetServerFeaturesAsync();
             Console.WriteLine($"Server version: {features?["server_version"]}");
             Console.WriteLine($"Protocol version: {features?["protocol_min"]} - {features?["protocol_max"]}");
             Console.WriteLine($"Genesis hash: {features?["genesis_hash"]}");
-
-            // Get a specific block header (e.g., block 100,000)
-            Console.WriteLine("\nGetting block 100,000...");
-            var historicHeader = await electrumX.GetBlockHeaderAsync(100_000);
-            Console.WriteLine($"Block 100,000 header: {historicHeader[..40]}...");
+            #endregion
         }
         catch (Exception ex)
         {

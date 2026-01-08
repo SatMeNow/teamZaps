@@ -39,9 +39,10 @@ src/
 │   ├── RecoveryService.cs        # Lost sats recovery system
 │   └── Backends/                 # Pluggable backend implementations
 │       ├── Backend.cs            # Backend interfaces and base types
-│       ├── Backend.AlbyHubService.cs   # AlbyHub NWC backend
-│       ├── Backend.LnbitsService.cs    # LNBits REST API backend
-│       └── Backend.CoinGecko.cs        # CoinGecko exchange rate backend
+│       ├── Backend.AlbyHub.cs    # AlbyHub NWC backend
+│       ├── Backend.Lnbits.cs     # LNBits REST API backend
+│       ├── Backend.CoinGecko.cs  # CoinGecko exchange rate backend
+│       └── Backend.ElectrumX.cs  # ElectrumX blockchain data backend
 ├── Sessions/                     # Core session management
 │   ├── SessionManager.cs         # Session storage and lifecycle
 │   ├── SessionState.cs           # Session and participant models
@@ -208,6 +209,21 @@ CoinGecko provides free BTC exchange rate data for fiat currency support.
 
 ElectrumX provides real-time Bitcoin blockchain data including current block height and timestamps. This is useful for monitoring network health and verifying transaction confirmations.
 
+**Configuration:**
+- `Host` - Single ElectrumX server. Supports `HOST:PORT` or `HOST` notation
+- `Hosts` - Array of ElectrumX servers. Supports `HOST:PORT` or `HOST` notation per entry
+- `Port` - Default server port (50001 for TCP, 50002 for SSL). Used as fallback when port is omitted from host notation
+- `UseSsl` - Whether to use SSL/TLS connection
+- `Timeout` - Connection and request timeout in milliseconds
+
+**Host Notation:**
+- Both `Host` and `Hosts` support flexible notation: `HOST:PORT` or `HOST`
+- When port is omitted, the `Port` field value is used as the default
+- All specified hosts are considered equally - the bot will try each in sequence until a connection succeeds
+- Both single `Host` and multiple `Hosts` can be specified simultaneously, and all entries will be used
+
+**Single Host Configuration**
+
 ```json
 {
   "Backends": {
@@ -215,22 +231,52 @@ ElectrumX provides real-time Bitcoin blockchain data including current block hei
       "Host": "electrum.blockstream.info",
       "Port": 50001,
       "UseSsl": false,
-      "TimeoutMs": 10000
+      "Timeout": 10000
     }
   }
 }
 ```
 
-**Configuration:**
-- `Host` - ElectrumX server hostname
-- `Port` - Server port (50001 for TCP, 50002 for SSL)
-- `UseSsl` - Whether to use SSL/TLS connection
-- `TimeoutMs` - Connection and request timeout in milliseconds
+**Multiple Hosts Configuration (Recommended)**
+
+You can configure multiple ElectrumX servers. The bot will automatically try each server in sequence ensuring continuous blockchain data access. This helps avoid service disruptions when a single server becomes unavailable due to rate limiting, spam protection, maintenance, or network issues, etc.
+
+> For improved reliability, it is recommended to configure at least 3 ElectrumX servers!
+
+```json
+{
+  "Backends": {
+    "ElectrumX": {
+      "Host": "electrum.blockstream.info",
+      "Port": 50002,
+      "Hosts": [
+        "electrum.blockstream.info:50002",
+        "electrum.qtornado.com",
+        "bitcoin.aranguren.org:50001"
+      ],
+      "UseSsl": true,
+      "Timeout": 10000
+    }
+  }
+}
+```
 
 **Public ElectrumX Servers:**
+
+For a comprehensive list of public ElectrumX servers with real-time status monitoring, see: **[1209k Bitcoin ElectrumX Monitor](https://1209k.com/bitcoin-eye/ele.php)**
+
+Here are 10 reliable servers to get started:
+
 - `electrum.blockstream.info:50001` (TCP) / `:50002` (SSL)
-- `electrum.qtornado.com:50001` / `:50002`
-- `bitcoin.aranguren.org:50001` / `:50002`
+- `electrum.qtornado.com:50001` (TCP) / `:50002` (SSL)
+- `bitcoin.aranguren.org:50001` (TCP) / `:50002` (SSL)
+- `fortress.qtornado.com:50001` (TCP) / `:50002` (SSL)
+- `electrum.emzy.de:50001` (TCP) / `:50002` (SSL)
+- `kirsche.emzy.de:50002` (SSL only)
+- `bitcoin.lu.ke:50001` (TCP) / `:50002` (SSL)
+- `fulcrum.sethforprivacy.com:50002` (SSL only)
+- `electrum.bitrefill.com:50002` (SSL only)
+- `bitcoin.grey.pw:50001` (TCP) / `:50002` (SSL)
 
 ### Bot Behavior Options
 

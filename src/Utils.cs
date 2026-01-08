@@ -1,3 +1,4 @@
+using System.Collections;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
@@ -192,6 +193,32 @@ namespace teamZaps.Utils
             return ((source is null) || (!source.Any()));
         }
         public static IEnumerable<T> WhereNotNull<T>(this IEnumerable<T> source) => source.Where(t => t is not null);
+        
+        public static void ForEach<T>(this IEnumerable<T> source, Action<T> action)
+        {
+            if (source is null)
+                return;
+            foreach (T item in source)
+                action(item);
+        }
+        public static void ForEach<T>(this IEnumerable source, Action<T> action)
+        {
+            if (source is null)
+                return;
+            foreach (T item in source)
+                action(item);
+        }
+    }
+    internal static partial class ExtList
+    {
+        public static IList<T> Rotate<T>(this IList<T> source)
+        {
+            var element = source.ElementAt(0);
+            source.RemoveAt(0);
+            source.Add(element);
+
+            return (source);
+        }
     }
     internal static partial class ExtDictionary
     {

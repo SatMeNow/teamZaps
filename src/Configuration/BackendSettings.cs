@@ -9,18 +9,32 @@ public class ElectrumXSettings
         Host = "electrum.blockstream.info",
         Port = 50001,
         UseSsl = false,
-        TimeoutMs = 10000
+        Timeout = 10000
     };
     #endregion
 
 
-    public required string Host { get; set; }
+    /// <inheritdoc cref="Host"/>
+    /// <summary>
+    /// Array of hosts in <c>HOST:PORT</c> notation.
+    /// </summary>
+    public string[]? Hosts { get; set; }
+    /// <summary>
+    /// Hosts in <c>HOST:PORT</c> notation. Port is optional and defaults to <see cref="Port"/>.
+    /// </summary>
+    /// <remarks>
+    /// Port is optional and defaults to <see cref="Port"/>.
+    /// </remarks>
+    public string? Host { get; set; }
     /// <remarks>
     /// 50001 as TCP port, 50002 for SSL.
     /// </remarks>
-    public required int Port { get; set; }
+    public int? Port { get; set; }
     public bool UseSsl { get; set; }
-    public int TimeoutMs { get; set; }
+    /// <summary>
+    /// Timeout in milliseconds.
+    /// </summary>
+    public int Timeout { get; set; }
 }
 
 public class LnbitsSettings

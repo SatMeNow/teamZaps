@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       release_type:
-        description: 'Release Type (for manual workflow dispatch builds)'
+        description: 'Release type (for manual workflow dispatch builds)'
         required: true
         default: 'beta'
         type: choice
@@ -17,6 +17,11 @@ on:
         - beta
         - rc
         - debug
+      run_unittests:
+        description: 'Run unit tests'
+        required: false
+        default: true
+        type: boolean
 
 env:
   # Use docker.io for Docker Hub if empty
@@ -67,9 +72,31 @@ jobs:
           # Don't push tags for debug builds or nextMaster
           dry_run: ${{ inputs.release_type == 'debug' || github.ref == 'refs/heads/nextMaster' }}
 
+  test:
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/nextMaster')) ||
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'workflow_dispatch' && inputs.run_unittests == true)
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Run Tests
+      run: dotnet test --verbosity normal
+
   build-and-test:
-    needs: calculate-version
-    if: always() && (needs.calculate-version.result == 'success' || needs.calculate-version.result == 'skipped')
+    needs: [calculate-version, test]
+    if: always() && (needs.calculate-version.result == 'success' || needs.calculate-version.result == 'skipped') && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version_output }}
@@ -120,10 +147,6 @@ jobs:
 
     - name: Build
       run: dotnet build src/teamZaps.csproj --no-restore --configuration ${{ env.BUILD_CONFIGURATION }} /p:Version=${{ env.VERSION }}
-
-    # TODO: No tests implemented yet
-    # - name: Test
-    #   run: dotnet test src/teamZaps.csproj --no-build --verbosity normal
 
     - name: Publish
       run: dotnet publish src/teamZaps.csproj --configuration ${{ env.BUILD_CONFIGURATION }} --output ./publish /p:Version=${{ env.VERSION }}
