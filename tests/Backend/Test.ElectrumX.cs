@@ -30,7 +30,7 @@ public class ElectrumXTests_Constructor : ElectrumXTests
         // Assert
         Assert.Single(service.Hosts);
         var host = service.Hosts.First();
-        Assert.Equal("electrum.example.com", host.Host);
+        Assert.Equal("electrum.example.com", host.Hostname);
         Assert.Equal(50001, host.Port);
     }
     [Fact]
@@ -59,15 +59,15 @@ public class ElectrumXTests_Constructor : ElectrumXTests
         Assert.Equal(3, service.Hosts.Count);
         var hostList = service.Hosts.ToArray();
         // First host
-        Assert.Equal("host1.example.com", hostList[0].Host);
+        Assert.Equal("host1.example.com", hostList[0].Hostname);
         Assert.Equal(50001, hostList[0].Port);
         Assert.Equal(5000, hostList[0].Timeout);
         // Second host
-        Assert.Equal("host2.example.com", hostList[1].Host);
+        Assert.Equal("host2.example.com", hostList[1].Hostname);
         Assert.Equal(50002, hostList[1].Port);
         Assert.Equal(5000, hostList[1].Timeout);
         // Third host
-        Assert.Equal("host3.example.com", hostList[2].Host);
+        Assert.Equal("host3.example.com", hostList[2].Hostname);
         Assert.Equal(50001, hostList[2].Port); // Uses default port
         Assert.Equal(5000, hostList[2].Timeout);
     }
@@ -82,7 +82,7 @@ public class ElectrumXTests_Constructor : ElectrumXTests
         // Assert - Should use default Blockstream server
         Assert.Single(service.Hosts);
         var host = service.Hosts.First();
-        Assert.Equal("electrum.blockstream.info", host.Host);
+        Assert.Equal("electrum.blockstream.info", host.Hostname);
         Assert.Equal(50001, host.Port);
     }
 }

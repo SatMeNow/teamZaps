@@ -44,8 +44,42 @@ public interface IBackend
     /// Total number of requests sent to the backend.
     /// </summary>
     long SentRequests { get; }
+    /// <summary>
+    /// Total number of failed requests to the backend.
+    /// </summary>
+	long FailedRequests { get; }
     #endregion
 }
+/// <summary>
+/// Backend that supports connections to multiple, alternating servers.
+/// </summary>
+public interface IMultiConnectionBackend : IBackend
+{
+    #region Properties.Management
+    public IReadOnlyCollection<IBackendClient> Hosts { get; }
+    #endregion
+}
+public interface IBackendClient
+{
+    #region Properties.Management
+    /// <inheritdoc cref="IBackend.SentRequests"/>
+	long SentRequests { get; }
+	/// <inheritdoc cref="IBackend.FailedRequests"/>
+	long FailedRequests { get; }
+
+    bool Connected { get; }
+
+    /// <summary>
+    /// Gets whether the last read time exceeds the stale threshold.
+    /// </summary>
+    bool IsStale { get; }
+    #endregion
+    #region Properties
+    string Hostname { get; }
+    int Port { get; }
+    #endregion
+}
+
 /// <summary>
 /// Interface for indexer backend services.
 /// </summary>

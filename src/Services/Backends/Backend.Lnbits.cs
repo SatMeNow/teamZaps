@@ -35,6 +35,7 @@ public class LnbitsService : ILightningBackend
 
     #region Properties
     public long SentRequests { get; private set; }
+    public long FailedRequests { get; private set; }
     #endregion
 
 
@@ -131,19 +132,32 @@ public class LnbitsService : ILightningBackend
     private Task<T?> RequestAsync<T>(HttpMethod method, string? requestUri, CancellationToken cancellationToken) => RequestAsync<T>(method, requestUri, null, cancellationToken);
     private async Task<T?> RequestAsync<T>(HttpMethod method, string? requestUri, object? request, CancellationToken cancellationToken)
     {
-        var reqMsg = new HttpRequestMessage(method, requestUri);
+        try
         {
-            reqMsg.Headers.Add("X-Api-Key", settings.ApiKey);
-            if (request is not null)
-                reqMsg.Content = new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, "application/json");
-        }
-        var sendRsp = await httpClient.SendAsync(reqMsg, cancellationToken).ConfigureAwait(false);
-        SentRequests++;
-        sendRsp.EnsureSuccessStatusCode();
+            var reqMsg = new HttpRequestMessage(method, requestUri);
+            {
+                reqMsg.Headers.Add("X-Api-Key", settings.ApiKey);
+                if (request is not null)
+                    reqMsg.Content = new StringContent(JsonSerializer.Serialize(request), Encoding.UTF8, "application/json");
+            }
+            var sendRsp = await httpClient.SendAsync(reqMsg, cancellationToken).ConfigureAwait(false);
+            sendRsp.EnsureSuccessStatusCode();
 
-        var readRsp = await sendRsp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        logger.LogDebug("Lnbits Response for {Method} '{RequestUri}': {Response}", method, requestUri, readRsp);
-        return (JsonSerializer.Deserialize<T>(readRsp));
+            var readRsp = await sendRsp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            logger.LogDebug("Lnbits Response for {Method} '{RequestUri}': {Response}", method, requestUri, readRsp);
+            var result = JsonSerializer.Deserialize<T>(readRsp);
+            if (result is null)
+                throw new NullReferenceException("Failed to deserialize Lnbits response!");
+
+            SentRequests++;
+            return (result);
+        }
+        catch (Exception)
+        {
+            FailedRequests++;
+            throw;
+        }
+
     }
     #endregion
 

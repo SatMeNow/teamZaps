@@ -39,9 +39,9 @@ public class Sample_ElectrumX
             // Get server features
             Console.WriteLine("\nGetting server features...");
             var features = await someHost.GetServerFeaturesAsync();
-            Console.WriteLine($"Server version: {features?["server_version"]}");
-            Console.WriteLine($"Protocol version: {features?["protocol_min"]} - {features?["protocol_max"]}");
-            Console.WriteLine($"Genesis hash: {features?["genesis_hash"]}");
+            Console.WriteLine($"Server version: {features.ServerVersion}");
+            Console.WriteLine($"Protocol version: {features.ProtocolMin} - {features.ProtocolMax}");
+            Console.WriteLine($"Genesis hash: {features.GenesisHash}");
             #endregion
         }
         catch (Exception ex)
