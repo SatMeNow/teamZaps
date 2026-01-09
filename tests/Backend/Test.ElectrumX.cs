@@ -20,7 +20,6 @@ public class ElectrumXTests_Constructor : ElectrumXTests
         {
             Host = "electrum.example.com",
             Port = 50001,
-            UseSsl = false,
             Timeout = 10000
         });
 
@@ -48,7 +47,6 @@ public class ElectrumXTests_Constructor : ElectrumXTests
                 "  ",
                 "host3.example.com"
             },
-            UseSsl = false,
             Timeout = 5000
         });
 

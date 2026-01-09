@@ -212,8 +212,8 @@ ElectrumX provides real-time Bitcoin blockchain data including current block hei
 **Configuration:**
 - `Host` - Single ElectrumX server. Supports `HOST:PORT` or `HOST` notation
 - `Hosts` - Array of ElectrumX servers. Supports `HOST:PORT` or `HOST` notation per entry
-- `Port` - Default server port (50001 for TCP, 50002 for SSL). Used as fallback when port is omitted from host notation
-- `UseSsl` - Whether to use SSL/TLS connection
+- `Port` - Default server port (50001 for TCP, 50002 for SSL). Used as fallback when port is omitted from host notation. **SSL is automatically used for port 50002**
+- `ValidateSslCertificate` - Whether to validate SSL/TLS certificates. Set to `false` to accept self-signed certificates (required for many public servers)
 - `Timeout` - Connection and request timeout in milliseconds
 
 **Host Notation:**
@@ -230,7 +230,7 @@ ElectrumX provides real-time Bitcoin blockchain data including current block hei
     "ElectrumX": {
       "Host": "electrum.blockstream.info",
       "Port": 50001,
-      "UseSsl": false,
+      "ValidateSslCertificate": true,
       "Timeout": 10000
     }
   }
@@ -254,7 +254,7 @@ You can configure multiple ElectrumX servers. The bot will automatically try eac
         "electrum.qtornado.com",
         "bitcoin.aranguren.org:50001"
       ],
-      "UseSsl": true,
+      "ValidateSslCertificate": true,
       "Timeout": 10000
     }
   }

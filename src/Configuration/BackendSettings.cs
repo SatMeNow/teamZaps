@@ -8,7 +8,7 @@ public class ElectrumXSettings
     {
         Host = "electrum.blockstream.info",
         Port = 50001,
-        UseSsl = false,
+        ValidateSslCertificate = true,
         Timeout = 10000
     };
     #endregion
@@ -30,7 +30,13 @@ public class ElectrumXSettings
     /// 50001 as TCP port, 50002 for SSL.
     /// </remarks>
     public int? Port { get; set; }
-    public bool UseSsl { get; set; }
+    /// <summary>
+    /// Validate SSL/TLS certificates. Set to false to accept self-signed certificates.
+    /// </summary>
+    /// <remarks>
+    /// When false, all certificates are accepted (less secure). Use with caution.
+    /// </remarks>
+    public bool ValidateSslCertificate { get; set; }
     /// <summary>
     /// Timeout in milliseconds.
     /// </summary>

@@ -23,9 +23,10 @@ services:
       - Telegram__RootUsers__2=${TELEGRAM_ROOT_USER_ID_3}
       
       # Backend: ElectrumX (Blockchain Data)
+      # Note: SSL is automatically used for port 50002, TCP for 50001
       # - Backends__ElectrumX__Host=${ELECTRUMX_HOST}
       # - Backends__ElectrumX__Port=${ELECTRUMX_PORT}
-      # - Backends__ElectrumX__UseSsl=${ELECTRUMX_USE_SSL}
+      # - Backends__ElectrumX__ValidateSslCertificate=${ELECTRUMX_VALIDATE_CERT}
       # - Backends__ElectrumX__Timeout=${ELECTRUMX_TIMEOUT}
       
       # Backend: AlbyHub (NWC)
