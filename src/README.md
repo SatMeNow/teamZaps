@@ -74,6 +74,15 @@ VS Code or Visual Studio
 Git
 ```
 
+### BotFather Configuration
+
+Configure your bot commands in @BotFather using the `/setcommands` command:
+
+```
+/about - About this bot
+/stat - Show personal statistics
+```
+
 ### Setup Steps
 
 1. **Clone and Build**
