@@ -13,7 +13,7 @@ using System.Diagnostics;
 namespace teamZaps.Backend;
 
 
- public class ElectrumXClient : IDisposable
+ public class ElectrumXClient : IBackendClient, IDisposable
  {
     #region Constants
     private const int DefaultPort = 50001;
@@ -31,7 +31,7 @@ namespace teamZaps.Backend;
         this.Timeout = timeout;
 
         var parts = host.Split(':', 2);
-        this.Host = parts[0].Trim();
+        this.Hostname = parts[0].Trim();
         if ((parts.Length > 1) && (int.TryParse(parts[1].Trim(), out var p)))
            this.Port = p;
         else
@@ -43,17 +43,18 @@ namespace teamZaps.Backend;
     private TcpClient Client { get; } = new();
     private NetworkStream Stream => Client.GetStream();
 
+	public long SentRequests { get; private set; }
+	public long FailedRequests { get; private set; }
+
     public bool Connected => Client.Connected;
     /// <summary>
     /// Gets whether the last read time exceeds the stale threshold.
     /// </summary>
-    public bool IsStale => (LastRead is not null) && ((DateTime.UtcNow - LastRead!) < StaleThreshold);
+    public bool IsStale => (lastRead is not null) && ((DateTime.UtcNow - lastRead!) < StaleThreshold);
+    private DateTime? lastRead = null;
     #endregion
     #region Properties
-	public long SentRequests { get; private set; }
-    public DateTime? LastRead { get; private set; } = null;
-
-    public string Host { get; }
+    public string Hostname { get; }
     public int Port { get; }
     /// <summary>
     /// Timeout in milliseconds.
@@ -77,7 +78,7 @@ namespace teamZaps.Backend;
         try
         {
             logger.LogDebug(new EventId(72, nameof(EnsureConnectedAsync)), "Connecting to ElectrumX server {Host}.", this);
-            await Client.ConnectAsync(Host, Port, linkedCts.Token).ConfigureAwait(false);
+            await Client.ConnectAsync(Hostname, Port, linkedCts.Token).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -92,69 +93,88 @@ namespace teamZaps.Backend;
     #region Communication
     public async Task<JsonNode> SendRequestAsync(string method, JsonArray? parameters = null, CancellationToken cancellationToken = default)
     {
-        this.LastRead = DateTime.UtcNow;
-
-        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-
-        var request = new JsonObject
+        try
         {
-            ["jsonrpc"] = "2.0",
-            ["id"] = requestId,
-            ["method"] = method,
-            ["params"] = (parameters ?? new JsonArray())
-        };
-        var requestJson = request.ToJsonString() + "\n";
-        var requestBytes = Encoding.UTF8.GetBytes(requestJson);
+            this.lastRead = DateTime.UtcNow;
 
-        logger.LogDebug(new EventId(90, nameof(SendRequestAsync)), "Sending '{Method}' request to {Host}.", method, this);
+            // Connect if not connected:
+            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
 
-        requestId++;
-        SentRequests++;
-        await Stream.WriteAsync(requestBytes, cancellationToken).ConfigureAwait(false);
-        await Stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-        // Read response
-        using var cts = new CancellationTokenSource(Timeout);
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token);
-        {
-            var buffer = new byte[8192];
-            var responseBuilder = new StringBuilder();
-            while (true)
+            // Create request:
+            var request = new JsonObject
             {
-                var bytesRead = await Stream.ReadAsync(buffer, linkedCts.Token).ConfigureAwait(false);
-                if (bytesRead == 0)
-                    throw new IOException("Connection closed by server");
+                ["jsonrpc"] = "2.0",
+                ["id"] = requestId++,
+                ["method"] = method,
+                ["params"] = (parameters ?? new JsonArray())
+            };
+            var requestJson = request.ToJsonString() + "\n";
+            var requestBytes = Encoding.UTF8.GetBytes(requestJson);
 
-                var chunk = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                responseBuilder.Append(chunk);
+            // Send request:
+            logger.LogDebug(new EventId(90, nameof(SendRequestAsync)), "Sending '{Method}' request to {Host}.", method, this);
+            await Stream.WriteAsync(requestBytes, cancellationToken).ConfigureAwait(false);
+            await Stream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
-                // ElectrumX responses are newline-delimited
-                var response = responseBuilder.ToString();
-                if (response.Contains('\n'))
+            // Read response
+            using var cts = new CancellationTokenSource(Timeout);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token);
+            {
+                var buffer = new byte[8192];
+                var responseBuilder = new StringBuilder();
+                while (true)
                 {
-                    // Get the first complete line
-                    var lines = response.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                    if (lines.Length > 0)
+                    var bytesRead = await Stream.ReadAsync(buffer, linkedCts.Token).ConfigureAwait(false);
+                    if (bytesRead == 0)
+                        throw new IOException("Connection closed by server");
+
+                    var chunk = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                    responseBuilder.Append(chunk);
+
+                    // ElectrumX responses are newline-delimited
+                    var response = responseBuilder.ToString();
+                    if (response.Contains('\n'))
                     {
-                        var rspJson = JsonNode.Parse(lines[0]);
-                        if (rspJson?["error"] is JsonNode error)
-                            throw new Exception($"ElectrumX error: {error?["message"]?.GetValue<string>() ?? "Unknown error"}");
-                        if (rspJson?["result"] is JsonNode result)
-                            return (result);
-                        
-                        throw new Exception("No response from ElectrumX server");
+                        // Get the first complete line
+                        var lines = response.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                        if (lines.Length > 0)
+                        {
+                            var rspJson = JsonNode.Parse(lines[0]);
+                            if (rspJson?["error"] is JsonNode error)
+                                throw new Exception($"ElectrumX error: {error?["message"]?.GetValue<string>() ?? "Unknown error"}");
+                            if (rspJson?["result"] is JsonNode result)
+                            {
+                                SentRequests++;
+                                return (result);
+                            }
+                            
+                            throw new Exception("No response from ElectrumX server");
+                        }
                     }
                 }
             }
         }
+        catch
+        {
+            FailedRequests++;
+            throw;
+        }
     }
 
     public Task PingAsync(CancellationToken cancellationToken = default) => SendRequestAsync("server.ping", null, cancellationToken);
-    public Task<JsonNode> GetServerFeaturesAsync(CancellationToken cancellationToken = default) => SendRequestAsync("server.features", null, cancellationToken);
+    public async Task<ServerFeatures> GetServerFeaturesAsync(CancellationToken cancellationToken = default)
+    {
+        var result = await SendRequestAsync("server.features", null, cancellationToken);
+        var features = result.Deserialize<ServerFeatures>();
+        if (features is null)
+            throw new Exception("Failed to deserialize server features");
+        else
+            return features;
+    }
     #endregion
 
 
-    public override string ToString() => $"{Host}:{Port}";
+    public override string ToString() => $"{Hostname}:{Port}";
 
     
     private readonly ILogger logger;
@@ -165,8 +185,13 @@ namespace teamZaps.Backend;
 /// Backend service for connecting to ElectrumX servers to get blockchain information.
 /// </summary>
 [BackendDescription("ElectrumX")]
-public class ElectrumXService : IIndexerBackend, IDisposable
+public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnectionBackend, IDisposable
 {
+    #region Constants
+    private const int RecommendedConnections = 3;
+    #endregion
+
+
     public ElectrumXService(ILogger<ElectrumXService> logger) : this(logger, null) { }
     public ElectrumXService(ILogger<ElectrumXService> logger, IOptions<ElectrumXSettings>? settings)
     {
@@ -185,19 +210,52 @@ public class ElectrumXService : IIndexerBackend, IDisposable
 
 
     #region Properties.Management
+    IReadOnlyCollection<IBackendClient> IMultiConnectionBackend.Hosts => this.Hosts;
     public IReadOnlyCollection<ElectrumXClient> Hosts { get; }
     private List<ElectrumXClient> rotatingHosts;
     #endregion
     #region Properties
 	public long SentRequests => Hosts.Sum(h => h.SentRequests);
+	public long FailedRequests => Hosts.Sum(h => h.FailedRequests);
     public BlockHeader? LastBlock { get; private set; }
     #endregion
 
 
     #region Initialization
-    public void Dispose()
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        // Test configured connections:
+        var requests = Hosts.Select(async host =>
+        {
+            try
+            {
+                var features = await host.GetServerFeaturesAsync(stoppingToken).ConfigureAwait(false);
+                logger.LogDebug("Established connection to ElectrumX server '{Host}' ({Features})", host, features);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to get features from ElectrumX server {Host}!", host);
+            }
+        });
+        await Task.WhenAll(requests).ConfigureAwait(false);
+        
+        // Review server configuration:
+        var succeededHosts = Hosts.Sum(h => h.SentRequests);
+        var failedHosts = Hosts.Sum(h => h.FailedRequests);
+        if (succeededHosts == 0)
+            throw new InvalidOperationException("Failed to connect to any ElectrumX server! Unable to operate.");
+        if (failedHosts == 0)
+            logger.LogInformation("Successfully established connection to all ElectrumX servers.");
+        else
+            logger.LogWarning("Connection established to {Succeeded} of {Total} ElectrumX servers.", succeededHosts, Hosts.Count);
+        if (succeededHosts < RecommendedConnections)
+            logger.LogWarning("Count of {Succeeded} successful connections is below the recommended minimum of {RecommendedConnections}.", succeededHosts, RecommendedConnections);
+    }
+    public override Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public new void Dispose()
     {
         Hosts.ForEach(h => h.Dispose());
+        base.Dispose();
     }
     #endregion
     #region Communication
@@ -392,4 +450,40 @@ file class ElectrumBlockHeader : BlockHeader
 {
     [JsonIgnore]
     public string HexHeader { get; set; } = string.Empty;
+}
+
+public class ServerFeatures
+{
+    public class ServerHostInfo
+    {
+        [JsonPropertyName("ssl_port")]
+        public int? SslPort { get; set; }
+        [JsonPropertyName("tcp_port")]
+        public int? TcpPort { get; set; }
+        [JsonPropertyName("ws_port")]
+        public int? WsPort { get; set; }
+        [JsonPropertyName("wss_port")]
+        public int? WssPort { get; set; }
+    }
+
+
+    [JsonPropertyName("dsproof")]
+    public bool? Dsproof { get; set; }
+    [JsonPropertyName("genesis_hash")]
+    public string? GenesisHash { get; set; }
+    [JsonPropertyName("hash_function")]
+    public string? HashFunction { get; set; }
+    [JsonPropertyName("hosts")]
+    public Dictionary<string, ServerHostInfo>? Hosts { get; set; }
+    [JsonPropertyName("protocol_max")]
+    public string? ProtocolMax { get; set; }
+    [JsonPropertyName("protocol_min")]
+    public string? ProtocolMin { get; set; }
+    [JsonPropertyName("pruning")]
+    public object? Pruning { get; set; }
+    [JsonPropertyName("server_version")]
+    public string? ServerVersion { get; set; }
+
+
+    public override string ToString() => $"{ServerVersion}, protocol {ProtocolMin}-{ProtocolMax}";
 }

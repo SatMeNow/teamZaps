@@ -41,6 +41,7 @@ public class CoinGeckoService : BackgroundService, IDisposable, IExchangeRateBac
 
     #region Properties
     public long SentRequests { get; private set; }
+    public long FailedRequests { get; private set; }
 
     public IReadOnlyDictionary<PaymentCurrency, double> Rates => rates;
     private ConcurrentDictionary<PaymentCurrency, double> rates = new();
@@ -95,13 +96,10 @@ public class CoinGeckoService : BackgroundService, IDisposable, IExchangeRateBac
 
             // Refresh exchange rates:
             var response = await httpClient.GetStringAsync(ApiUrl, cancellationToken).ConfigureAwait(false);
-            SentRequests++;
             var jsonDoc = JsonSerializer.Deserialize<JsonElement>(response);
             if (!jsonDoc.TryGetProperty("bitcoin", out var bitcoinRates))
-            {
-                logger.LogWarning("Failed to parse exchange rate response");
-                return;
-            }
+                throw new Exception("Failed to parse exchange rate response");
+            SentRequests++;
 
             // Update cache:
             LastRateUpdate = DateTime.Now;
@@ -116,7 +114,10 @@ public class CoinGeckoService : BackgroundService, IDisposable, IExchangeRateBac
                 else 
                 {
                     if (firstUpdate)
-                        throw new NullReferenceException($"Rate of currency '{currency.Key.GetDescription()}' rate not found in response!");
+                    {
+                        logger.LogError("Rate of currency '{Currency}' rate not found in response!", currency.Key.GetDescription());
+                        return;
+                    }
                     else
                         ; // Assume/hope that currency is temporarily not available.
                 }
@@ -132,6 +133,7 @@ public class CoinGeckoService : BackgroundService, IDisposable, IExchangeRateBac
         }
         catch (Exception ex)
         {
+            FailedRequests++;
             logger.LogError(ex, "Error refreshing exchange rates");
         }
     }

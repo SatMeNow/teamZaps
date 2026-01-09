@@ -28,6 +28,7 @@ public class AlbyHubService : ILightningBackend, IDisposable
 
     #region Properties
     public long SentRequests => nostr.SentRequests;
+    public long FailedRequests => nostr.FailedRequests;
     #endregion
 
 

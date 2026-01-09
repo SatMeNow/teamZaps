@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using teamZaps;
+using teamZaps.Backend;
 using teamZaps.Configuration;
 using teamZaps.Helper;
 using teamZaps.Services;
@@ -386,16 +387,36 @@ public partial class UpdateHandler
             }
         }
 
+        Action<IBackend> appendBackendInfo = (backend) =>
+        {
+            diag.AppendLine($"• Service: *{backend.BackendType}*");
+            if (backend is IMultiConnectionBackend multiConnection)
+            {
+                diag.AppendLine($"• Configured hosts: *{multiConnection.Hosts.Count()}*");
+                foreach (var host in multiConnection.Hosts)
+                {
+                    string? succeeded = (host.SentRequests > 0) ? $"*{host.SentRequests}*x✅ " : null;
+                    string? failed = (host.FailedRequests > 0) ? $"*{host.FailedRequests}*x⛔ " : null;
+                    diag.AppendLine($"   • {succeeded}{failed}{host.Hostname}");
+                }
+            }
+            else
+            {
+                string? succeeded = (backend.SentRequests > 0) ? $"✅ *{backend.SentRequests}*" : "*0*";
+                diag.AppendLine($"• Sent requests: {succeeded}");
+                if (backend.FailedRequests > 0)
+                    diag.AppendLine($"• Failed requests: ⛔ *{backend.FailedRequests}*"); 
+            }
+        };
+
         // Indexer backend Information
         diag.AppendLine("\n🗂️ *Indexer backend status:*");
-        diag.AppendLine($"• Backend type: *{indexerBackend.BackendType}*");
-        diag.AppendLine($"• Sent requests: *{indexerBackend.SentRequests}*");
+        appendBackendInfo(indexerBackend);
         diag.AppendLineIfNotNull("• Last block: {0}", indexerBackend.LastBlock?.Format());
 
         // Lightning backend Information
         diag.AppendLine("\n⚡ *Lightning backend status:*");
-        diag.AppendLine($"• Backend type: *{lightningBackend.BackendType}*");
-        diag.AppendLine($"• Sent requests: *{lightningBackend.SentRequests}*");
+        appendBackendInfo(lightningBackend);
 
         // Exchange rate backend Information (optional)
         diag.AppendLine("\n💱 *Exchange rate backend status:* ");
@@ -403,11 +424,10 @@ public partial class UpdateHandler
             diag.AppendLine("• Backend: 🚫 *none*");
         else
         {
-            diag.AppendLine($"• Backend type: *{exchangeRateBackend.BackendType}*");
+            appendBackendInfo(exchangeRateBackend);
             diag.AppendLineIfNotNull("• Last update: *{0}*", exchangeRateBackend.LastRateUpdate?.ToString("f"), "⚠️ never");
             if (exchangeRateBackend.RatesReliable)
                 diag.AppendLine($"• Fiat rate: *{exchangeRateBackend.FiatRate!.Value.FormatFiatRate()}*");
-            diag.AppendLine($"• Sent requests: *{exchangeRateBackend.SentRequests}*");
         }
 
         await botClient.SendMessage(command.ChatId,

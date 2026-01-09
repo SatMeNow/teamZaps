@@ -56,6 +56,7 @@ public class NostrWalletConnector : IDisposable
 	public string Pubkey => walletPubkey;
 
 	public long SentRequests { get; private set; }
+	public long FailedRequests { get; private set; }
     #endregion
 
 
@@ -71,6 +72,7 @@ public class NostrWalletConnector : IDisposable
 	{
 		try
 		{
+			logger.LogTrace("Sending NWC request of type {RequestType}.", typeof(TResult).Name);
 			await nostrClient.ConnectAndWaitUntilConnected(cancellationToken).ConfigureAwait(false);
 			var requestJson = JsonSerializer.Serialize(request);
 			var encryptedContent = EncryptNip04(requestJson, walletPubkeyBytes);
@@ -128,6 +130,7 @@ public class NostrWalletConnector : IDisposable
 				var responseEvent = await responseReceived.Task.WaitAsync(linkedCts.Token).ConfigureAwait(false);
 				var decryptedContent = DecryptNip04(responseEvent!.Content!, walletPubkeyBytes);
 				var response = JsonSerializer.Deserialize<NwcResponse<TResult>>(decryptedContent);
+				logger.LogTrace("Received NWC response for type {ResponseType}.", typeof(TResult).Name);
 
 				if ((response is not null) && (response.Error is not null))
 				{
@@ -145,11 +148,13 @@ public class NostrWalletConnector : IDisposable
 		}
 		catch (OperationCanceledException ex)
 		{
+			FailedRequests++;
 			throw new Exception("Request timed out!", ex);
 		}
 		catch (Exception ex)
 		{
-			throw new Exception("Request sending request!", ex);
+			FailedRequests++;
+			throw new Exception("Failed to send request!", ex);
 		}
 	}
     #endregion
