@@ -9,6 +9,7 @@ using teamZaps.Utils;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.VisualBasic;
 using System.Diagnostics;
+using System.Net.Security;
 
 namespace teamZaps.Backend;
 
@@ -16,32 +17,49 @@ namespace teamZaps.Backend;
  public class ElectrumXClient : IBackendClient, IDisposable
  {
     #region Constants
-    private const int DefaultPort = 50001;
+    private const int TcpPort = 50001;
+    private const int SslPort = 50002;
     
     private static readonly TimeSpan StaleThreshold = TimeSpan.FromSeconds(30);
     #endregion
 
 
-    internal ElectrumXClient(ILogger logger, string host, int? port, int timeout)
+    internal ElectrumXClient(ILogger logger, string host, ElectrumXSettings settings)
     {
         if (string.IsNullOrWhiteSpace(host))
             throw new ArgumentException("Failed to create client for unspecified host", nameof(host));
 
         this.logger = logger;
-        this.Timeout = timeout;
+        this.ValidateCertificate = settings.ValidateSslCertificate;
+        this.Timeout = settings.Timeout;
 
         var parts = host.Split(':', 2);
         this.Hostname = parts[0].Trim();
         if ((parts.Length > 1) && (int.TryParse(parts[1].Trim(), out var p)))
            this.Port = p;
         else
-           this.Port = (port ?? DefaultPort);
+           this.Port = (settings.Port ?? TcpPort);
+        
+        // Determine SSL usage based on port:
+        this.UseSsl = (this.Port == SslPort);
     }
 
 
     #region Properties.Management
     private TcpClient Client { get; } = new();
-    private NetworkStream Stream => Client.GetStream();
+    private Stream Stream
+    {
+        get
+        {
+            if (!UseSsl)
+                return (Client.GetStream());
+            else if (sslStream is null)
+                throw new InvalidOperationException("SSL stream not initialized");
+            else
+                return (sslStream);
+        }
+    }
+    private SslStream? sslStream = null;
 
 	public long SentRequests { get; private set; }
 	public long FailedRequests { get; private set; }
@@ -56,6 +74,8 @@ namespace teamZaps.Backend;
     #region Properties
     public string Hostname { get; }
     public int Port { get; }
+    public bool UseSsl { get; }
+    public bool ValidateCertificate { get; }
     /// <summary>
     /// Timeout in milliseconds.
     /// </summary>
@@ -66,6 +86,7 @@ namespace teamZaps.Backend;
     #region Connection
     public void Dispose()
     {
+        sslStream?.Dispose();
         Client.Dispose();
     }
     private async Task EnsureConnectedAsync(CancellationToken cancellationToken = default)
@@ -79,6 +100,22 @@ namespace teamZaps.Backend;
         {
             logger.LogDebug(new EventId(72, nameof(EnsureConnectedAsync)), "Connecting to ElectrumX server {Host}.", this);
             await Client.ConnectAsync(Hostname, Port, linkedCts.Token).ConfigureAwait(false);
+            
+            // Setup SSL/TLS if enabled
+            if (UseSsl)
+            {
+                var networkStream = Client.GetStream();
+                sslStream = new SslStream(
+                    networkStream, 
+                    false,
+                    ValidateCertificate 
+                        ? null 
+                        : (sender, certificate, chain, errors) => true // Accept all certificates
+                );
+                var authOptions = new SslClientAuthenticationOptions { TargetHost = Hostname };
+                await sslStream.AuthenticateAsClientAsync(authOptions, linkedCts.Token).ConfigureAwait(false);
+                logger.LogDebug("SSL/TLS handshake completed for {Host}", this);
+            }
         }
         catch (Exception ex)
         {
@@ -357,13 +394,13 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
     private IEnumerable<ElectrumXClient> GetConfiguredHosts()
     {
         if (!string.IsNullOrWhiteSpace(settings.Host))
-            yield return new ElectrumXClient(logger, settings.Host, settings.Port, settings.Timeout);
+            yield return new ElectrumXClient(logger, settings.Host, settings);
         if (settings.Hosts is not null)
         {
             foreach (var hostEntry in settings.Hosts)
             {
                 if (!string.IsNullOrWhiteSpace(hostEntry))
-                    yield return new ElectrumXClient(logger, hostEntry, settings.Port, settings.Timeout);
+                    yield return new ElectrumXClient(logger, hostEntry, settings);
             }
         }
     }
