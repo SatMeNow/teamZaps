@@ -220,21 +220,38 @@ Contributions are welcome
 Please read the [developer documentation](src/README.md) for technical details and contribution guidelines.
 You will find the [repository](https://github.com/SatMeNow/teamZaps) on github.
 
-## 📞 Support
-
-- 🐛 **Bug Reports**: Open an issue on GitHub
-- 💡 **Feature Requests**: Open an issue with the "enhancement" label
-- 📖 **Documentation**: Check the [developer docs](src/README.md)
-
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
+
+## 📞 Support
+
+- 🐛 **Bug Reports**: Open an [issue](https://github.com/SatMeNow/teamZaps/issues) on GitHub
+- 💡 **Feature Requests**: Open an [issue](https://github.com/SatMeNow/teamZaps/issues) with the `enhancement` label
+- 📖 **Documentation**: Check the [developer documents](src/README.md)
 
 ## Docs
 
 - [Telegram Bot API](https://core.telegram.org/bots/api)
   - [Markdown samples](https://core.telegram.org/bots/api#markdownv2-style)
 
+## 💜 Support the Project
+
+Team Zaps is built on **value for value**. If you find this bot useful and it's providing value to you and your community, you can choose to return value in whatever way feels right to you. Thank you for supporting this development 🙏
+
+Your contribution helps:
+- 🔧 Keep the bot running and maintained
+- ⚡ Add new features and improvements
+- 🐞 Fix bugs and enhance stability
+
+<div align="center">
+
+![Donation QR Code](docs/4v4-qr.png)
+
+**Lightning Address:** `satmenow@getalby.com`
+
+</div>
+
 ---
 
-**Made with ⚡ by Bitcoiners, for Bitcoiners** 🧡
+🧑‍💻 **Made with ⚡ by Bitcoiners, for Bitcoiners** 🧡

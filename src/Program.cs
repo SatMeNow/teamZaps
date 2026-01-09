@@ -80,17 +80,15 @@ public static class Program
                 // Register HttpClientFactory for backend services:
                 services.AddHttpClient();
 
-                services.AddHostedService<TelegramBotService>();
-                services.AddHostedService<PaymentMonitorService>();
-                services.AddHostedService<RecoveryService>();
-                services.AddHostedService(sp => sp.GetRequiredService<StatisticService>());
-
                 services.AddSingleton(typeof(FileService<>));
-                services.AddSingleton<LiquidityLogService>();
                 services.AddSingleton<RecoveryService>();
-                services.AddSingleton<StatisticService>();
+                services.AddHostedServiceAsSingleton<StatisticService>();
                 services.AddSingleton<SessionManager>();
                 services.AddSingleton<SessionWorkflowService>();
+                services.AddHostedServiceAsSingleton<LiquidityLogService>();
+                services.AddHostedService<PaymentMonitorService>();
+                services.AddHostedService<RecoveryService>();
+                services.AddHostedService<TelegramBotService>();
                 services.AddSingleton<UpdateHandler>();
                 services.AddSingleton<ITelegramBotClient>(sp =>
                 {
@@ -159,11 +157,6 @@ public static class Program
 
 internal static partial class Ext
 {
-    public static IServiceCollection AddBackend<T>(this IServiceCollection source)
-        where T : class, IBackend
-    {
-        return (AddBackend<IBackend>(source, typeof(T)));
-    }
     public static IServiceCollection AddHostedServiceAsSingleton<T>(this IServiceCollection source)
         where T : class, IHostedService
     {

@@ -17,7 +17,7 @@ public enum LogTag
 /// Lightweight logging service for monitoring sats locked in the bot at runtime.
 /// Appends to a CSV file that can be opened in Excel or other standard tools.
 /// </summary>
-public class LiquidityLogService
+public class LiquidityLogService : IHostedService
 {
     #region Constants
     private static readonly string LogPath = Path.Combine(Common.DataPath, "log", "liquidity.csv");
@@ -32,6 +32,11 @@ public class LiquidityLogService
     }
 
 
+    #region Initialization
+    public Task StartAsync(CancellationToken cancellationToken) => LogAsync(LogTag.Startup, cancellationToken);
+    public Task StopAsync(CancellationToken cancellationToken) => LogAsync(LogTag.Shutdown, cancellationToken);
+    #endregion
+    #region Operation
     public Task LogAsync(CancellationToken cancellationToken = default) => LogAsync(null, cancellationToken);
     public async Task LogAsync(LogTag? tag, CancellationToken cancellationToken = default)
     {
@@ -76,6 +81,7 @@ public class LiquidityLogService
             update.Release();
         }
     }
+    #endregion
 
 
     private readonly ILogger<LiquidityLogService> logger;

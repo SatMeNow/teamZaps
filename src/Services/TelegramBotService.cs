@@ -1,7 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
+using teamZaps.Backend;
 using teamZaps.Handlers;
 using teamZaps.Logging;
 using teamZaps.Session;
+using teamZaps.Utils;
 
 namespace teamZaps.Services;
 
@@ -76,31 +78,31 @@ public static class CallbackActions
 
 public class TelegramBotService : BackgroundService
 {
-    public TelegramBotService(ILogger<TelegramBotService> logger, LiquidityLogService liquidityLogService, ITelegramBotClient botClient, UpdateHandler updateHandler)
+    public TelegramBotService(ILogger<TelegramBotService> logger, ITelegramBotClient botClient, UpdateHandler updateHandler)
     {
         this.logger = logger;
-        this.liquidityLogService = liquidityLogService;
         this.botClient = botClient;
         this.updateHandler = updateHandler;
     }
 
 
+    #region Properties
     public bool Ready { get; private set; }
+    #endregion
 
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
-            User me = await botClient.GetMe(stoppingToken).ConfigureAwait(false);
-            logger.LogInformation("Bot {BotUsername} initialized successfully", me);
-
-            await liquidityLogService.LogAsync(LogTag.Startup, stoppingToken).ConfigureAwait(false);
+            // Initialize telegram bot:
+            var me = await botClient.GetMe(stoppingToken).ConfigureAwait(false);
 
             var receiverOptions = new ReceiverOptions { AllowedUpdates = Array.Empty<UpdateType>() };
-            await botClient.ReceiveAsync(updateHandler, receiverOptions, stoppingToken).ConfigureAwait(false);
+            _ = Task.Run(() => botClient.ReceiveAsync(updateHandler, receiverOptions, stoppingToken));
 
             this.Ready = true;
+            logger.LogInformation("Bot {BotUsername} initialized successfully", me);
         }
         catch (Exception ex)
         {
@@ -114,13 +116,10 @@ public class TelegramBotService : BackgroundService
 
         logger.LogInformation("Stopping Team Zaps Telegram Bot...");
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
-        
-        await liquidityLogService.LogAsync(LogTag.Shutdown, cancellationToken).ConfigureAwait(false);
     }
 
 
     private readonly ILogger<TelegramBotService> logger;
-    private readonly LiquidityLogService liquidityLogService;
     private readonly ITelegramBotClient botClient;
     private readonly UpdateHandler updateHandler;
 }
