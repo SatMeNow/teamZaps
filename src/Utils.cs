@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace teamZaps.Utils
@@ -297,6 +298,23 @@ namespace teamZaps.Utils
                 return (group!.Value);
             else
                 return (null);
+        }
+    }
+
+    internal static partial class ExtJson
+    {
+        public static bool TryDeserialize<T>(this JsonNode node, [NotNullWhen(true)] out T? result)
+            where T : class
+        {
+            try
+            {
+                result = node.Deserialize<T>();
+            }
+            catch
+            {
+                result = null;
+            }
+            return (result is not null);
         }
     }
     internal static partial class ExtException

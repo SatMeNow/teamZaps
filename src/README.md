@@ -265,17 +265,15 @@ You can configure multiple ElectrumX servers. The bot will automatically try eac
 
 For a comprehensive list of public ElectrumX servers with real-time status monitoring, see: **[1209k Bitcoin ElectrumX Monitor](https://1209k.com/bitcoin-eye/ele.php)**
 
-Here are 10 reliable servers to get started:
+Here are some reliable servers to get started:
 
 - `electrum.blockstream.info:50001` (TCP) / `:50002` (SSL)
 - `electrum.qtornado.com:50001` (TCP) / `:50002` (SSL)
 - `bitcoin.aranguren.org:50001` (TCP) / `:50002` (SSL)
-- `fortress.qtornado.com:50001` (TCP) / `:50002` (SSL)
 - `electrum.emzy.de:50001` (TCP) / `:50002` (SSL)
 - `kirsche.emzy.de:50002` (SSL only)
 - `bitcoin.lu.ke:50001` (TCP) / `:50002` (SSL)
 - `fulcrum.sethforprivacy.com:50002` (SSL only)
-- `electrum.bitrefill.com:50002` (SSL only)
 - `bitcoin.grey.pw:50001` (TCP) / `:50002` (SSL)
 
 ### Bot Behavior Options
