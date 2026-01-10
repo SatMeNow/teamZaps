@@ -123,8 +123,6 @@ namespace teamZaps.Backend;
         }
         if (Stream is null)
             throw new Exception("Not connected to ElectrumX server");
-        else
-            logger.LogInformation("Connected to ElectrumX server");
     }
     #endregion
     #region Communication
@@ -226,6 +224,8 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
 {
     #region Constants
     private const int RecommendedConnections = 3;
+    private static readonly int RequestRetries = 1;
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
     #endregion
 
 
@@ -296,20 +296,58 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
     }
     #endregion
     #region Communication
-    public Task<JsonNode> SendRequestAsync(string method, JsonArray? parameters = null, CancellationToken cancellationToken = default) => GetRotatedHost()
-        .SendRequestAsync(method, parameters, cancellationToken);
+    private Task<T> SendRequestAsync<T>(string method, JsonArray? parameters, CancellationToken cancellationToken, string propertyName) => SendRequestAsync<T>("blockchain.headers.subscribe", null, cancellationToken, (res) => GetValue<T>(res, propertyName));
+    /// <summary>
+    /// Sends a request to the configured ElectrumX hosts. Stale hosts are are considered to be used.
+    /// </summary>
+    private async Task<T> SendRequestAsync<T>(string method, JsonArray? parameters, CancellationToken cancellationToken, Func<JsonNode, T> valueFactory)
+    {
+        var result = await TrySendRequestAsync(true, method, parameters, cancellationToken).ConfigureAwait(false);
+        if (result is null)
+            // This should never happen, as stale hosts are enabled
+            throw new NotImplementedException("Internal error on sending request to ElectrumX hosts.");
+        else
+            // Create value from response:
+            return (valueFactory(result));
+    }
+    /// <summary>
+    /// Sends a request to the configured ElectrumX hosts. Stale hosts are only considered if no default value could be provided.
+    /// </summary>
+    private async Task<T> SendRequestAsync<T>(string method, JsonArray? parameters, CancellationToken cancellationToken, T? defaultValue, Func<JsonNode, T> valueFactory)
+    {
+        // Send block request:
+        var enStale = (defaultValue is null);
+        var result = await TrySendRequestAsync(enStale, method, parameters, cancellationToken).ConfigureAwait(false);
+        if (result is null)
+        {
+            // All hosts are stale, return default value:
+            Debug.Assert(defaultValue is not null);
+            return (defaultValue!);
+        }
+        else
+            // Create value from response:
+            return (valueFactory(result));
+    }
     /// <summary>
     /// Tries to send a request to the configured ElectrumX hosts, rotating through them until one succeeds or all fail.
     /// </summary>
+    /// <param name="enableStale">If <c>true</c>, stale hosts will also be considered.</param>
     /// <returns>Returns the received response as a <see cref="JsonNode"/>, or <c>null</c> if all hosts are stale.</returns>
     /// <exception cref="AggregateException"></exception>
-    public async Task<JsonNode?> TrySendRequestAsync(string method, JsonArray? parameters = null, CancellationToken cancellationToken = default)
+    private async Task<JsonNode?> TrySendRequestAsync(bool enableStale, string method, JsonArray? parameters = null, CancellationToken cancellationToken = default)
     {
         var failures = 0;
-        for (int i = 0; i < Hosts.Count; i++)
+        var timeout = Stopwatch.StartNew();
+        var maxRequests = (Hosts.Count * (RequestRetries + 1));
+        for (int i = 0; i < maxRequests; i++)
         {
-            if (!TryGetRotatedHost(out var host))
-                break; // Hosts are stale at the moment.
+            if ((!TryGetRotatedHost(out var host)) && (!enableStale))
+            {
+                logger.LogDebug("Abort sending request hence all hosts are stale.");
+                break;
+            }
+            if ((i >= Hosts.Count) && (timeout.Elapsed > RequestTimeout))
+                throw new Exception($"Request '{method}' timed out after {failures} failure(s)! Refer to debug log for details.");
 
             try
             {
@@ -345,46 +383,52 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
     {
         try
         {
-            // Send block request
-            var result = await TrySendRequestAsync("blockchain.headers.subscribe", null, cancellationToken).ConfigureAwait(false);
-            if (result is null)
-                return (LastBlock!); // Last block is still fresh.
-
-            var height = result["height"]?.GetValue<int>() ?? throw new Exception("Missing height in response");
-            var hexHeader = result["hex"]?.GetValue<string>() ?? throw new Exception("Missing hex in response");
-
-            // Parse the block header (80 bytes)
-            var headerBytes = Convert.FromHexString(hexHeader);
-            var blockTime = ParseBlockTime(headerBytes);
-
-            if (LastBlock?.Height != height)
-                logger.LogInformation("Current block: height={Height}, time={BlockTime}", height, blockTime);
-
-            return (this.LastBlock = new ElectrumBlockHeader
+            return (await SendRequestAsync("blockchain.headers.subscribe", null, cancellationToken, LastBlock, (result) =>
             {
-                Height = height,
-                HexHeader = hexHeader,
-                Hash = ComputeBlockHash(headerBytes),
-                BlockTime = blockTime
-            });
+                BlockHeader currentBlock;
+                if (result.TryDeserialize<BlockResponse.Layout1>(out var layout1))
+                {
+                    var headerBytes = Convert.FromHexString(layout1.Hex);
+                    currentBlock = new BlockHeader {
+                        Height = layout1.Height,
+                        Hash = ComputeBlockHash(headerBytes),
+                        BlockTime = ParseBlockTime(headerBytes)
+                    };
+                }
+                else if (result.TryDeserialize<BlockResponse.Layout2>(out var layout2))
+                {
+                    var hexHeader = ConstructHexHeader(layout2);
+                    var headerBytes = Convert.FromHexString(hexHeader);
+                    currentBlock = new BlockHeader {
+                        Height = layout2.BlockHeight,
+                        Hash = ComputeBlockHash(headerBytes),
+                        BlockTime = DateTimeOffset.FromUnixTimeSeconds(layout2.Timestamp)
+                    };
+                }
+                else
+                    throw new NotImplementedException("Unknown block response layout! Please remove host from server configuration.")
+                        .AddLogLevel(LogLevel.Critical);
+
+                if (LastBlock?.Height != currentBlock.Height)
+                    logger.LogInformation("Current block: height={Height}, time={BlockTime}", currentBlock.Height, currentBlock.BlockTime);
+
+                return (this.LastBlock = currentBlock);
+            }).ConfigureAwait(false));
         }
         catch (Exception ex)
         {
-            throw new Exception("Failed to get current block", ex);
+            throw new Exception("Failed to get current block!", ex);
         }
     }
     public async Task<string> GetBlockAsync(int height, CancellationToken cancellationToken = default)
     {
         try
         {
-            var parameters = new JsonArray { height };
-            var result = await SendRequestAsync("blockchain.block.header", parameters, cancellationToken).ConfigureAwait(false);
-            
-            return (result.GetValue<string>());
+            return (await SendRequestAsync<string>("blockchain.headers.subscribe", null, cancellationToken, "hex").ConfigureAwait(false));
         }
         catch (Exception ex)
         {
-            throw new Exception($"Failed to get current block {height}", ex);
+            throw new Exception($"Failed to get current block {height}!", ex);
         }
     }
     #endregion
@@ -403,15 +447,6 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
                     yield return new ElectrumXClient(logger, hostEntry, settings);
             }
         }
-    }
-    /// <summary>
-    /// Returns the next host that is not stale.
-    /// </summary>
-    /// <returns>If all hosts are stale, the next stale host is returned.</returns>
-    private ElectrumXClient GetRotatedHost()
-    {
-        TryGetRotatedHost(out var host);
-        return (host);
     }
     /// <summary>
     /// Tries to return the next host that is not stale.
@@ -438,6 +473,53 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
         return (false);
     }
 
+    /// <summary>
+    /// Constructs a hex-encoded block header from individual fields.
+    /// </summary>
+    /// <remarks>
+    /// Block header format (80 bytes):
+    /// - Version: 4 bytes (little-endian)
+    /// - Previous block hash: 32 bytes (reversed for display)
+    /// - Merkle root: 32 bytes (reversed for display)
+    /// - Timestamp: 4 bytes (Unix timestamp, little-endian)
+    /// - Bits: 4 bytes (little-endian)
+    /// - Nonce: 4 bytes (little-endian)
+    /// </remarks>
+    private static string ConstructHexHeader(BlockResponse.Layout2 layout)
+    {
+        var header = new byte[80];
+        var offset = 0;
+        
+        // Version (4 bytes, little-endian)
+        BitConverter.GetBytes(layout.Version!.Value).CopyTo(header, offset);
+        offset += 4;
+        
+        // Previous block hash (32 bytes, needs to be reversed from display format)
+        var prevHashBytes = Convert.FromHexString(layout.PrevBlockHash!);
+        Array.Reverse(prevHashBytes);
+        prevHashBytes.CopyTo(header, offset);
+        offset += 32;
+        
+        // Merkle root (32 bytes, needs to be reversed from display format)
+        var merkleBytes = Convert.FromHexString(layout.MerkleRoot!);
+        Array.Reverse(merkleBytes);
+        merkleBytes.CopyTo(header, offset);
+        offset += 32;
+        
+        // Timestamp (4 bytes, little-endian)
+        BitConverter.GetBytes(layout.Timestamp).CopyTo(header, offset);
+        offset += 4;
+        
+        // Bits (4 bytes, little-endian)
+        BitConverter.GetBytes(layout.Bits!.Value).CopyTo(header, offset);
+        offset += 4;
+        
+        // Nonce (4 bytes, little-endian)
+        BitConverter.GetBytes(layout.Nonce!.Value).CopyTo(header, offset);
+        
+        return Convert.ToHexString(header).ToLowerInvariant();
+    }
+    
     /// <summary>
     /// Parses the block time from a raw block header.
     /// </summary>
@@ -474,6 +556,21 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
 
         return (Convert.ToHexString(second).ToLowerInvariant());
     }
+
+    /// <param name="propertyName">Name of the property to retrieve. Specify more than one if alternatives are possible.</param>
+    private static T GetValue<T>(JsonNode node, params string[] propertyName)
+    {
+        foreach (var prop in propertyName)
+        {
+            var value = node[prop];
+            if (value is not null)
+            {
+                Debug.WriteLine($"PROP={prop}");
+                return (value.GetValue<T>());
+            }
+        }
+        throw new Exception($"Missing '{propertyName.First()}' in response!");
+    }
     #endregion
 
 
@@ -481,12 +578,6 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
     private readonly ILogger<ElectrumXService> logger;
     private readonly ElectrumXSettings settings;
     #endregion
-}
-
-file class ElectrumBlockHeader : BlockHeader
-{
-    [JsonIgnore]
-    public string HexHeader { get; set; } = string.Empty;
 }
 
 public class ServerFeatures
@@ -523,4 +614,36 @@ public class ServerFeatures
 
 
     public override string ToString() => $"{ServerVersion}, protocol {ProtocolMin}-{ProtocolMax}";
+}
+
+/// <summary>
+/// Block response layouts.
+/// </summary>
+internal class BlockResponse
+{
+    public record Layout1
+    {
+        [JsonPropertyName("hex")]
+        public required string Hex { get; init; }
+        [JsonPropertyName("height")]
+        public required int Height { get; init; }
+    }
+    public record Layout2
+    {
+        [JsonPropertyName("version")]
+        public uint? Version { get; init; }
+        [JsonPropertyName("prev_block_hash")]
+        public string? PrevBlockHash { get; init; }
+        [JsonPropertyName("merkle_root")]
+        public required string MerkleRoot { get; init; }
+        [JsonPropertyName("timestamp")]
+        public required uint Timestamp { get; init; }
+        [JsonPropertyName("bits")]
+        public uint? Bits { get; init; }
+        [JsonPropertyName("nonce")]
+        public uint? Nonce { get; init; }
+        
+        [JsonPropertyName("block_height")]
+        public required int BlockHeight { get; init; }
+    }
 }
