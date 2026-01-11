@@ -9,7 +9,7 @@ services:
     labels:
       - com.centurylinklabs.watchtower.enable=true
     environment:
-      - DOTNET_ENVIRONMENT=Production
+      - DOTNET_ENVIRONMENT=${DOTNET_ENVIRONMENT:-Production}
       
       # Bot Behavior
       - BotBehavior__MaxBudget=${MAX_BUDGET}
