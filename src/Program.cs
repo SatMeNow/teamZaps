@@ -41,7 +41,9 @@ public static class Program
             .ConfigureAppConfiguration((hostingContext, config) =>
             {
                 #if DEBUG
-                hostingContext.HostingEnvironment.EnvironmentName = "Development";
+                // Default to development environment unless explicitly overridden:
+                if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")))
+                    hostingContext.HostingEnvironment.EnvironmentName = "Development";
                 #endif
 
                 Log.Information($"Starting {hostingContext.HostingEnvironment.ApplicationName} Telegram Bot in {hostingContext.HostingEnvironment.EnvironmentName.ToLower()} environment...");
