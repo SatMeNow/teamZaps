@@ -17,10 +17,10 @@ namespace teamZaps.Backend;
  public class ElectrumXClient : IBackendClient, IDisposable
  {
     #region Constants
-    private const int TcpPort = 50001;
-    private const int SslPort = 50002;
+    public const int TcpPort = 50001;
+    public const int SslPort = 50002;
     
-    private static readonly TimeSpan StaleThreshold = TimeSpan.FromSeconds(30);
+    public static readonly TimeSpan StaleThreshold = TimeSpan.FromSeconds(30);
     #endregion
 
 
@@ -409,8 +409,10 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
                     throw new NotImplementedException("Unknown block response layout! Please remove host from server configuration.")
                         .AddLogLevel(LogLevel.Critical);
 
-                if (LastBlock?.Height != currentBlock.Height)
-                    logger.LogInformation("Current block: height={Height}, time={BlockTime}", currentBlock.Height, currentBlock.BlockTime);
+                if (LastBlock?.Height == currentBlock.Height)
+                    logger.LogInformation("Keep using last block {Height}", currentBlock.Height);
+                else
+                    logger.LogInformation("Received new block {Height}", currentBlock.Height);
 
                 return (this.LastBlock = currentBlock);
             }).ConfigureAwait(false));
