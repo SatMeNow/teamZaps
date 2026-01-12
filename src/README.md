@@ -190,14 +190,16 @@ LNBits uses a traditional REST API for Lightning operations. Requires a running 
 - `LndhubUrl` - LNDhub extension URL (must end with `/lndhub/ext/`)
 - `ApiKey` - Invoice/read key from your LNbits wallet
 
-#### CoinGecko Backend (Exchange Rates)
+#### Exchange Rate Backends
 
-CoinGecko provides free BTC exchange rate data for fiat currency support.
+**XXX Backend (Recommended)**
+
+XXX provides free BTC exchange rate data for fiat currency support.
 
 ```json
 {
   "Backends": {
-    "CoinGecko": { }
+    "XXX": { }
   }
 }
 ```
@@ -205,7 +207,26 @@ CoinGecko provides free BTC exchange rate data for fiat currency support.
 **Configuration:**
 - No settings required - works out of the box
 - Automatically fetches fiat exchange rates
-- Used by AlbyHub backend to support fiat currency invoices
+- Used by lightning backends to support fiat currency invoices
+
+---
+
+**Legacy Backends (CoinCap & CoinGecko)**
+
+These backends now require paid API keys:
+
+```json
+{
+  "Backends": {
+    "CoinCap": {
+      "ApiKey": "your_coincap_api_key_here"
+    },
+    "CoinGecko": {
+      "ApiKey": "your_coingecko_api_key_here"
+    }
+  }
+}
+```
 
 #### ElectrumX Backend (Blockchain Data)
 
@@ -438,12 +459,26 @@ All backends must:
   - Features: Full Lightning operations with fiat currency support
 
 **Exchange Rate Backends:**
-- **CoinGecko** - Free cryptocurrency price data
+- **XXX** - Free cryptocurrency price data (Recommended)
   - Implements: `IExchangeRateBackend`
-  - Configuration: `Backends:CoinGecko` section (empty config - no keys needed)
-  - API: CoinGecko public API (no authentication required)
-  - Features: BTC/USD and BTC/EUR rates with 5-minute caching
-  - Rate limits: 30 calls/minute on free tier
+  - Configuration: `Backends:XXX` section
+  - API: XXX API (no authentication required)
+  - Features: BTC/USD and BTC/EUR exchange rates
+  - Status: ✅ Active and maintained
+
+- **CoinCap** - Cryptocurrency price data (Deprecated)
+  - Implements: `IExchangeRateBackend`
+  - Configuration: `Backends:CoinCap` section
+  - API: CoinCap API v2 (requires paid API key)
+  - Features: BTC/USD prices with automatic EUR conversion rate updates
+  - Status: ⚠️ Free tier no longer available, API key required
+
+- **CoinGecko** - Cryptocurrency price data (Deprecated)
+  - Implements: `IExchangeRateBackend`
+  - Configuration: `Backends:CoinGecko` section
+  - API: CoinGecko API v3 (requires paid API key)
+  - Features: Native BTC/USD and BTC/EUR rates
+  - Status: ⚠️ Free tier no longer available, API key required
 
 **Blockchain Data Backends:**
 - **ElectrumX** - Bitcoin blockchain information via ElectrumX protocol
