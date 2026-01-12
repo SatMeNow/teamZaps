@@ -36,6 +36,9 @@ services:
       # - Backends__LNBits__LndhubUrl=${LNBITS_URL}
       # - Backends__LNBits__ApiKey=${LNBITS_API_KEY}
       
+      # Backend: Yadio (Exchange Rates - Free, no auth required)
+      # No configuration needed - enabled by adding empty section in appsettings.json
+      
       # Backend: CoinCap (Exchange Rates - Deprecated, requires API key)
       # - Backends__CoinCap__ApiKey=${COINCAP_API_KEY}
       

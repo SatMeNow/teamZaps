@@ -13,11 +13,12 @@ namespace teamZaps.Backend;
 public abstract class ExchangeRateService : BackgroundService, IDisposable, IExchangeRateBackend
 {
     #region Constants.Settings
-    protected static readonly IReadOnlyDictionary<PaymentCurrency, string> SupportedCurrencies = new Dictionary<PaymentCurrency, string>()
+    protected static readonly IReadOnlyCollection<PaymentCurrency> SupportedCurrencies = new PaymentCurrency[]
     {
-        { PaymentCurrency.Euro, "eur" },
-        { PaymentCurrency.Dollar, "usd" }
+        PaymentCurrency.Euro,
+        PaymentCurrency.Dollar
     };
+    public abstract IReadOnlyDictionary<PaymentCurrency, string> SupportedCurrencyCodes { get; }
     #endregion
 
 
@@ -25,6 +26,7 @@ public abstract class ExchangeRateService : BackgroundService, IDisposable, IExc
     {
         this.logger = logger;
         this.httpClient = httpClientFactory.CreateClient();
+        this.httpClient.Timeout = TimeSpan.FromSeconds(10);
         this.sessionManager = sessionManager;
         this.updatePeriod = updatePeriod;
         
@@ -57,7 +59,7 @@ public abstract class ExchangeRateService : BackgroundService, IDisposable, IExc
         using var timer = new PeriodicTimer(updatePeriod);
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (!sessionManager.ActiveSessions.IsEmpty())
+            if ((LastRateUpdate is null) || (!sessionManager.ActiveSessions.IsEmpty()))
                 await RefreshRatesAsync(stoppingToken).ConfigureAwait(false);
 
             try

@@ -16,8 +16,15 @@ namespace teamZaps.Backend;
 public class CoinGeckoService : ExchangeRateService
 {
     #region Constants.Settings
-    static readonly string ApiUrl = $"https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies={string.Join(",", SupportedCurrencies.Values)}";
+    static readonly string ApiUrl = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies={0}";
     static readonly TimeSpan UpdatePeriod = TimeSpan.FromMinutes(3);
+    
+    public override IReadOnlyDictionary<PaymentCurrency, string> SupportedCurrencyCodes { get; } = SupportedCurrencies.ToDictionary(c => c, c => c switch
+    {
+        PaymentCurrency.Euro => "eur",
+        PaymentCurrency.Dollar => "usd",
+        _ => throw new NotSupportedException($"Currency {c} is not supported")
+    });
     #endregion
 
 
@@ -29,7 +36,10 @@ public class CoinGeckoService : ExchangeRateService
 
     protected override async Task<Dictionary<PaymentCurrency, double>> FetchRatesAsync(CancellationToken cancellationToken)
     {
-        var response = await httpClient.GetStringAsync(ApiUrl, cancellationToken).ConfigureAwait(false);
+        var currencies = string.Join(",", SupportedCurrencyCodes.Values);
+        var apiUrl = string.Format(ApiUrl, currencies);
+        
+        var response = await httpClient.GetStringAsync(apiUrl, cancellationToken).ConfigureAwait(false);
         var jsonDoc = JsonSerializer.Deserialize<JsonElement>(response);
         if (!jsonDoc.TryGetProperty("bitcoin", out var bitcoinRates))
             throw new Exception("Failed to parse exchange rate response");
@@ -37,15 +47,13 @@ public class CoinGeckoService : ExchangeRateService
         var rates = new Dictionary<PaymentCurrency, double>();
         foreach (var currency in SupportedCurrencies)
         {
-            if (bitcoinRates.TryGetProperty(currency.Value, out var rateElement))
+            if (bitcoinRates.TryGetProperty(SupportedCurrencyCodes[currency], out var rateElement))
             {
                 var rate = rateElement.GetDouble();
-                rates[currency.Key] = rate;
+                rates[currency] = rate;
             }
             else
-            {
-                logger.LogError("Rate of currency '{Currency}' rate not found in response!", currency.Key.GetDescription());
-            }
+                logger.LogError("Rate of currency '{Currency}' rate not found in response!", currency.GetDescription());
         }
 
         return rates;
