@@ -13,6 +13,10 @@ namespace teamZaps.Backend;
 /// CoinGecko exchange rate backend.
 /// </summary>
 [BackendDescription("CoinGecko")]
+// CONTRIBUTIONS ARE WELCOME:
+// If anyone would like to continue using this API backend, please feel free to implement and test
+// the [required API key](https://docs.coingecko.com/reference/setting-up-your-api-key).
+[Obsolete("This backend is deprecated hence they did not provide a free API anymore. Please use another exchange rate backend.")]
 public class CoinGeckoService : BackgroundService, IDisposable, IExchangeRateBackend
 {
     #region Constants.Settings
