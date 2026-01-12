@@ -1,0 +1,119 @@
+using teamZaps.Backend;
+using teamZaps.Configuration;
+using teamZaps.Session;
+using teamZaps.Utils;
+
+namespace teamZaps.Backend;
+
+/// <summary>
+/// CoinCap exchange rate backend.
+/// </summary>
+/// <remarks>
+/// - CoinCap API only provides BTC prices in USD. For other currencies, we use static conversion rates.
+///   This means non-USD rates may be less accurate than services that provide native multi-currency support.
+/// </remarks>
+[BackendDescription("CoinCap")]
+// CONTRIBUTIONS ARE WELCOME:
+// If anyone would like to continue using this API backend, please feel free to implement and test
+// the [required API key](https://pro.coincap.io/api-docs).
+[Obsolete("This backend is deprecated hence they did not provide a free API anymore. Please use another exchange rate backend.")]
+public class CoinCapService : ExchangeRateService
+{
+    #region Constants.Settings
+    static readonly string ApiUrl = "https://api.coincap.io/v2/assets/bitcoin";
+    static readonly string ApiEuroUrl = "https://api.coincap.io/v2/rates/euro";
+    static readonly TimeSpan UpdatePeriod = TimeSpan.FromMinutes(3);
+    #endregion
+
+
+    public CoinCapService(ILogger<CoinCapService> logger, IHttpClientFactory httpClientFactory, SessionManager sessionManager)
+        : base(logger, httpClientFactory, sessionManager, UpdatePeriod)
+    {
+        // Configure HttpClient with proper headers
+        httpClient.DefaultRequestHeaders.Add("User-Agent", "TeamZaps/1.0");
+        httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
+    }
+
+
+    #region Events
+    protected override void OnFirstSessionCreated(object? sender, EventArgs e)
+    {
+        // Update EUR/USD rate when first session is created
+        InvokeUpdateFiatConversionRates();
+
+        base.OnFirstSessionCreated(sender, e);
+    }
+    #endregion
+
+
+    #region Initialization
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        // Update fiat rate on startup:
+        await UpdateFiatConversionRatesAsync(stoppingToken).ConfigureAwait(false);
+
+        await base.ExecuteAsync(stoppingToken).ConfigureAwait(false);
+    }
+    #endregion
+    #region Operation
+    private void InvokeUpdateFiatConversionRates() => Task.Run(() => UpdateFiatConversionRatesAsync(CancellationToken.None));
+    private async Task UpdateFiatConversionRatesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Fetch current EUR/USD rate from CoinCap
+            var response = await httpClient.GetStringAsync(ApiEuroUrl, cancellationToken).ConfigureAwait(false);
+            var jsonDoc = JsonSerializer.Deserialize<JsonElement>(response);
+            
+            if ((jsonDoc.TryGetProperty("data", out var data)) && (data.TryGetProperty("rateUsd", out var rateElement)))
+            {
+                var eurUsd = rateElement.GetDouble();
+                lock (usdConversionRates)
+                {
+                    usdConversionRates[PaymentCurrency.Euro] = eurUsd;
+                }
+                logger.LogDebug("Updated EUR/USD conversion rate to {Rate}", eurUsd);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to update EUR/USD conversion rate, using default");
+        }
+    }
+
+    protected override async Task<Dictionary<PaymentCurrency, double>> FetchRatesAsync(CancellationToken cancellationToken)
+    {
+        // Get BTC price in USD
+        var response = await httpClient.GetStringAsync(ApiUrl, cancellationToken).ConfigureAwait(false);
+        var jsonDoc = JsonSerializer.Deserialize<JsonElement>(response);
+        
+        if ((!jsonDoc.TryGetProperty("data", out var data)) || (!data.TryGetProperty("priceUsd", out var priceElement)))
+            throw new Exception("Failed to parse BTC price from CoinCap");
+        
+        var btcUsd = priceElement.GetDouble();
+        var rates = new Dictionary<PaymentCurrency, double>();
+
+        // Calculate BTC rates for all supported currencies using USD conversion rates
+        foreach (var currency in SupportedCurrencies)
+        {
+            double usdRate;
+            lock (usdConversionRates)
+            {
+                if (!usdConversionRates.TryGetValue(currency.Key, out usdRate))
+                {
+                    logger.LogWarning("No USD conversion rate found for currency '{Currency}'", currency.Key.GetDescription());
+                    continue;
+                }
+            }
+            
+            rates[currency.Key] = (btcUsd * usdRate);
+        }
+
+        return (rates);
+    }
+    #endregion
+    
+    
+    // CoinCap only provides USD rates, so we need known exchange rates for other currencies.
+    private static readonly Dictionary<PaymentCurrency, double> usdConversionRates = new();
+}

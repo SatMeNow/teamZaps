@@ -36,6 +36,12 @@ services:
       # - Backends__LNBits__LndhubUrl=${LNBITS_URL}
       # - Backends__LNBits__ApiKey=${LNBITS_API_KEY}
       
+      # Backend: CoinCap (Exchange Rates - Deprecated, requires API key)
+      # - Backends__CoinCap__ApiKey=${COINCAP_API_KEY}
+      
+      # Backend: CoinGecko (Exchange Rates - Deprecated, requires API key)
+      # - Backends__CoinGecko__ApiKey=${COINGECKO_API_KEY}
+      
     volumes:
       # Mount appsettings.json if you want to configure it from the host
       - ./appsettings.json:/app/appsettings.json
