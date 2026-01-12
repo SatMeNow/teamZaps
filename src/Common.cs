@@ -147,7 +147,7 @@ public static partial class Extensions
             amount += $" (inkl. {tipAmount.Format()} tip)";
         return (amount);
     }
-    public static string FormatFiatRate(this double source) => $"{source:F2} {Common.AcceptedFiatPerBitcoinSymbol}";
+    public static string FormatFiatRate(this double source) => $"{source:N2} {Common.AcceptedFiatPerBitcoinSymbol}"; // `1,234.56`
     public static string? FormatAmount(this IFormattableAmount source)
     {
         var sats = source.SatsAmount.Format();
@@ -174,9 +174,9 @@ public static partial class Extensions
             return (null);
         
         if (currency == PaymentCurrency.Sats)
-            return ($"{source:N0}{currency.ToSymbol()}");
+            return ($"{source:N0}{currency.ToSymbol()}"); // `1,234`
         else
-            return ($"{source:N2}{currency.ToSymbol()}");
+            return ($"{source:N2}{currency.ToSymbol()}"); // `1,234.56`
     }
     public static string Format(this BlockHeader source) => $"{source.FormatHeight()} ({source.LocalTime:g})"; // `31.10.2008 17:04`
     public static string FormatHeight(this BlockHeader source) => $"[{source.Height.ToString("N0")}](https://mempool.space/block/{source.Hash})";

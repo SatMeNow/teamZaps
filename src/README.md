@@ -80,8 +80,10 @@ Git
 Configure your bot commands in @BotFather using the `/setcommands` command:
 
 ```
-/about - About this bot
-/stat - Show personal statistics
+stat - Show personal statistics
+recover - Recover lost sats from interrupted sessions
+help - Show help and available commands
+about - About this bot
 ```
 
 ### Setup Steps

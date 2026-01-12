@@ -64,10 +64,13 @@ public partial class UpdateHandler
                     $"{BotGroupCommand.StartSession} - Start a new payment session (maybe for admins only)\n" +
                     $"{BotGroupCommand.CloseSession} - Close payments and start lottery (maybe for admins only)\n" +
                     $"{BotGroupCommand.CancelSession} - Cancel session (maybe for admins only)\n\n" +
+                    $"{BotGroupCommand.Statistics} - Show group statistics (may be restricted to admins)\n\n" +
+                    $"{BotGroupCommand.Config} - Configure group settings and bot behavior (admins only)\n\n" +
                     "*Private commands* (use in direct message with the bot):\n" +
-                    $"{BotGroupCommand.Status} - View session details (in group or private)\n" +
-                    $"{BotPmCommand.Recover} - Recover lost sats from interrupted sessions (private chat)\n" +
-                    $"{BotPmCommand.Help} - Show this help message\n\n" +
+                    $"{BotPmCommand.Statistics} - Show personal and server statistics\n" +
+                    $"{BotPmCommand.Recover} - Recover lost sats from interrupted sessions\n" +
+                    $"{BotPmCommand.Help} - Show this help message\n" +
+                    $"{BotPmCommand.About} - About this bot\n\n" +
                     "*How to participate:*\n" +
                     "1️⃣ Join the session using the button on the status message in the group\n" +
                     "2️⃣ Send payment amounts here in *private chat*\n" +
