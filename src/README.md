@@ -192,14 +192,14 @@ LNBits uses a traditional REST API for Lightning operations. Requires a running 
 
 #### Exchange Rate Backends
 
-**XXX Backend (Recommended)**
+**Yadio Backend (Recommended)**
 
-XXX provides free BTC exchange rate data for fiat currency support.
+Yadio provides free BTC exchange rate data for fiat currency support.
 
 ```json
 {
   "Backends": {
-    "XXX": { }
+    "Yadio": { }
   }
 }
 ```
@@ -208,6 +208,7 @@ XXX provides free BTC exchange rate data for fiat currency support.
 - No settings required - works out of the box
 - Automatically fetches fiat exchange rates
 - Used by lightning backends to support fiat currency invoices
+- Rate limit: 100 requests per minute
 
 ---
 
@@ -459,11 +460,12 @@ All backends must:
   - Features: Full Lightning operations with fiat currency support
 
 **Exchange Rate Backends:**
-- **XXX** - Free cryptocurrency price data (Recommended)
+- **Yadio** - Free cryptocurrency price data (Recommended)
   - Implements: `IExchangeRateBackend`
-  - Configuration: `Backends:XXX` section
-  - API: XXX API (no authentication required)
-  - Features: BTC/USD and BTC/EUR exchange rates
+  - Configuration: `Backends:Yadio` section (no settings required)
+  - API: Yadio.io API (no authentication required)
+  - Features: BTC/USD, BTC/EUR and other fiat currency exchange rates
+  - Rate limits: 100 requests per minute
   - Status: ✅ Active and maintained
 
 - **CoinCap** - Cryptocurrency price data (Deprecated)

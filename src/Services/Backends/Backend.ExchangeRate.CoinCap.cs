@@ -21,8 +21,14 @@ public class CoinCapService : ExchangeRateService
 {
     #region Constants.Settings
     static readonly string ApiUrl = "https://api.coincap.io/v2/assets/bitcoin";
-    static readonly string ApiEuroUrl = "https://api.coincap.io/v2/rates/euro";
     static readonly TimeSpan UpdatePeriod = TimeSpan.FromMinutes(3);
+
+    public override IReadOnlyDictionary<PaymentCurrency, string> SupportedCurrencyCodes { get; } = SupportedCurrencies.ToDictionary(c => c, c => c switch
+    {
+        PaymentCurrency.Euro => "euro",
+        PaymentCurrency.Dollar => "dollar",
+        _ => throw new NotSupportedException($"Currency {c} is not supported")
+    });
     #endregion
 
 
@@ -61,23 +67,38 @@ public class CoinCapService : ExchangeRateService
     {
         try
         {
-            // Fetch current EUR/USD rate from CoinCap
-            var response = await httpClient.GetStringAsync(ApiEuroUrl, cancellationToken).ConfigureAwait(false);
-            var jsonDoc = JsonSerializer.Deserialize<JsonElement>(response);
-            
-            if ((jsonDoc.TryGetProperty("data", out var data)) && (data.TryGetProperty("rateUsd", out var rateElement)))
+            // Fetch conversion rates for all non-USD currencies
+            foreach (var currency in SupportedCurrencies)
             {
-                var eurUsd = rateElement.GetDouble();
-                lock (usdConversionRates)
+                if (currency == PaymentCurrency.Dollar)
                 {
-                    usdConversionRates[PaymentCurrency.Euro] = eurUsd;
+                    // USD is the base currency, rate is always 1.0
+                    lock (usdConversionRates)
+                    {
+                        usdConversionRates[PaymentCurrency.Dollar] = 1.0;
+                    }
+                    continue;
                 }
-                logger.LogDebug("Updated EUR/USD conversion rate to {Rate}", eurUsd);
+
+                var apiCode = SupportedCurrencyCodes[currency];
+                var url = $"https://api.coincap.io/v2/rates/{apiCode}";
+                var response = await httpClient.GetStringAsync(url, cancellationToken).ConfigureAwait(false);
+                var jsonDoc = JsonSerializer.Deserialize<JsonElement>(response);
+                
+                if ((jsonDoc.TryGetProperty("data", out var data)) && (data.TryGetProperty("rateUsd", out var rateElement)))
+                {
+                    var conversionRate = rateElement.GetDouble();
+                    lock (usdConversionRates)
+                    {
+                        usdConversionRates[currency] = conversionRate;
+                    }
+                    logger.LogDebug("Updated {Currency}/USD conversion rate to {Rate}", currency, conversionRate);
+                }
             }
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to update EUR/USD conversion rate, using default");
+            logger.LogWarning(ex, "Failed to update conversion rates, using defaults");
         }
     }
 
@@ -99,14 +120,14 @@ public class CoinCapService : ExchangeRateService
             double usdRate;
             lock (usdConversionRates)
             {
-                if (!usdConversionRates.TryGetValue(currency.Key, out usdRate))
+                if (!usdConversionRates.TryGetValue(currency, out usdRate))
                 {
-                    logger.LogWarning("No USD conversion rate found for currency '{Currency}'", currency.Key.GetDescription());
+                    logger.LogWarning("No USD conversion rate found for currency '{Currency}'", currency.GetDescription());
                     continue;
                 }
             }
             
-            rates[currency.Key] = (btcUsd * usdRate);
+            rates[currency] = (btcUsd * usdRate);
         }
 
         return (rates);
