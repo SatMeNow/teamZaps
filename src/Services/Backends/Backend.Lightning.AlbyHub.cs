@@ -2,12 +2,12 @@ using System.Text.Json.Serialization;
 using NBitcoin;
 using NBitcoin.Secp256k1;
 using NNostr.Client;
-using teamZaps.Configuration;
-using teamZaps.Backend;
-using teamZaps.Communication;
-using teamZaps.Utils;
+using TeamZaps.Configuration;
+using TeamZaps.Backend;
+using TeamZaps.Communication;
+using TeamZaps.Utils;
 
-namespace teamZaps.Backend;
+namespace TeamZaps.Backend;
 
 /// <summary>
 /// AlbyHub Lightning backend implementation.

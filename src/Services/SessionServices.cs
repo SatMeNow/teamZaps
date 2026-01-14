@@ -1,12 +1,12 @@
 using Telegram.Bot.Types.ReplyMarkups;
-using teamZaps.Configuration;
+using TeamZaps.Configuration;
 using System.Diagnostics.CodeAnalysis;
 using System.Collections.Concurrent;
-using teamZaps.Services;
-using teamZaps.Backend;
-using teamZaps.Utils;
+using TeamZaps.Services;
+using TeamZaps.Backend;
+using TeamZaps.Utils;
 
-namespace teamZaps.Session;
+namespace TeamZaps.Session;
 
 public class SessionWorkflowService
 {

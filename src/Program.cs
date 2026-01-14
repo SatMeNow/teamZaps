@@ -1,15 +1,15 @@
-using teamZaps.Configuration;
-using teamZaps.Handlers;
-using teamZaps.Services;
-using teamZaps.Backend;
-using teamZaps.Session;
-using teamZaps.Utils;
+using TeamZaps.Configuration;
+using TeamZaps.Handlers;
+using TeamZaps.Services;
+using TeamZaps.Backend;
+using TeamZaps.Session;
+using TeamZaps.Utils;
 using Serilog;
 using System.Globalization;
-using teamZaps.Statistic;
-using teamZaps.Logging;
+using TeamZaps.Statistic;
+using TeamZaps.Logging;
 
-namespace teamZaps;
+namespace TeamZaps;
 
 public static class Program
 {

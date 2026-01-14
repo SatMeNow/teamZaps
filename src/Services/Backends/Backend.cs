@@ -1,9 +1,9 @@
 using System.ComponentModel;
 using NLightning.Bolt11.Models;
-using teamZaps.Configuration;
-using teamZaps.Utils;
+using TeamZaps.Configuration;
+using TeamZaps.Utils;
 
-namespace teamZaps.Backend;
+namespace TeamZaps.Backend;
 
 
 /// <summary>

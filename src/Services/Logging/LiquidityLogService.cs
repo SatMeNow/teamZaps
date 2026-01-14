@@ -1,11 +1,11 @@
 using System.ComponentModel;
 using System.Globalization;
-using teamZaps;
-using teamZaps.Configuration;
-using teamZaps.Session;
-using teamZaps.Utils;
+using TeamZaps;
+using TeamZaps.Configuration;
+using TeamZaps.Session;
+using TeamZaps.Utils;
 
-namespace teamZaps.Logging;
+namespace TeamZaps.Logging;
 
 public enum LogTag
 {

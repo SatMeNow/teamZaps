@@ -2,12 +2,12 @@ using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using teamZaps.Backend;
-using teamZaps.Services;
-using teamZaps.Session;
-using teamZaps.Utils;
+using TeamZaps.Backend;
+using TeamZaps.Services;
+using TeamZaps.Session;
+using TeamZaps.Utils;
 
-namespace teamZaps.Statistic;
+namespace TeamZaps.Statistic;
 
 public class StatisticService : IHostedService
 {

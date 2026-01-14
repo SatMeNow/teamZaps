@@ -1,9 +1,9 @@
 using System.Text;
-using teamZaps.Services;
-using teamZaps.Session;
-using teamZaps.Utils;
+using TeamZaps.Services;
+using TeamZaps.Session;
+using TeamZaps.Utils;
 
-namespace teamZaps.Helper;
+namespace TeamZaps.Helper;
 
 internal static partial class Ext
 {

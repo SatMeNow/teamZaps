@@ -4,14 +4,14 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Security.Cryptography;
-using teamZaps.Configuration;
-using teamZaps.Utils;
+using TeamZaps.Configuration;
+using TeamZaps.Utils;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.VisualBasic;
 using System.Diagnostics;
 using System.Net.Security;
 
-namespace teamZaps.Backend;
+namespace TeamZaps.Backend;
 
 
  public class ElectrumXClient : IBackendClient, IDisposable

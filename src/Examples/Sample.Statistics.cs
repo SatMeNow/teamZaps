@@ -1,9 +1,9 @@
 using System;
-using teamZaps.Statistic;
-using teamZaps.Session;
-using teamZaps.Backend;
+using TeamZaps.Statistic;
+using TeamZaps.Session;
+using TeamZaps.Backend;
 
-namespace teamZaps.Examples;
+namespace TeamZaps.Examples;
 
 /// <summary>
 /// Sample demonstrating how to invoke StatisticService with randomly generated sessions.

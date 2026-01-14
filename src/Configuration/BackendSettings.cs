@@ -1,4 +1,4 @@
-namespace teamZaps.Configuration;
+namespace TeamZaps.Configuration;
 
 public class ElectrumXSettings
 {

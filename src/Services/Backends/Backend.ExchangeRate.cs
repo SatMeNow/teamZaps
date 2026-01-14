@@ -1,11 +1,11 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using teamZaps.Backend;
-using teamZaps.Configuration;
-using teamZaps.Session;
-using teamZaps.Utils;
+using TeamZaps.Backend;
+using TeamZaps.Configuration;
+using TeamZaps.Session;
+using TeamZaps.Utils;
 
-namespace teamZaps.Backend;
+namespace TeamZaps.Backend;
 
 /// <summary>
 /// Base class for exchange rate backend services.

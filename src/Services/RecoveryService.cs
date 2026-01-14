@@ -2,13 +2,13 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Telegram.Bot;
-using teamZaps.Helper;
-using teamZaps.Session;
-using teamZaps.Utils;
-using teamZaps.Configuration;
-using teamZaps.Backend;
+using TeamZaps.Helper;
+using TeamZaps.Session;
+using TeamZaps.Utils;
+using TeamZaps.Configuration;
+using TeamZaps.Backend;
 
-namespace teamZaps.Services;
+namespace TeamZaps.Services;
 
 /// <summary>
 /// Service for managing lost sats recovery system for interrupted sessions.

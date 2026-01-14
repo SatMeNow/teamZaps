@@ -1,11 +1,11 @@
 using System.Diagnostics;
-using teamZaps.Configuration;
-using teamZaps.Services;
-using teamZaps.Backend;
-using teamZaps.Session;
-using teamZaps.Logging;
+using TeamZaps.Configuration;
+using TeamZaps.Services;
+using TeamZaps.Backend;
+using TeamZaps.Session;
+using TeamZaps.Logging;
 
-namespace teamZaps.Services;
+namespace TeamZaps.Services;
 
 public class PaymentMonitorService : BackgroundService
 {

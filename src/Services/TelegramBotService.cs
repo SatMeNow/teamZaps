@@ -1,11 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
-using teamZaps.Backend;
-using teamZaps.Handlers;
-using teamZaps.Logging;
-using teamZaps.Session;
-using teamZaps.Utils;
+using TeamZaps.Backend;
+using TeamZaps.Handlers;
+using TeamZaps.Logging;
+using TeamZaps.Session;
+using TeamZaps.Utils;
 
-namespace teamZaps.Services;
+namespace TeamZaps.Services;
 
 
 public interface IUserName

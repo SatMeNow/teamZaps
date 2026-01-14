@@ -1,7 +1,7 @@
-using teamZaps.Services;
-using teamZaps.Session;
+using TeamZaps.Services;
+using TeamZaps.Session;
 
-namespace teamZaps.Configuration;
+namespace TeamZaps.Configuration;
 
 [Storage("adminOpt", "chat_{0}.json")]
 public class BotAdminOptions

@@ -4,10 +4,10 @@ using System.Globalization;
 using System.Numerics;
 using System.Text.RegularExpressions;
 using Microsoft.VisualBasic;
-using teamZaps.Configuration;
-using teamZaps.Utils;
+using TeamZaps.Configuration;
+using TeamZaps.Utils;
 
-namespace teamZaps.Session;
+namespace TeamZaps.Session;
 
 public record PaymentToken : IFormattableAmount
 {

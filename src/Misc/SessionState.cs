@@ -1,14 +1,14 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Text;
-using teamZaps.Backend;
-using teamZaps.Configuration;
-using teamZaps.Services;
-using teamZaps.Statistic;
-using teamZaps.Utils;
+using TeamZaps.Backend;
+using TeamZaps.Configuration;
+using TeamZaps.Services;
+using TeamZaps.Statistic;
+using TeamZaps.Utils;
 using Telegram.Bot.Types;
 
-namespace teamZaps.Session;
+namespace TeamZaps.Session;
 
 
 public enum SessionPhase

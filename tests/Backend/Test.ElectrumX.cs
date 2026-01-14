@@ -2,10 +2,10 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
-using teamZaps.Backend;
-using teamZaps.Configuration;
+using TeamZaps.Backend;
+using TeamZaps.Configuration;
 
-namespace teamZaps.Tests.Backend;
+namespace TeamZaps.Tests.Backend;
 
 
 public abstract class ElectrumXTests : BackendUnitTest<ElectrumXService>

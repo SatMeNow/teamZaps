@@ -3,10 +3,10 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using teamZaps.Configuration;
-using teamZaps.Backend;
+using TeamZaps.Configuration;
+using TeamZaps.Backend;
 
-namespace teamZaps.Backend;
+namespace TeamZaps.Backend;
 
 [BackendDescription("LNBits")]
 public class LnbitsService : ILightningBackend
