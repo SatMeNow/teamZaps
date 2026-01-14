@@ -33,6 +33,7 @@ internal static class ServerStatisticsMessage
             message.AppendLine();
             message.AppendLine($"*Overall activity*");
             message.AppendLine($"• Total sessions: {stats.TotalSessions}");
+            message.AppendLine($"• Total groups: {stats.TotalGroups}");
             message.AppendLatestMonth("Sessions", stats.SessionsPerMonth);
             message.AppendMappedValue("First session", stats.StartedAtBlock!, statisticService);
             message.AppendLine($"• Total duration: {stats.Duration} blocks");
@@ -56,7 +57,7 @@ internal static class ServerStatisticsMessage
             message.AppendLatestMonth("Parallel sessions", stats.MaxParallelSessionsPerMonth);
         }
 
-        return message.ToString();
+        return (message.ToString());
     }
 }
 
@@ -149,7 +150,7 @@ internal static class GroupStatisticsMessage
             }
         }
 
-        return message.ToString();
+        return (message.ToString());
     }
 }
 
@@ -198,7 +199,20 @@ internal static class UserStatisticsMessage
         message.AppendLine($"• Avg sats/session: {statistic.SatsPerSession.Format()}");
         message.AppendLine($"• Avg sats/block: {statistic.SatsPerBlock.Format()}");
 
-        return message.ToString();
+        if (statistic.TotalLotteries > 0)
+        {
+            message.AppendLine();
+            message.AppendLine($"*Lottery statistics*");
+            message.AppendLine($"• Total lotteries: {statistic.TotalLotteries}");
+            message.AppendLine($"• Won: {statistic.WonLotteries}");
+            message.AppendLine($"• Lost: {statistic.LostLotteries}");
+            if (statistic.TotalWonSats > 0)
+                message.AppendLine($"• Total won sats: {((long)statistic.TotalWonSats).Format()}");
+            if (statistic.WonSatsPerSession > 0)
+                message.AppendLine($"• Avg won sats/session: {statistic.WonSatsPerSession.Format()}");
+        }
+
+        return (message.ToString());
     }
 }
 
