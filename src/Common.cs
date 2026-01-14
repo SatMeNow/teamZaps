@@ -1,10 +1,10 @@
 using System.ComponentModel;
 using System.Numerics;
-using teamZaps.Backend;
-using teamZaps.Configuration;
-using teamZaps.Utils;
+using TeamZaps.Backend;
+using TeamZaps.Configuration;
+using TeamZaps.Utils;
 
-namespace teamZaps;
+namespace TeamZaps;
 
 
 [AttributeUsage(AttributeTargets.Field, AllowMultiple = false)]

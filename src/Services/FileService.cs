@@ -1,7 +1,7 @@
 using System.ComponentModel;
-using teamZaps.Utils;
+using TeamZaps.Utils;
 
-namespace teamZaps.Services;
+namespace TeamZaps.Services;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
 public class StorageAttribute(string Folder, string FileFormat) : Attribute

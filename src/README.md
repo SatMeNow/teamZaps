@@ -821,7 +821,7 @@ dotnet run
       "Override": {
         "Microsoft": "Warning",
         "System": "Warning",
-        "teamZaps.Sessions.PaymentMonitorService": "Debug"
+        "TeamZaps.Sessions.PaymentMonitorService": "Debug"
       }
     }
   }

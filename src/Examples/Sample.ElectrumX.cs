@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using teamZaps.Backend;
-using teamZaps.Configuration;
+using TeamZaps.Backend;
+using TeamZaps.Configuration;
 
-namespace teamZaps.Examples;
+namespace TeamZaps.Examples;
 
 /// <summary>
 /// Example usage of the ElectrumX service to get current block time.

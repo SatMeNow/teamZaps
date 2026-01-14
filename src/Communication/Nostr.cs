@@ -12,7 +12,7 @@ using NBitcoin.Secp256k1;
 using NNostr.Client;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
-namespace teamZaps.Communication;
+namespace TeamZaps.Communication;
 
 public class NostrWalletConnector : IDisposable
 {

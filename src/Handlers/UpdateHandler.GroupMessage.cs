@@ -1,13 +1,13 @@
 using System.Diagnostics;
 using System.Text;
-using teamZaps.Configuration;
-using teamZaps.Helper;
-using teamZaps.Services;
-using teamZaps.Session;
-using teamZaps.Utils;
+using TeamZaps.Configuration;
+using TeamZaps.Helper;
+using TeamZaps.Services;
+using TeamZaps.Session;
+using TeamZaps.Utils;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace teamZaps.Handlers;
+namespace TeamZaps.Handlers;
 
 public partial class UpdateHandler
 {

@@ -1,13 +1,13 @@
 using System.Text;
-using teamZaps.Configuration;
-using teamZaps.Services;
-using teamZaps.Backend;
-using teamZaps.Session;
-using teamZaps.Utils;
-using teamZaps.Statistic;
-using teamZaps.Logging;
+using TeamZaps.Configuration;
+using TeamZaps.Services;
+using TeamZaps.Backend;
+using TeamZaps.Session;
+using TeamZaps.Utils;
+using TeamZaps.Statistic;
+using TeamZaps.Logging;
 
-namespace teamZaps.Handlers;
+namespace TeamZaps.Handlers;
 
 public partial class UpdateHandler : IUpdateHandler
 {

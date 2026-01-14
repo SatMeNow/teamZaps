@@ -1,11 +1,11 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using teamZaps.Backend;
-using teamZaps.Configuration;
-using teamZaps.Session;
-using teamZaps.Utils;
+using TeamZaps.Backend;
+using TeamZaps.Configuration;
+using TeamZaps.Session;
+using TeamZaps.Utils;
 
-namespace teamZaps.Backend;
+namespace TeamZaps.Backend;
 
 /// <summary>
 /// Yadio exchange rate backend.
