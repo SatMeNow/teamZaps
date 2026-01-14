@@ -120,6 +120,7 @@ public class StatisticService : IHostedService
         // Update metrics:
         stats.TotalParticipants = this.Participants;
         stats.TotalSessions++;
+        stats.TotalGroups = GroupStats.Count;
         stats.Duration += (ulong)session.Duration!.Value;
         stats.StartedAtBlock ??= new MappedValue<BlockHeader>(session.ChatId, session.StartedAtBlock!);
         stats.TotalSats += (ulong)session.SatsAmount;
@@ -184,6 +185,16 @@ public class StatisticService : IHostedService
         stats.StartedAtBlock ??= session.StartedAtBlock!;
         stats.TotalSats += (ulong)session.SatsAmount;
         stats.TotalTippedSats += (ulong)participant.Payments.Sum(p => p.TipAmount);
+        // Update lottery metrics:
+        if (session.LotteryParticipants.ContainsKey(userId))
+        {
+            stats.TotalLotteries++;
+            if (session.Winners.TryGetValue(userId, out var winnerInfo))
+            {
+                stats.WonLotteries++;
+                stats.TotalWonSats += (ulong)winnerInfo.SatsAmount;
+            }
+        }
 
         // Write updated statistics:
         userStats[userId] = stats;
@@ -193,7 +204,7 @@ public class StatisticService : IHostedService
     {
         this.GroupRanking = null;
         if (GroupStats.Count < GroupRankingStatistics.MinGroups)
-            return;
+            logger.LogInformation("Skip creating group ranking hence we have not enough groups.");
 
         // Create new statistics:
         this.GroupRanking = new()
@@ -275,6 +286,7 @@ public record MappedValue<T>(long GroupId, T Value)
 public record GeneralStatistics
 {
     public uint TotalSessions { set; get; }
+    public int TotalGroups { set; get; }
 
     /// <summary>
     /// Total duration of all sessions in blocks.
@@ -455,6 +467,29 @@ public record UserStatistics
     /// <inheritdoc cref="GeneralStatistics.SatsPerSession"/> 
     [JsonIgnore]
     public long SatsPerSession => (TotalSessions > 0) ? (long)(TotalSats / TotalSessions) : 0;
+
+    /// <summary>
+    /// Total number of lotteries participated in.
+    /// </summary>
+    public uint TotalLotteries { set; get; }
+    /// <summary>
+    /// Number of lotteries won.
+    /// </summary>
+    public uint WonLotteries { set; get; }
+    /// <summary>
+    /// Number of lotteries lost (calculated).
+    /// </summary>
+    [JsonIgnore]
+    public uint LostLotteries => (TotalLotteries - WonLotteries);
+    /// <summary>
+    /// Total amount of sats won from lotteries.
+    /// </summary>
+    public ulong TotalWonSats { set; get; }
+    /// <summary>
+    /// Average amount of won sats per session.
+    /// </summary>
+    [JsonIgnore]
+    public long WonSatsPerSession => (TotalSessions > 0) ? (long)(TotalWonSats / TotalSessions) : 0;
 }
 
 public struct GroupRankingStatistics
