@@ -30,6 +30,18 @@ public class BotAdminOptions
     #endregion
 }
 
+[Storage("userOpt", "user_{0}.json")]
+public class BotUserOptions
+{
+    #region Properties
+    /// <summary>
+    /// User's tip percentage preference.
+    /// </summary>
+    [JsonPropertyName("tip")]
+    public byte? Tip { get; set; }
+    #endregion
+}
+
 public class BotBehaviorOptions
 {
     #region Constants

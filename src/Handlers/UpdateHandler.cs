@@ -14,7 +14,7 @@ public partial class UpdateHandler : IUpdateHandler
     public UpdateHandler(
         ILogger<UpdateHandler> logger, IHostEnvironment hostEnvironment,
         IOptions<BotBehaviorOptions> botBehaviour, IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings,
-        FileService<BotAdminOptions> adminOptionsService, RecoveryService recoveryService,
+        FileService<BotAdminOptions> adminOptionsService, FileService<BotUserOptions> userOptionsService, RecoveryService recoveryService,
         LiquidityLogService liquidityLogService, SessionManager sessionManager, SessionWorkflowService workflowService, StatisticService statisticService,
         IEnumerable<IBackend> backends)
     {
@@ -26,6 +26,7 @@ public partial class UpdateHandler : IUpdateHandler
         this.telegramSettings = telegramSettings.Value;
 
         this.adminOptionsService = adminOptionsService;
+        this.userOptionsService = userOptionsService;
         this.recoveryService = recoveryService;
         
         this.liquidityLogService = liquidityLogService;
@@ -250,6 +251,7 @@ public partial class UpdateHandler : IUpdateHandler
     private readonly TelegramSettings telegramSettings;
 
     private readonly FileService<BotAdminOptions> adminOptionsService;
+    private readonly FileService<BotUserOptions> userOptionsService;
     private readonly RecoveryService recoveryService;
 
     private readonly LiquidityLogService liquidityLogService;

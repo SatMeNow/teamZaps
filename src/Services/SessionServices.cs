@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using TeamZaps.Services;
 using TeamZaps.Backend;
 using TeamZaps.Utils;
+using System.Diagnostics;
 
 namespace TeamZaps.Session;
 
@@ -29,10 +30,10 @@ public class SessionWorkflowService
         session = sessionManager.GetSessionByUser(userId);
         return (session is not null);
     }
-    public SessionState? TryStartSession(ChatFullInfo chat, CommandMessage command) => sessionManager.TryCreateSession(chat, command);
+    public Task<SessionState?> TryStartSessionAsync(ChatFullInfo chat, CommandMessage command) => sessionManager.TryCreateSessionAsync(chat, command);
     public bool TryCloseSession(long chatId, bool cancel) => sessionManager.RemoveSession(chatId, cancel);
 
-    public ParticipantState EnsureParticipant(SessionState session, User user) => sessionManager.GetOrAddParticipant(session, user);
+    public Task<ParticipantState> EnsureParticipantAsync(SessionState session, User user) => sessionManager.GetOrAddParticipantAsync(session, user);
 
 
     private readonly SessionManager sessionManager;
@@ -41,10 +42,11 @@ public class SessionWorkflowService
 
 public class SessionManager : IFormattableAmount
 {
-    public SessionManager(ILogger<SessionManager> logger, IOptions<BotBehaviorOptions> botBehaviour, RecoveryService recoveryService)
+    public SessionManager(ILogger<SessionManager> logger, IOptions<BotBehaviorOptions> botBehaviour, FileService<BotUserOptions> userOptionsService, RecoveryService recoveryService)
     {
         this.logger = logger;
         this.botBehaviour = botBehaviour.Value;
+        this.userOptionsService = userOptionsService;
         this.recoveryService = recoveryService;
     }
 
@@ -72,7 +74,7 @@ public class SessionManager : IFormattableAmount
 
 
     #region Management
-    public SessionState? TryCreateSession(ChatFullInfo chat, CommandMessage command)
+    public async Task<SessionState?> TryCreateSessionAsync(ChatFullInfo chat, CommandMessage command)
     {
         // Check if maximum parallel sessions limit is reached:
         if (botBehaviour.MaxParallelSessions is not null)
@@ -92,7 +94,7 @@ public class SessionManager : IFormattableAmount
 
         var user = command.From;
         var firstSession = sessions.IsEmpty();
-        var startedByUser = new ParticipantState(user);
+        var startedByUser = await CreateParticipantAsync(user).ConfigureAwait(false);
         
         var session = new SessionState
         {
@@ -139,15 +141,39 @@ public class SessionManager : IFormattableAmount
         }
         return (removed);
     }
-    public ParticipantState GetOrAddParticipant(SessionState session, User user) => session.Participants.GetOrAdd(user.Id, uid => new ParticipantState(user)
+    private async Task<ParticipantState> CreateParticipantAsync(User user)
     {
-        Tip = botBehaviour.TipChoices.Min() // Default to the lowest tip choice
-    });
+        // Load saved user options:
+        var userOptions = await userOptionsService.ReadAsync(user.Id).ConfigureAwait(false);
+        // Create default options if none exist:
+        if (userOptions is null)
+        {
+            userOptions = new BotUserOptions
+            {
+                Tip = botBehaviour.TipChoices.Min() // Default to the lowest tip choice
+            };
+        }
+
+        return (new ParticipantState(user, userOptions));
+    }
+    public async Task<ParticipantState> GetOrAddParticipantAsync(SessionState session, User user)
+    {
+        if (session.Participants.TryGetValue(user.Id, out var participant))
+            return (participant);
+        else
+        {
+            var newParticipant = await CreateParticipantAsync(user).ConfigureAwait(false);
+            if (!session.Participants.TryAdd(user.Id, newParticipant))
+                Debug.Assert(false);
+            return (newParticipant);
+        }
+    }
     #endregion
     
 
     private readonly ConcurrentDictionary<long, SessionState> sessions = new();
     private readonly BotBehaviorOptions botBehaviour;
+    private readonly FileService<BotUserOptions> userOptionsService;
     private readonly ILogger<SessionManager> logger;
     private readonly RecoveryService recoveryService;
 }

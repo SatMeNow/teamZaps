@@ -197,8 +197,8 @@ public partial class UpdateHandler
 
                 var grpAmount = (double)tokenGrp.Sum(tGrp => tGrp.Amount);
                 var tipAmount = 0.0;
-                if (participant.Tip > 0)
-                    tipAmount = ((grpAmount * participant.Tip!.Value) / 100.0);
+                if (participant.Options.Tip > 0)
+                    tipAmount = ((grpAmount * participant.Options.Tip!.Value) / 100.0);
                 var invoiceAmount = (grpAmount + tipAmount);
 
                 // Check if this payment would exceed the sessions's remaining budget
