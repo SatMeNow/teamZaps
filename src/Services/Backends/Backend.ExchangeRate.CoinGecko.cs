@@ -23,7 +23,7 @@ public class CoinGeckoService : ExchangeRateService
     {
         PaymentCurrency.Euro => "eur",
         PaymentCurrency.Dollar => "usd",
-        _ => throw new NotSupportedException($"Currency {c} is not supported")
+        _ => throw new NotSupportedException($"Currency {c} is not supported!")
     });
     #endregion
 

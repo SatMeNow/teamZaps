@@ -60,7 +60,7 @@ internal static class SessionStatusMessage
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to update pinned status message for session {Session}", session);
+            logger.LogWarning(ex, "Failed to update pinned status message for session {Session}.", session);
         }
         
         // Unpin status message
@@ -78,7 +78,7 @@ internal static class SessionStatusMessage
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to recreate status message for session {Session}", session);
+            logger.LogError(ex, "Failed to recreate status message for session {Session}.", session);
             session.StatusMessageId = null; // Clear invalid message ID
         }
     }
@@ -183,7 +183,7 @@ internal static class UserStatusMessage
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to send private status message to user {User}", participant);
+            logger.LogWarning(ex, "Failed to send private status message to user {User}.", participant);
             throw;
         }
     }
@@ -219,7 +219,7 @@ internal static class UserStatusMessage
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to update user status message for user {User}", participant);
+            logger.LogWarning(ex, "Failed to update user status message for user {User}.", participant);
         }
     }
     private static async Task RecreateAsync(SessionState session, ParticipantState participant, ITelegramBotClient botClient, SessionWorkflowService workflowService, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
@@ -227,11 +227,11 @@ internal static class UserStatusMessage
         try
         {
             await SendAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
-            logger.LogInformation("User status message recreated for user {User}", participant);
+            logger.LogInformation("User status message recreated for user {User}.", participant);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to recreate user status message for user {User}", participant);
+            logger.LogError(ex, "Failed to recreate user status message for user {User}.", participant);
             participant.StatusMessageId = null;
         }
     }

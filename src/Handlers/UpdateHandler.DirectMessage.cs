@@ -170,12 +170,14 @@ public partial class UpdateHandler
                     break;
 
                 default:
-                    throw new InvalidOperationException($"Payments are not available in current session phase: {session.Phase}")
-                        .AddLogLevel(LogLevel.Warning);
+                    throw new InvalidOperationException($"Payments are not available in current session phase '{session.Phase}'.")
+                        .AddLogLevel(LogLevel.Warning)
+                        .AnswerUser();
             }
         }
         
-        throw new NotImplementedException("Sorry, push the `payment` button for instructions or use `/help` for commands.");
+        throw new NotImplementedException("Sorry, push the `payment` button for instructions or use `/help` for commands.")
+            .AnswerUser();
     }
     private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, User user, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
     {
@@ -190,7 +192,8 @@ public partial class UpdateHandler
 
                 // Ensure invoice to be payed in Euro only
                 if (grpCurrency != BotBehaviorOptions.AcceptedFiatCurrency)
-                    throw new NotSupportedException($"Only {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()} payments are supported.");
+                    throw new NotSupportedException($"Only {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()} payments are supported.")
+                        .AnswerUser();
 
                 var grpAmount = (double)tokenGrp.Sum(tGrp => tGrp.Amount);
                 var tipAmount = 0.0;
@@ -207,7 +210,8 @@ public partial class UpdateHandler
                     throw new InvalidOperationException($"💸 Payment rejected!\n\n" +
                         $"Your payment of {invoiceAmount.Format()} would exceed the session's total budget.\n\n" +
                         $"Available budget: {remainingFiatAmount.Format()}")
-                        .AddLogLevel(LogLevel.Warning);
+                        .AddLogLevel(LogLevel.Warning)
+                        .AnswerUser();
 
                 try
                 {
@@ -234,23 +238,23 @@ public partial class UpdateHandler
                     var message = await PaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
                     pending.MessageId = message.MessageId;
 
-                    logger.LogInformation("Created invoice for user {User} in session {Session}: {InvoiceAmount}", user, session, invoiceAmount.Format(grpCurrency));
+                    logger.LogInformation("Created invoice for user {User} in session {Session}: {InvoiceAmount}.", user, session, invoiceAmount.Format(grpCurrency));
                 }
                 catch (Exception ex)
                 {
-                    throw new Exception($"Failed to create invoice for {invoiceAmount.Format(grpCurrency)}.", ex);
+                    throw new Exception($"Failed to create invoice for {invoiceAmount.Format(grpCurrency)}!", ex);
                 }
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error creating invoice for private payment");
+            logger.LogError(ex, "Error creating invoice for private payment.");
             await botClient.SendException(user, ex, cancellationToken).ConfigureAwait(false);
         }
     }
     private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, ParticipantState winnerUser, string bolt11, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Winner invoice submitted by {User} for session {Session}", winnerUser, session);
+        logger.LogInformation("Winner invoice submitted by {User} for session {Session}.", winnerUser, session);
 
         var winnerInfo = session.Winners[winnerUser];
 
@@ -292,7 +296,7 @@ public partial class UpdateHandler
                 // Clean up session
                 workflowService.TryCloseSession(session, false);
 
-                logger.LogInformation("Payout executed successfully by {User} for session {Session}", winnerUser, session);
+                logger.LogInformation("Payout executed successfully by {User} for session {Session}.", winnerUser, session);
             }
         
             await botClient.SendMessage(winnerUser.UserId,
@@ -313,7 +317,7 @@ public partial class UpdateHandler
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error executing payout by {User} for session {Session}", winnerUser, session);
+            logger.LogError(ex, "Error executing payout by {User} for session {Session}.", winnerUser, session);
             await botClient.SendMessage(session.ChatId, "❌ Error during payout. Please contact support.", cancellationToken: cancellationToken).ConfigureAwait(false);
         }
     }
@@ -449,16 +453,18 @@ public partial class UpdateHandler
         // Check if command is used in private chat
         var chat = await botClient.GetChat(command.ChatId, cancellationToken).ConfigureAwait(false);
         if (chat.Type != ChatType.Private)
-            throw new InvalidOperationException("The recover command is only available in private chat with the bot.\n\n" +
+            throw new InvalidOperationException("The recover command is only available in private chat with the bot.\n" +
                 "Please send me `/recover` as a direct message.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
 
         // Get lost sats for this user
         var lostSats = await recoveryService.TryGetLostSatsAsync(command.UserId).ConfigureAwait(false);
         if (lostSats is null)
-            throw new Exception("You *don't have any lost sats* to recover.\n\n" +
+            throw new Exception("You *don't have any lost sats* to recover.\n" +
                 "All your previous payments were successfully processed.")
-                .AddLogLevel(LogLevel.Information);
+                .AddLogLevel(LogLevel.Information)
+                .AnswerUser();
 
         // Show recoverable amount
         var message = new StringBuilder()
@@ -501,15 +507,16 @@ public partial class UpdateHandler
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            logger.LogInformation("Successfully processed recovery payment for user {User}: {SatsAmount} sats from {Timestamp}", user, expectedSats.Format(), lostSats.Timestamp);
+            logger.LogInformation("Successfully processed recovery payment for user {User}: {SatsAmount} sats from {Timestamp}.", user, expectedSats.Format(), lostSats.Timestamp);
         }
         else
         {
-            logger.LogError("Failed to process recovery payment for user {User}: {SatsAmount}", user, expectedSats.Format());
+            logger.LogError("Failed to process recovery payment for user {User}: {SatsAmount}.", user, expectedSats.Format());
                 
             throw new InvalidOperationException("Recovery payment failed!\n\n" +
                 "Unable to process your recovery invoice. Please try again later or contact support.")
-                .AddLogLevel(LogLevel.Error);
+                .AddLogLevel(LogLevel.Error)
+                .AnswerUser();
         }
     }
 
@@ -521,7 +528,8 @@ public partial class UpdateHandler
             throw new InvalidOperationException($"Invoice amount mismatch!\n\n" +
                 $"Expected: {expectedSats.Format()}\n" +
                 $"Your invoice: {invoiceSats.Format()}\n" +
-                "Please create a new invoice with the correct amount of sats.");
+                "Please create a new invoice with the correct amount of sats.")
+                .AnswerUser();
     }
     private async Task<bool> IsRootUserAsync(ITelegramBotClient botClient, CommandMessage command, CancellationToken cancellationToken)
     {
@@ -532,7 +540,8 @@ public partial class UpdateHandler
         // Check if command is used in private chat
         var chat = await botClient.GetChat(command.ChatId, cancellationToken).ConfigureAwait(false);
         if (chat.Type != ChatType.Private)
-            throw new InvalidOperationException("This command is only available in private chat with the bot.");
+            throw new InvalidOperationException("This command is only available in private chat with the bot!")
+                .AnswerUser();
 
         return (true);
     }

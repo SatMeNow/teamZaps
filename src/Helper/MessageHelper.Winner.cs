@@ -39,7 +39,7 @@ internal static class WinnerMessage
             (ex.Message.Contains("message to edit not found") || ex.Message.Contains("message can't be edited")))
         {
             // Message was deleted, no need to recreate winner messages
-            logger.LogInformation("Winner message deleted for session {Session}, skipping update", session);
+            logger.LogInformation("Winner message deleted for session {Session}, skipping update.", session);
         }
         catch (ApiRequestException ex) when (ex.Message.Contains("message is not modified"))
         {
@@ -47,13 +47,13 @@ internal static class WinnerMessage
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to update winner message for session {Session}", session);
+            logger.LogWarning(ex, "Failed to update winner message for session {Session}.", session);
         }
     }
     private static string Build(SessionState session, SessionWorkflowService workflowService, PaymentStatus status, IPaymentResponse? paymentResult = null)
     {
         if (session.Winners.Count == 0)
-            throw new InvalidOperationException("No winners available");
+            throw new InvalidOperationException("No winners available!");
 
         var message = new StringBuilder();
         switch (status)
@@ -93,7 +93,7 @@ internal static class WinnerMessage
                 break;
 
             default:
-                throw new InvalidEnumArgumentException($"Invalid payment status '{status.GetDescription()}' for winner message");
+                throw new InvalidEnumArgumentException($"Invalid payment status '{status.GetDescription()}' for winner message!");
         }
 
         return (message.ToString());

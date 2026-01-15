@@ -40,7 +40,7 @@ public class RecoveryService : BackgroundService
         await Task.Delay(InitTimeout).ConfigureAwait(false);
 
         // Schedule periodic scans:
-        logger.LogInformation("Recovery service starting periodic scans");
+        logger.LogInformation("Recovery service starting periodic scans.");
         using var timer = new PeriodicTimer(ScanPeriod);
         do
         {
@@ -86,7 +86,7 @@ public class RecoveryService : BackgroundService
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to record lost sats for user {User}", participant);
+            logger.LogError(ex, "Failed to record lost sats for user {User}.", participant);
         }
     }
     public Task ClearLostSatsAsync(long userId)
@@ -157,7 +157,7 @@ public class RecoveryService : BackgroundService
                 await botClient.SendMessage(record.UserId, message, 
                     parseMode: ParseMode.Markdown).ConfigureAwait(false);
                     
-                logger.LogInformation("Notified user {User} about {SatsAmount} of lost funds", record.DisplayName(), record.SatsAmount.Format());
+                logger.LogInformation("Notified user {User} about {SatsAmount} of lost funds.", record.DisplayName(), record.SatsAmount.Format());
                 
                 // Update the record with notification timestamp:
                 record.LastNotified = DateTimeOffset.Now;
@@ -165,7 +165,7 @@ public class RecoveryService : BackgroundService
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to notify user {User} about lost sats", record.DisplayName());
+                logger.LogError(ex, "Failed to notify user {User} about lost sats.", record.DisplayName());
             }
         }
     }

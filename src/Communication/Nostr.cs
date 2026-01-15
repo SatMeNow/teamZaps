@@ -23,7 +23,7 @@ public class NostrWalletConnector : IDisposable
         // Parse NWC connection string:
         var connectionUri = new Uri(connectionString);
         if (connectionUri.Scheme != "nostr+walletconnect")
-            throw new InvalidOperationException("Invalid NWC connection string. Must start with 'nostr+walletconnect://'");
+            throw new InvalidOperationException("Invalid NWC connection string. Must start with 'nostr+walletconnect://'!");
         this.walletPubkey = connectionUri.Host;
         this.walletPubkeyBytes = Convert.FromHexString(walletPubkey);
 
@@ -31,7 +31,7 @@ public class NostrWalletConnector : IDisposable
         var queryParams = ParseQueryString(connectionUri.Query);
         var secret = (queryParams.TryGetValue("secret", out var secretValue)) && (secretValue.Count > 0)
             ? secretValue[0]
-            : throw new InvalidOperationException("NWC connection string missing 'secret' parameter");
+            : throw new InvalidOperationException("NWC connection string missing 'secret' parameter!");
         this.clientPrivateKey = Context.Instance.CreateECPrivKey(Convert.FromHexString(secret));
         clientPublicKey = Convert.ToHexString(clientPrivateKey.CreateXOnlyPubKey().ToBytes()).ToLower();
 
@@ -41,7 +41,7 @@ public class NostrWalletConnector : IDisposable
         else if ((queryParams.TryGetValue("relay", out var relayValues)) && (relayValues.Count > 0))
             relayUrls = relayValues.ToArray();
         else
-            throw new InvalidOperationException("NWC connection string missing 'relay' parameter(s)");
+            throw new InvalidOperationException("NWC connection string missing 'relay' parameter(s)!");
 
         // Initialize Nostr client:
         this.Relays = relayUrls
@@ -207,7 +207,7 @@ public class NostrWalletConnector : IDisposable
 	{
 		var parts = encryptedContent.Split("?iv=");
 		if (parts.Length != 2)
-			throw new InvalidOperationException("Invalid encrypted content format");
+			throw new InvalidOperationException("Invalid encrypted content format!");
 
 		var ciphertext = Convert.FromBase64String(parts[0]);
 		var iv = Convert.FromBase64String(parts[1]);

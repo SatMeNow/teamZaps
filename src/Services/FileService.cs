@@ -38,7 +38,7 @@ public class FileService<T>
             if (!Directory.Exists(storagePath))
             {
                 Directory.CreateDirectory(storagePath);
-                logger.LogInformation("Created storage folder '{Directory}'", StorageTypes[storage].Folder);
+                logger.LogInformation("Created storage folder '{Directory}'.", StorageTypes[storage].Folder);
             }
         }
     }
@@ -73,7 +73,7 @@ public class FileService<T>
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to read dataset of type {Type} from file '{File}'", typeof(T).Name, filePath);
+            logger.LogError(ex, "Failed to read dataset of type {Type} from file '{File}'.", typeof(T).Name, filePath);
             return (default);
         }
     }
@@ -97,7 +97,7 @@ public class FileService<T>
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to read datasets of type {Type}", typeof(T).Name);
+            logger.LogError(ex, "Failed to read datasets of type {Type}.", typeof(T).Name);
         }
 
         return (records);
@@ -125,7 +125,7 @@ public class FileService<T>
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to delete dataset {Id} of type {Type}", id, typeof(T).Name);
+            logger.LogError(ex, "Failed to delete dataset {Id} of type {Type}.", id, typeof(T).Name);
         }
     }
     #endregion

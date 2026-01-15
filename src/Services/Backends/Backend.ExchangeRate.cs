@@ -106,14 +106,14 @@ public abstract class ExchangeRateService : BackgroundService, IDisposable, IExc
                 logger.LogWarning("Refreshed exchange rates, but accepted fiat currency rate was not found!");
             else if (firstUpdate)
             {
-                logger.LogInformation("Refreshed exchange rates");
-                logger.LogInformation("Will drop further logs as long as exchange rates are reliable");
+                logger.LogInformation("Refreshed exchange rates.");
+                logger.LogInformation("Will drop further logs as long as exchange rates are reliable.");
             }
         }
         catch (Exception ex)
         {
             FailedRequests++;
-            logger.LogError(ex, "Error refreshing exchange rates");
+            logger.LogError(ex, "Error refreshing exchange rates.");
         }
     }
 

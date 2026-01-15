@@ -80,7 +80,7 @@ public class SessionManager : IFormattableAmount
             var activeSessionCount = (uint)sessions.Count;
             if (activeSessionCount >= botBehaviour.MaxParallelSessions.Value)
             {
-                logger.LogWarning("Refused to create session: Limit of {Limit} parallel sessions reached", botBehaviour.MaxParallelSessions.Value);
+                logger.LogWarning("Refused to create session: Limit of {Limit} parallel sessions reached.", botBehaviour.MaxParallelSessions.Value);
                 throw new InvalidOperationException($"Sorry, we reached the server's capacity! All session slots are in use. Please try again later.");
             }
         }
@@ -105,7 +105,7 @@ public class SessionManager : IFormattableAmount
 
         if (sessions.TryAdd(chat.Id, session))
         {
-            logger.LogInformation("Session {Session} created by user {User}", session, user);
+            logger.LogInformation("Session {Session} created by user {User}.", session, user);
             if (firstSession)
                 OnFirstSessionCreated?.Invoke(this, EventArgs.Empty);
             return (session);
@@ -123,7 +123,7 @@ public class SessionManager : IFormattableAmount
         var removed = sessions.TryRemove(chatId, out var session);
         if (removed)
         {
-            logger.LogInformation("Session {Session} removed", session);
+            logger.LogInformation("Session {Session} removed.", session);
 
             if (session is not null)
             {
