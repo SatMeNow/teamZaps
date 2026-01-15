@@ -27,7 +27,7 @@ public class CoinCapService : ExchangeRateService
     {
         PaymentCurrency.Euro => "euro",
         PaymentCurrency.Dollar => "dollar",
-        _ => throw new NotSupportedException($"Currency {c} is not supported")
+        _ => throw new NotSupportedException($"Currency {c} is not supported!")
     });
     #endregion
 
@@ -92,13 +92,13 @@ public class CoinCapService : ExchangeRateService
                     {
                         usdConversionRates[currency] = conversionRate;
                     }
-                    logger.LogDebug("Updated {Currency}/USD conversion rate to {Rate}", currency, conversionRate);
+                    logger.LogDebug("Updated {Currency}/USD conversion rate to {Rate}.", currency, conversionRate);
                 }
             }
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to update conversion rates, using defaults");
+            logger.LogWarning(ex, "Failed to update conversion rates, using defaults.");
         }
     }
 
@@ -122,7 +122,7 @@ public class CoinCapService : ExchangeRateService
             {
                 if (!usdConversionRates.TryGetValue(currency, out usdRate))
                 {
-                    logger.LogWarning("No USD conversion rate found for currency '{Currency}'", currency.GetDescription());
+                    logger.LogWarning("No USD conversion rate found for currency '{Currency}'.", currency.GetDescription());
                     continue;
                 }
             }

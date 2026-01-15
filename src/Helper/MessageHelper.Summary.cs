@@ -27,11 +27,11 @@ internal static class SessionSummaryMessage
                     parseMode: ParseMode.Markdown,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
                     
-                logger.LogDebug("Summary message sent to winner {Winner} for session {Session}", winnerUser, session);
+                logger.LogDebug("Summary message sent to winner {Winner} for session {Session}.", winnerUser, session);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to send summary message to winner {Winner} for session {Session}", winnerUser, session);
+                logger.LogWarning(ex, "Failed to send summary message to winner {Winner} for session {Session}.", winnerUser, session);
             }
         }
     }

@@ -36,7 +36,8 @@ public partial class UpdateHandler
                 // Check permissions
                 if ((!adminOptions.AllowNonAdminStatistics) && (!await IsUserAdminAsync(botClient, chatId, command.From, cancellationToken).ConfigureAwait(false)))
                     throw new InvalidOperationException("Only group administrators can view statistics.")
-                        .AddLogLevel(LogLevel.Warning);
+                        .AddLogLevel(LogLevel.Warning)
+                        .AnswerUser();
                 
                 await GroupStatisticsMessage.SendAsync(botClient, statisticService, command.ChatId, cancellationToken).ConfigureAwait(false);
                 break;
@@ -53,7 +54,8 @@ public partial class UpdateHandler
     {
         var chat = await botClient.GetChat(command.ChatId).ConfigureAwait(false);
         if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
-            throw new InvalidOperationException("Sessions can only be started in group chats.");
+            throw new InvalidOperationException("Sessions can only be started in group chats!")
+                .AnswerUser();
 
         // Obtain block header at session start
         var currentBlock = await indexerBackend.GetCurrentBlockAsync(cancellationToken).ConfigureAwait(false);
@@ -65,7 +67,8 @@ public partial class UpdateHandler
         var allowNonAdminSessionStart = adminOptions?.AllowNonAdminSessionStart ?? false;
         if ((!allowNonAdminSessionStart) && (!await IsUserAdminAsync(botClient, command.ChatId, command.From, cancellationToken).ConfigureAwait(false)))
             throw new InvalidOperationException("Only group administrators can start a session.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
 
         var session = workflowService.TryStartSession(chat, command);
         if (session is not null)
@@ -79,23 +82,27 @@ public partial class UpdateHandler
         }
         else
             throw new InvalidOperationException("A session is already active in this group!")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
     }
     private async Task HandleCloseSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
         var session = workflowService.GetSessionByChat(chatId);
         if (session is null)
             throw new InvalidOperationException("No active session in this group.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
 
         // Check permissions
         if ((!session.AdminOptions.AllowNonAdminSessionClose) && (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false)))
             throw new InvalidOperationException("Only group administrators can close a session.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
 
         if (session.Phase > SessionPhase.AcceptingPayments)
             throw new InvalidOperationException("Session has already moved past the payment phase.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
 
         if (!session.HasPayments)
         {
@@ -120,7 +127,7 @@ public partial class UpdateHandler
             
             await WinnerMessage.SendAsync(session, botClient, workflowService, cancellationToken).ConfigureAwait(false);
 
-            logger.LogInformation("Winners selected for session {Session}: {Winners}", session, 
+            logger.LogInformation("Winners selected for session {Session}: {Winners}.", session, 
                 string.Join(", ", session.Winners.Select(w => $"{w.Key} ({w.Value.FiatAmount.Format()})")));
         }
         
@@ -143,7 +150,8 @@ public partial class UpdateHandler
         }
         else if ((!session.AdminOptions.AllowNonAdminSessionCancel) && (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false)))
             throw new InvalidOperationException("Only group administrators can cancel a session.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
 
         if (workflowService.TryCloseSession(chatId, true))
         {
@@ -154,22 +162,25 @@ public partial class UpdateHandler
                 await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
         
             await botClient.SendMessage(chatId, "❌ Session has been cancelled and removed.", cancellationToken: cancellationToken).ConfigureAwait(false);
-            logger.LogInformation("Session {Session} cancelled by user {User}", session, user);
+            logger.LogInformation("Session {Session} cancelled by user {User}.", session, user);
         }
         else
             throw new InvalidOperationException("No active session to close.")
-                .AddLogLevel(LogLevel.Warning);   
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();   
     }
     private async Task HandleJoinSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
         var session = workflowService.GetSessionByChat(chatId);
         if (session is null || session.Phase > SessionPhase.AcceptingPayments)
             throw new InvalidOperationException("Session is not currently accepting new participants.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
 
         // Check if user is already a participant in this session
         if (session.Participants.ContainsKey(user.Id))
-            throw new InvalidOperationException($"You're already part of this session!");
+            throw new InvalidOperationException("You're already part of this session!")
+                .AnswerUser();
 
         // Check for lost sats of this user
         var lostSats = await recoveryService.TryGetLostSatsAsync(user.Id).ConfigureAwait(false);
@@ -180,7 +191,8 @@ public partial class UpdateHandler
                 .AppendLine("\nℹ️ You need to *recover your lost sats before joining* a new session.")
                 .ToString();
             throw new Exception(message)
-                .AddLogLevel(LogLevel.None);
+                .AddLogLevel(LogLevel.None)
+                .AnswerUser();
         }
 
         // Check if user is already participating in another session
@@ -190,7 +202,8 @@ public partial class UpdateHandler
             var existingChat = await botClient.GetChat(existingSession.ChatId, cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException($"You're already participating in a session in *{existingChat.Title}*!\n\n" +
                 "You can only join one session at a time. Please complete your current session first.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
         }
 
         // Send private status message
@@ -221,7 +234,7 @@ public partial class UpdateHandler
         // Update the pinned status message
         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
 
-        logger.LogInformation("User {User} joined session in chat {ChatId}", user, chatId);
+        logger.LogInformation("User {User} joined session in chat {ChatId}.", user, chatId);
     }
 
     private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, User user, double budget, CancellationToken cancellationToken)
@@ -229,12 +242,14 @@ public partial class UpdateHandler
         var session = workflowService.GetSessionByUser(user.Id);
         if (session is null)
             throw new InvalidOperationException("No active session found.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
         var participant = session.Participants[user.Id];
 
         // Check if user already joined
         if (session.LotteryParticipants.ContainsKey(user.Id))
-            throw new InvalidOperationException($"You've already entered the lottery!");
+            throw new InvalidOperationException("You've already entered the lottery.")
+                .AnswerUser();
 
         // Check server-wide budget limit
         if (!CheckServerBudgetLimit(budget))
@@ -248,7 +263,8 @@ public partial class UpdateHandler
             else
                 message += $"Currently, no budgets are available to join the lottery. Please try again later.";
             throw new IndexOutOfRangeException(message)
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
         }
 
         // Add user to lottery with budget
@@ -258,10 +274,10 @@ public partial class UpdateHandler
         if (session.Phase == SessionPhase.WaitingForLotteryParticipants)
         {
             session.Phase = SessionPhase.AcceptingPayments;
-            logger.LogInformation("First lottery participant {User} in chat {ChatId}, payments unlocked", user, chatId);
+            logger.LogInformation("First lottery participant {User} in chat {ChatId}, payments unlocked.", user, chatId);
         }
         else
-            logger.LogInformation("User {User} joined lottery in chat {ChatId} with {Budget} budget", user, chatId, budget.Format());
+            logger.LogInformation("User {User} joined lottery in chat {ChatId} with {Budget} budget.", user, chatId, budget.Format());
         
         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
         
@@ -274,10 +290,12 @@ public partial class UpdateHandler
         var session = workflowService.GetSessionByUser(user.Id);
         if (session is null)
             throw new InvalidOperationException("No active session found.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
         var participant = session.Participants[user.Id];
         if (session.LotteryParticipants.ContainsKey(user.Id))
-            throw new InvalidOperationException($"You've already entered the lottery!");
+            throw new InvalidOperationException("You've already entered the lottery!")
+                .AnswerUser();
 
         if (await DeleteMessageAsync(botClient, chatId, participant.BudgetSelectionMessageId, cancellationToken).ConfigureAwait(false))
             participant.BudgetSelectionMessageId = null;
@@ -319,10 +337,12 @@ public partial class UpdateHandler
         var session = workflowService.GetSessionByUser(userId);
         if (session is null)
             throw new InvalidOperationException("No active session found.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
         if ((!session.AdminOptions.AllowNonAdminSessionClose) && (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false)))
             throw new InvalidOperationException("Only group administrators can close a session.")
-                .AddLogLevel(LogLevel.Warning);        
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();        
         var keyboard = new InlineKeyboardMarkup(botBehaviour.TipChoices
             .Prepend((byte)0)
             .Select(t => InlineKeyboardButton.WithCallbackData(t.FormatTip(), $"{CallbackActions.SelectTip}_{t}"))
@@ -347,7 +367,8 @@ public partial class UpdateHandler
         var session = workflowService.GetSessionByUser(user.Id);
         if (session is null)
             throw new InvalidOperationException($"No active session found.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
         var participant = session.Participants[user.Id];
         
         // Delete the tip selection message
@@ -370,7 +391,8 @@ public partial class UpdateHandler
     {
         var session = workflowService.GetSessionByChat(chatId);
         if (session is null)
-            throw new InvalidOperationException($"No active session in this group.\n\nUse {BotGroupCommand.StartSession} to start one!");
+            throw new InvalidOperationException($"No active session in this group.\n\nUse {BotGroupCommand.StartSession} to start one!")
+                .AnswerUser();
 
         // Delete previous message (should exist, but we don't really know):
         if (session.StatusMessageId is not null)
@@ -388,7 +410,8 @@ public partial class UpdateHandler
         // Check if user is admin
         if (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false))
             throw new InvalidOperationException("Only group administrators can change settings.")
-                .AddLogLevel(LogLevel.Warning);
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
 
         var session = workflowService.GetSessionByChat(chatId);
         var options = await GetAdminOptions(session, chatId).ConfigureAwait(false);
@@ -405,7 +428,8 @@ public partial class UpdateHandler
     private async Task HandleSetOptionsAsync(ITelegramBotClient botClient, CallbackQuery query, CancellationToken cancellationToken)
     {
         if (!configMessageMap.TryGetValue(query.Message!.MessageId, out var groupChatId))
-            throw new InvalidOperationException($"Sorry, can't associate config message with group. Please run `{BotGroupCommand.Config}` again.");
+            throw new InvalidOperationException($"Sorry, can't associate config message with group. Please run `{BotGroupCommand.Config}` again.")
+                .AnswerUser();
             
         var chatId = query.Message!.Chat.Id;
         var chatTitle = query.Message!.Chat.Title!;

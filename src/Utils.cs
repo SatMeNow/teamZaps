@@ -341,10 +341,15 @@ namespace TeamZaps.Utils
             source.Data.Add(key, value);
             return (source);
         }
+        /// <summary>
+        /// Adds help information to the exception data if not already present.
+        /// </summary>
         public static T AddHelp<T>(this T source, object? value)
             where T : Exception
         {
-            return (AddData<T>(source, "help", value));
+            if (!source.Data.Contains("help"))
+                AddData<T>(source, "help", value);
+            return (source);
         }
         public static T AddLogLevel<T>(this T source, LogLevel level)
             where T : Exception

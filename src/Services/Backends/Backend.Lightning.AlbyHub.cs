@@ -22,7 +22,7 @@ public class AlbyHubService : ILightningBackend, IDisposable
         this.exchangeRateBackend = exchangeRateBackend;
         this.nostr = new NostrWalletConnector(loggerFactory, settings.Value.ConnectionString, settings.Value.RelayUrls);
 
-        logger.LogInformation("AlbyHub initialized with wallet {WalletPubkey} and {RelayCount} relay(s)", $"{nostr.Pubkey[..8]}...", nostr.Relays.Length);
+        logger.LogInformation("AlbyHub initialized with wallet {WalletPubkey} and {RelayCount} relay(s).", $"{nostr.Pubkey[..8]}...", nostr.Relays.Length);
     }
 
 
@@ -55,7 +55,7 @@ public class AlbyHubService : ILightningBackend, IDisposable
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting wallet balance");
+            logger.LogError(ex, "Error getting wallet balance.");
         }
         return (null);
     }
@@ -89,7 +89,7 @@ public class AlbyHubService : ILightningBackend, IDisposable
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error creating invoice");
+            logger.LogError(ex, "Error creating invoice.");
         }
         return (null);
     }
@@ -114,7 +114,7 @@ public class AlbyHubService : ILightningBackend, IDisposable
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error paying invoice");
+            logger.LogError(ex, "Error paying invoice.");
         }
         return (null);
     }
@@ -145,7 +145,7 @@ public class AlbyHubService : ILightningBackend, IDisposable
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error checking payment status");
+            logger.LogError(ex, "Error checking payment status.");
         }
         return (null);
     }

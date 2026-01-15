@@ -31,7 +31,7 @@ public class PaymentMonitorService : BackgroundService
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error during payment monitoring loop");
+                logger.LogError(ex, "Error during payment monitoring loop.");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
@@ -114,7 +114,7 @@ public class PaymentMonitorService : BackgroundService
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Error checking payment status for {PaymentHash}", pending.PaymentHash);
+                    logger.LogError(ex, "Error checking payment status for {PaymentHash}.", pending.PaymentHash);
                 }
             }
         }

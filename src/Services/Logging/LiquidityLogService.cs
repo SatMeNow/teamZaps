@@ -70,11 +70,11 @@ public class LiquidityLogService : IHostedService
         }
         catch (IOException ex) when (ex.Message.Contains("being used by another process"))
         {
-            logger.LogWarning("Cannot write to liquidity log (file opened in another application)");
+            logger.LogWarning("Cannot write to liquidity log (file opened in another application).");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error writing liquidity log");
+            logger.LogError(ex, "Error writing liquidity log.");
         }
         finally
         {

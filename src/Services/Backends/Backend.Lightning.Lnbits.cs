@@ -144,7 +144,7 @@ public class LnbitsService : ILightningBackend
             sendRsp.EnsureSuccessStatusCode();
 
             var readRsp = await sendRsp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            logger.LogDebug("Lnbits Response for {Method} '{RequestUri}': {Response}", method, requestUri, readRsp);
+            logger.LogDebug("Lnbits Response for {Method} '{RequestUri}': {Response}.", method, requestUri, readRsp);
             var result = JsonSerializer.Deserialize<T>(readRsp);
             if (result is null)
                 throw new NullReferenceException("Failed to deserialize Lnbits response!");

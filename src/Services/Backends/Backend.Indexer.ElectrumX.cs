@@ -27,7 +27,7 @@ namespace TeamZaps.Backend;
     internal ElectrumXClient(ILogger logger, string host, ElectrumXSettings settings)
     {
         if (string.IsNullOrWhiteSpace(host))
-            throw new ArgumentException("Failed to create client for unspecified host", nameof(host));
+            throw new ArgumentException("Failed to create client for unspecified host!", nameof(host));
 
         this.logger = logger;
         this.ValidateCertificate = settings.ValidateSslCertificate;
@@ -54,7 +54,7 @@ namespace TeamZaps.Backend;
             if (!UseSsl)
                 return (Client.GetStream());
             else if (sslStream is null)
-                throw new InvalidOperationException("SSL stream not initialized");
+                throw new InvalidOperationException("SSL stream not initialized!");
             else
                 return (sslStream);
         }
@@ -161,7 +161,7 @@ namespace TeamZaps.Backend;
                 {
                     var bytesRead = await Stream.ReadAsync(buffer, linkedCts.Token).ConfigureAwait(false);
                     if (bytesRead == 0)
-                        throw new IOException("Connection closed by server");
+                        throw new IOException("Connection closed by server!");
 
                     var chunk = Encoding.UTF8.GetString(buffer, 0, bytesRead);
                     responseBuilder.Append(chunk);
@@ -240,9 +240,9 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
         if (Hosts.IsEmpty())
             throw new InvalidOperationException("No ElectrumX hosts configured!");
         else if (Hosts.Count == 1)
-            logger.LogInformation("ElectrumX initialized with '{Host}'", Hosts.First());
+            logger.LogInformation("ElectrumX initialized with '{Host}'.", Hosts.First());
         else
-            logger.LogInformation("ElectrumX initialized with {Count} hosts", Hosts.Count);
+            logger.LogInformation("ElectrumX initialized with {Count} hosts.", Hosts.Count);
     }
 
 
@@ -267,7 +267,7 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
             try
             {
                 var features = await host.GetServerFeaturesAsync(stoppingToken).ConfigureAwait(false);
-                logger.LogDebug("Established connection to ElectrumX server '{Host}' ({Features})", host, features);
+                logger.LogDebug("Established connection to ElectrumX server '{Host}' ({Features}).", host, features);
             }
             catch (Exception ex)
             {
@@ -410,9 +410,9 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
                         .AddLogLevel(LogLevel.Critical);
 
                 if (LastBlock?.Height == currentBlock.Height)
-                    logger.LogInformation("Keep using last block {Height}", currentBlock.Height);
+                    logger.LogInformation("Keep using last block {Height}.", currentBlock.Height);
                 else
-                    logger.LogInformation("Received new block {Height}", currentBlock.Height);
+                    logger.LogInformation("Received new block {Height}.", currentBlock.Height);
 
                 return (this.LastBlock = currentBlock);
             }).ConfigureAwait(false));
@@ -537,7 +537,7 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
     private static DateTimeOffset ParseBlockTime(byte[] headerBytes)
     {
         if (headerBytes.Length < 80)
-            throw new ArgumentException("Invalid block header length", nameof(headerBytes));
+            throw new ArgumentException("Invalid block header length!", nameof(headerBytes));
 
         // Timestamp is at bytes 68-71 (little-endian)
         var timestampBytes = headerBytes[68..72];
@@ -548,7 +548,7 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
     private static string ComputeBlockHash(byte[] headerBytes)
     {
         if (headerBytes.Length < 80)
-            throw new ArgumentException("Invalid block header length", nameof(headerBytes));
+            throw new ArgumentException("Invalid block header length!", nameof(headerBytes));
 
         var first = SHA256.HashData(headerBytes);
         var second = SHA256.HashData(first);

@@ -24,7 +24,7 @@ public class YadioService : ExchangeRateService
     {
         PaymentCurrency.Euro => "EUR",
         PaymentCurrency.Dollar => "USD",
-        _ => throw new NotSupportedException($"Currency {c} is not supported")
+        _ => throw new NotSupportedException($"Currency {c} is not supported!")
     });
     #endregion
 

@@ -102,11 +102,11 @@ public class TelegramBotService : BackgroundService
             _ = Task.Run(() => botClient.ReceiveAsync(updateHandler, receiverOptions, stoppingToken));
 
             this.Ready = true;
-            logger.LogInformation("Bot {BotUsername} initialized successfully", me);
+            logger.LogInformation("Bot {BotUsername} initialized successfully.", me);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error starting bot");
+            logger.LogError(ex, "Error starting bot.");
             throw;
         }
     }

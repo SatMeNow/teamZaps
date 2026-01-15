@@ -88,13 +88,9 @@ public partial class UpdateHandler : IUpdateHandler
     {
         string errorMessage;
         if (exception is ApiRequestException apiRequestException)
-        {
             errorMessage = $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}";
-        }
         else
-        {
             errorMessage = exception.ToString();
-        }
 
         logger.LogError("HandleError: {ErrorMessage}", errorMessage);
         return Task.CompletedTask;
@@ -226,7 +222,7 @@ public partial class UpdateHandler : IUpdateHandler
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to delete message {MessageId}", messageId);
+            logger.LogWarning(ex, "Failed to delete message {MessageId}.", messageId);
         }
         return (true);
     }

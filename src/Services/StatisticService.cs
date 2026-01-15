@@ -48,7 +48,7 @@ public class StatisticService : IHostedService
     #region Initialization
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        logger.LogInformation("Loading statistics");
+        logger.LogInformation("Loading statistics.");
         try
         {
             this.userStats = (await userStatsFile.ReadAllAsync().ConfigureAwait(false))
@@ -85,7 +85,7 @@ public class StatisticService : IHostedService
 
         if (!session.IsValid)
         {
-            logger.LogError("Cannot update statistics for invalid session {Session}!", session);
+            logger.LogError("Cannot update statistics for invalid session {Session}.", session);
             return (false);
         }
 
@@ -104,7 +104,7 @@ public class StatisticService : IHostedService
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to update statistics for session {Session}", session);
+            logger.LogError(ex, "Failed to update statistics for session {Session}.", session);
             return (false);
         }
         finally
