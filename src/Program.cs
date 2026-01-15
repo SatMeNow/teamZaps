@@ -33,10 +33,17 @@ public static class Program
         Host.CreateDefaultBuilder(args)
             .UseSerilog((hostingContext, services, loggerConfiguration) =>
             {
+                const string LogTemplate = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}";
                 loggerConfiguration
                     .ReadFrom.Configuration(hostingContext.Configuration)
                     .Enrich.FromLogContext()
-                    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}");
+                    .WriteTo.Console(outputTemplate: LogTemplate)
+                    .WriteTo.Map(
+                        keySelector: _ => DateTime.Now.Year,
+                        configure: (year, wt) => wt.File(
+                            path: Path.Combine(Common.LogPath, year.ToString(), "log-.txt"),
+                            rollingInterval: RollingInterval.Day,
+                            outputTemplate: LogTemplate));
             })
             .ConfigureAppConfiguration((hostingContext, config) =>
             {
