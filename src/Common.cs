@@ -194,3 +194,21 @@ public static partial class Extensions
     public static double WeeksToBlocks(this int weeks) => (weeks.DaysToBlocks() * 7.0);
     public static double MonthsToBlocks(this int months) => (months.DaysToBlocks() * 30.0);
 }
+
+internal static partial class Ext
+{
+    /// <summary>
+    /// Tags an exception as answer to the user.
+    /// </summary>
+    /// <remarks>
+    /// No need to append callstack as it is intended to be shown to the user.
+    /// </remarks>
+    public static T AnswerUser<T>(this T source)
+        where T : Exception
+    {
+        return (source.AddData<T>(nameof(AnswerUser), null));
+    }
+    public static bool IsUserAnswer(this Exception source) => source
+        .Enumerate()
+        .Any(ex => ex.Data.Contains(nameof(AnswerUser)));
+}

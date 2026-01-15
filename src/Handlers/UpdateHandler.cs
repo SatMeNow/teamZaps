@@ -40,24 +40,48 @@ public partial class UpdateHandler : IUpdateHandler
     }
 
 
-    public Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+    public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
     {
+        long? chatId = null;
         try
         {
             switch (update.Type)
             {
-                case UpdateType.Message: return (HandleMessageAsync(botClient, update.Message!, cancellationToken));
-                case UpdateType.CallbackQuery: return (HandleCallbackQueryAsync(botClient, update.CallbackQuery!, cancellationToken));
+                case UpdateType.Message:
+                    chatId = update.Message!.Chat.Id;
+                    await HandleMessageAsync(botClient, update.Message!, cancellationToken).ConfigureAwait(false);
+                    break;
+                case UpdateType.CallbackQuery:
+                    chatId = update.CallbackQuery!.Message!.Chat.Id;
+                    await HandleCallbackQueryAsync(botClient, update.CallbackQuery!, cancellationToken).ConfigureAwait(false);
+                    break;
 
                 default:
-                    logger.LogInformation("Received update of not implemented type '{UpdateType}'", update.Type);
-                    return (Task.CompletedTask);
+                    throw new NotImplementedException($"Received update of not implemented type '{update.Type}'!");
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error handling update");
-            return (Task.FromException(ex));
+            var isAnswer = ex.IsUserAnswer();
+            var logMessage = $"Failed to handle update of type '{update.Type}':";
+            var logEx = ex;
+            if (isAnswer)
+            {
+                // Prevent logging the whole call-stack if we just answer the user:
+                logEx = null;
+                logMessage += "\n" + string.Join("\n", ex
+                    .Enumerate()
+                    .Select(ex => $"> {ex.Message}"));
+            }
+            logger.LogError(logEx, logMessage);
+
+            if (chatId is not null)
+            {
+                if (!isAnswer)
+                    // Add help since this response will be caused by an unexpected error:
+                    ex.AddHelp($"Use {BotPmCommand.Help} to see available commands.");
+                await botClient.SendException(chatId!.Value, ex, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
     public Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, HandleErrorSource source, CancellationToken cancellationToken)
@@ -76,54 +100,38 @@ public partial class UpdateHandler : IUpdateHandler
         return Task.CompletedTask;
     }
 
-    private async Task<bool> HandleMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
+    private async Task HandleMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
     {
-        var chatId = message.Chat.Id;
         #if DEBUG
-        logger.LogInformation("Received message from {User} in chat {ChatId}: {MessageText}", message.From, chatId, message.Text);
+        logger.LogInformation("Received message from {User} in chat {ChatId}: {MessageText}.", message.From, message.Chat.Id, message.Text);
         #endif
         
         var res = true;
         var isCmd = message.TryGetCommand(out var cmd);
-        try
+        switch (message.Chat.Type)
         {
-            switch (message.Chat.Type)
-            {
-                case ChatType.Private:
-                    if (isCmd)
-                        res = await HandleDirectCommandAsync(botClient, cmd!.Value, cancellationToken).ConfigureAwait(false);
-                    else
-                        res = await HandleDirectMessageAsync(botClient, message, cancellationToken).ConfigureAwait(false);
-                    break;
+            case ChatType.Private:
+                if (isCmd)
+                    res = await HandleDirectCommandAsync(botClient, cmd!.Value, cancellationToken).ConfigureAwait(false);
+                else
+                    res = await HandleDirectMessageAsync(botClient, message, cancellationToken).ConfigureAwait(false);
+                break;
 
-                case ChatType.Group:
-                case ChatType.Supergroup:
-                    if (isCmd)
-                        res = await HandleGroupCommandAsync(botClient, cmd!.Value, cancellationToken).ConfigureAwait(false);
-                    else
-                        res = true; // Just ignore regular group messages.
-                    break;
-            }
+            case ChatType.Group:
+            case ChatType.Supergroup:
+                if (isCmd)
+                    res = await HandleGroupCommandAsync(botClient, cmd!.Value, cancellationToken).ConfigureAwait(false);
+                else
+                    res = true; // Just ignore regular group messages.
+                break;
+        }
             
-            if (res)
-                ; // Succeeded.
-            else if (isCmd)
-                throw new ArgumentException("Unknown command!");
-            else
-                throw new Exception("Unable to process message!");
-        }
-        catch (Exception ex)
-        {
-            res = false;
-            if (isCmd)
-                logger.LogError(ex, "Error handling command {Command}", cmd);
-            else
-                logger.LogError(ex, "Error handling message");
-
-            await botClient.SendException(chatId, ex.AddHelp($"Use {BotPmCommand.Help} to see available commands."), cancellationToken).ConfigureAwait(false);
-        }
-        
-        return (res);
+        if (res)
+            ; // Succeeded.
+        else if (isCmd)
+            throw new ArgumentException("Error handling unknown command!");
+        else
+            throw new Exception("Unable to process message!");
     }
 
     private async Task HandleCallbackQueryAsync(ITelegramBotClient botClient, CallbackQuery query, CancellationToken cancellationToken)
@@ -136,81 +144,72 @@ public partial class UpdateHandler : IUpdateHandler
 
         var data = query.Data!.Split("_");
         var action = data.First();
-        try
+        await botClient.AnswerCallbackQuery(query.Id, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        switch (action)
         {
-            await botClient.AnswerCallbackQuery(query.Id, cancellationToken: cancellationToken).ConfigureAwait(false);
+            case CallbackActions.JoinLottery:
+                #if DEBUG
+                // [Debug] Join lottery instant with fix budget
+                if (debugSettings.FixBudget is not null)
+                {
+                    await HandleJoinLotteryWithBudgetAsync(botClient, chatId, query.From!, debugSettings.FixBudget.Value, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                #endif
 
-            switch (action)
-            {
-                case CallbackActions.JoinLottery:
-                    #if DEBUG
-                    // [Debug] Join lottery instant with fix budget
-                    if (debugSettings.FixBudget is not null)
-                    {
-                        await HandleJoinLotteryWithBudgetAsync(botClient, chatId, query.From!, debugSettings.FixBudget.Value, cancellationToken).ConfigureAwait(false);
-                        return;
-                    }
-                    #endif
+                await HandleJoinLotteryAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
+                break;
 
-                    await HandleJoinLotteryAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
-                    break;
+            case CallbackActions.SelectBudget when (data.Length == 2):
+                var budget = double.Parse(data[1]);
+                await HandleJoinLotteryWithBudgetAsync(botClient, chatId, query.From!, budget, cancellationToken).ConfigureAwait(false);
+                break;
 
-                case CallbackActions.SelectBudget when (data.Length == 2):
-                    var budget = double.Parse(data[1]);
-                    await HandleJoinLotteryWithBudgetAsync(botClient, chatId, query.From!, budget, cancellationToken).ConfigureAwait(false);
-                    break;
+            case CallbackActions.ViewStatus:
+                await HandleStatusAsync(botClient, chatId, cancellationToken).ConfigureAwait(false);
+                break;
 
-                case CallbackActions.ViewStatus:
-                    await HandleStatusAsync(botClient, chatId, cancellationToken).ConfigureAwait(false);
-                    break;
+            case CallbackActions.JoinSession:
+                await HandleJoinSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
+                break;
+            case CallbackActions.CloseSession:
+                await HandleCloseSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
+                break;
+            case CallbackActions.CancelSession:
+                await HandleCancelSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
+                break;
 
-                case CallbackActions.JoinSession:
-                    await HandleJoinSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
-                    break;
-                case CallbackActions.CloseSession:
-                    await HandleCloseSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
-                    break;
-                case CallbackActions.CancelSession:
-                    await HandleCancelSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
-                    break;
+            case CallbackActions.MakePayment:
+                var session = workflowService.GetSessionByUser(userId);
+                if (session is not null && session.Participants.TryGetValue(userId, out var participant))
+                {
+                    var message = await botClient.SendMessage(chatId, 
+                        "💰 To make payments, simply send me *euro denominated* amounts like:\n" +
+                        "`3,99` or `5,50eur` or `5€`\n\n" +
+                        "Add a *note* to improve your overview:\n" +
+                        "`3,99 Beer`\n\n" +
+                        "*Combine payments* with `+` or `newline`:\n" +
+                        "`4,50 Pizza + 2,50 Water`\n\n" +
+                        "⚡ I'll create Lightning invoices for you to pay!\n" +
+                        "ℹ️ You can also send amounts without using the `payment` button.", 
+                        parseMode: ParseMode.Markdown,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                case CallbackActions.MakePayment:
-                    var session = workflowService.GetSessionByUser(userId);
-                    if (session is not null && session.Participants.TryGetValue(userId, out var participant))
-                    {
-                        var message = await botClient.SendMessage(chatId, 
-                            "💰 To make payments, simply send me *euro denominated* amounts like:\n" +
-                            "`3,99` or `5,50eur` or `5€`\n\n" +
-                            "Add a *note* to improve your overview:\n" +
-                            "`3,99 Beer`\n\n" +
-                            "*Combine payments* with `+` or `newline`:\n" +
-                            "`4,50 Pizza + 2,50 Water`\n\n" +
-                            "⚡ I'll create Lightning invoices for you to pay!\n" +
-                            "ℹ️ You can also send amounts without using the `payment` button.", 
-                            parseMode: ParseMode.Markdown,
-                            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-                        participant.PaymentHelpMessageId = message.MessageId;
-                    }
-                    break;
-                case CallbackActions.SetTip:
-                    await HandleTipSelectionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
-                    break;
-                case CallbackActions.SelectTip when (data.Length == 2):
-                    var tip = int.Parse(data[1]);
-                    await HandleSetTipAsync(botClient, chatId, query.From!, tip, cancellationToken).ConfigureAwait(false);
-                    break;
-                    
-                case CallbackActions.AdminOptions:
-                    await HandleSetOptionsAsync(botClient, query, cancellationToken).ConfigureAwait(false);
-                    break;
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error handling callback query '{Action}'", action);
-
-            await botClient.SendException(userId, ex, cancellationToken).ConfigureAwait(false);
+                    participant.PaymentHelpMessageId = message.MessageId;
+                }
+                break;
+            case CallbackActions.SetTip:
+                await HandleTipSelectionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
+                break;
+            case CallbackActions.SelectTip when (data.Length == 2):
+                var tip = int.Parse(data[1]);
+                await HandleSetTipAsync(botClient, chatId, query.From!, tip, cancellationToken).ConfigureAwait(false);
+                break;
+                
+            case CallbackActions.AdminOptions:
+                await HandleSetOptionsAsync(botClient, query, cancellationToken).ConfigureAwait(false);
+                break;
         }
     }
     
@@ -298,7 +297,7 @@ internal static partial class Ext
                     throw new NotSupportedException("Failed to send message due to not supported log level!");
             }
         }
-        return SendError(source, userId, message, cancellationToken);
+        return (SendError(source, userId, message, cancellationToken));
     }
     public static Task SendInfo(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "ℹ️", message, cancellationToken);
     public static Task SendWarning(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "⚠️", message, cancellationToken);

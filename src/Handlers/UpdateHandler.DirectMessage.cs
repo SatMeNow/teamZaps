@@ -143,7 +143,8 @@ public partial class UpdateHandler
                 case SessionPhase.WaitingForLotteryParticipants:
                     throw new InvalidOperationException("Payments are blocked until someone enters the lottery!\n\n" +
                         "Use the 🎰 Enter Lottery button in your welcome message or ask someone to enter the lottery first.")
-                        .AddLogLevel(LogLevel.Warning);
+                        .AddLogLevel(LogLevel.Warning)
+                        .AnswerUser();
 
                 case SessionPhase.AcceptingPayments:
                     // Try to parse as payment from session participant
