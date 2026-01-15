@@ -86,16 +86,18 @@ public record PendingJoinInfo(long ChatId, int WelcomeMessageId);
 
 public class ParticipantState : IUser, ITipableAmount
 {
-    public ParticipantState(User user)
+    public ParticipantState(User user) : this(user, new()) {}
+    public ParticipantState(User user, BotUserOptions options)
     {
         this.User = user;
+        this.Options = options;
     }
 
 
     public User User { get; }
     public long UserId => User.Id;
+    public BotUserOptions Options { get; }
 
-    public byte? Tip { get; set; }
     public List<PaymentRecord> Payments { get; } = new();
     public bool HasPayments => (Payments.Count > 0);
     public long SatsAmount => (HasPayments ? Payments.Sum(p => p.SatsAmount) : 0);

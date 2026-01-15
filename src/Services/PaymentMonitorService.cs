@@ -83,7 +83,7 @@ public class PaymentMonitorService : BackgroundService
 
                         session.PendingPayments.TryRemove(pending.PaymentHash, out _);
 
-                        var participant = sessionManager.GetOrAddParticipant(session, pending.User);
+                        var participant = await sessionManager.GetOrAddParticipantAsync(session, pending.User).ConfigureAwait(false);
                         participant.Payments.Add(payment);
 
                         // Record lost sats for crash recovery:

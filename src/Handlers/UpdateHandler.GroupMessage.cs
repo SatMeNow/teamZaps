@@ -70,7 +70,7 @@ public partial class UpdateHandler
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser();
 
-        var session = workflowService.TryStartSession(chat, command);
+        var session = await workflowService.TryStartSessionAsync(chat, command).ConfigureAwait(false);
         if (session is not null)
         {
             if (adminOptions is not null)
@@ -209,7 +209,7 @@ public partial class UpdateHandler
         // Send private status message
         try
         {
-            var participant = workflowService.EnsureParticipant(session, user);
+            var participant = await workflowService.EnsureParticipantAsync(session, user).ConfigureAwait(false);
             await UserStatusMessage.SendAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception)
@@ -375,9 +375,12 @@ public partial class UpdateHandler
         if (await DeleteMessageAsync(botClient, chatId, participant.TipSelectionMessageId, cancellationToken).ConfigureAwait(false))
             participant.TipSelectionMessageId = null;
 
-        // Set the user's tip
-        participant.Tip = (tip == 0) ? null : (byte)tip;
-        // Update the user's status message to reflect the new tip
+        // Set the user's tip:
+        participant.Options.Tip = (tip == 0) ? null : (byte)tip;
+        // Save user options:
+        await userOptionsService.WriteAsync(user.Id, participant.Options).ConfigureAwait(false);
+        
+        // Update the user's status message to reflect the new tip:
         await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
     }
 

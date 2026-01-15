@@ -250,8 +250,8 @@ internal static class UserStatusMessage
             
             if (session.Phase >= SessionPhase.AcceptingPayments)
             {
-                var tip = participant.Tip.FormatTip();
-                if (participant.Tip > 0)
+                var tip = participant.Options.Tip.FormatTip();
+                if (participant.Options.Tip > 0)
                     tip = $"🎩 *{tip}* per payment";
                 status.AppendLine($"• Tip: {tip}");
             }
