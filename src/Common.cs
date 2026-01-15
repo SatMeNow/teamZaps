@@ -80,6 +80,7 @@ public static partial class Common
 {
     #region Constants
     public static readonly string DataPath = Path.Combine(AppContext.BaseDirectory, "data");
+    public static readonly string LogPath = Path.Combine(DataPath, "logs");
     
     public static readonly string AcceptedFiatPerBitcoinSymbol = $"{BotBehaviorOptions.AcceptedFiatCurrency.ToSymbol()}/{PaymentCurrency.Bitcoin.ToSymbol()}";
     

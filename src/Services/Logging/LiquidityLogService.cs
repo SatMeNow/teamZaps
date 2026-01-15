@@ -20,7 +20,7 @@ public enum LogTag
 public class LiquidityLogService : IHostedService
 {
     #region Constants
-    private static readonly string LogPath = Path.Combine(Common.DataPath, "log", "liquidity.csv");
+    private static readonly string LogPath = Path.Combine(Common.LogPath, "liquidity.csv");
     private static readonly string[] Columns = [ "Timestamp", "Sessions", PaymentCurrency.Sats.GetDescription(), BotBehaviorOptions.AcceptedFiatCurrency.GetDescription() ];
     #endregion
 
