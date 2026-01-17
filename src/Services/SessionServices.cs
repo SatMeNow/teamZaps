@@ -42,17 +42,17 @@ public class SessionWorkflowService
 
 public class SessionManager : IFormattableAmount
 {
-    public SessionManager(ILogger<SessionManager> logger, IOptions<BotBehaviorOptions> botBehaviour, FileService<BotUserOptions> userOptionsService, RecoveryService recoveryService)
+    public SessionManager(ILogger<SessionManager> logger, IOptions<BotBehaviorOptions> botBehaviour, FileService<BotUserOptions> userOptionsService)
     {
         this.logger = logger;
         this.botBehaviour = botBehaviour.Value;
         this.userOptionsService = userOptionsService;
-        this.recoveryService = recoveryService;
     }
 
 
     #region Properties.Management
     public IEnumerable<SessionState> ActiveSessions => sessions.Values;
+    public IEnumerable<ParticipantState> ActiveParticipants => ActiveSessions.SelectMany(s => s.Participants.Values);
     public ConcurrentDictionary<long, PendingJoinInfo> PendingJoins { get; } = new();
     #endregion
     #region Properties
@@ -69,6 +69,7 @@ public class SessionManager : IFormattableAmount
 
     #region Events
     public event EventHandler? OnFirstSessionCreated;
+    public event EventHandler<SessionState>? OnSessionRemoved;
     public event EventHandler? OnLastSessionRemoved;
     #endregion
 
@@ -130,10 +131,8 @@ public class SessionManager : IFormattableAmount
             if (session is not null)
             {
                 session.Close(cancel);
-                
-                if (!cancel)
-                    // Clear recovery files for all participants:
-                    recoveryService.ClearLostSats(session);
+
+                OnSessionRemoved?.Invoke(this, session);
             }
 
             if (sessions.IsEmpty())
@@ -175,5 +174,4 @@ public class SessionManager : IFormattableAmount
     private readonly BotBehaviorOptions botBehaviour;
     private readonly FileService<BotUserOptions> userOptionsService;
     private readonly ILogger<SessionManager> logger;
-    private readonly RecoveryService recoveryService;
 }
