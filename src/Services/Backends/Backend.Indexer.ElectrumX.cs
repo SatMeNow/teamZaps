@@ -84,10 +84,21 @@ namespace TeamZaps.Backend;
 
 
     #region Connection
-    public void Dispose()
+    public void Dispose() => Disconnect();
+    private void Disconnect()
     {
-        sslStream?.Dispose();
-        Client.Dispose();
+        logger.LogDebug("Disconnecting from {Host}.", this);
+        try
+        {
+            sslStream?.Dispose();
+            sslStream = null;
+            if (Client.Connected)
+                Client.Close();
+        }
+        catch
+        {
+            // Ignore errors during disconnect
+        }
     }
     private async Task EnsureConnectedAsync(CancellationToken cancellationToken = default)
     {
@@ -100,6 +111,19 @@ namespace TeamZaps.Backend;
         {
             logger.LogDebug(new EventId(72, nameof(EnsureConnectedAsync)), "Connecting to ElectrumX server {Host}.", this);
             await Client.ConnectAsync(Hostname, Port, linkedCts.Token).ConfigureAwait(false);
+            
+            // Enable TCP keep-alive to detect dead connections
+            Client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+            // Configure keep-alive parameters (send probe after 30s idle, every 10s, 3 times)
+            if (OperatingSystem.IsWindows())
+            {
+                // Windows-specific keep-alive settings
+                var keepAliveValues = new byte[12];
+                BitConverter.GetBytes(1u).CopyTo(keepAliveValues, 0);        // on/off
+                BitConverter.GetBytes(30000u).CopyTo(keepAliveValues, 4);    // time (ms)
+                BitConverter.GetBytes(10000u).CopyTo(keepAliveValues, 8);    // interval (ms)
+                Client.Client.IOControl(IOControlCode.KeepAliveValues, keepAliveValues, null);
+            }
             
             // Setup SSL/TLS if enabled
             if (UseSsl)
@@ -119,6 +143,7 @@ namespace TeamZaps.Backend;
         }
         catch (Exception ex)
         {
+            Disconnect();
             throw new Exception($"Failed to connect to ElectrumX server", ex);
         }
         if (Stream is null)
@@ -134,6 +159,8 @@ namespace TeamZaps.Backend;
 
             // Connect if not connected:
             await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            if (!Connected)
+                throw new IOException("Connection not established!");
 
             // Create request:
             var request = new JsonObject
@@ -148,8 +175,68 @@ namespace TeamZaps.Backend;
 
             // Send request:
             logger.LogDebug(new EventId(90, nameof(SendRequestAsync)), "Sending '{Method}' request to {Host}.", method, this);
-            await Stream.WriteAsync(requestBytes, cancellationToken).ConfigureAwait(false);
-            await Stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            
+            const int maxSendAttempts = 2; // Original attempt + 1 retry
+            Exception? lastSendException = null;
+            for (int sendAttempt = 0; sendAttempt < maxSendAttempts; sendAttempt++)
+            {
+                try
+                {
+                    // For SSL connections, verify once more before writing
+                    if (UseSsl && sslStream != null)
+                    {
+                        if (!sslStream.CanWrite)
+                        {
+                            logger.LogDebug("SSL stream became unwritable for {Host}, reconnecting...", this);
+                            Disconnect();
+                            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+                            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+                    
+                    await Stream.WriteAsync(requestBytes, cancellationToken).ConfigureAwait(false);
+                    await Stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    logger.LogTrace("Request sent successfully to {Host}, waiting for response...", this);
+                    
+                    // Success - break out of retry loop
+                    lastSendException = null;
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    // Check if this is a recoverable error
+                    var isRecoverable = (
+                        ex is IOException || 
+                        ex.InnerException is SocketException ||
+                        (ex is SocketException se && se.SocketErrorCode == SocketError.ConnectionAborted)
+                    );
+                    if (!isRecoverable)
+                    {
+                        logger.LogDebug(ex, "Non-recoverable error during send to {Host}", this);
+                        throw new IOException($"Failed to send request to server", ex);
+                    }
+                    
+                    lastSendException = ex;
+                    logger.LogDebug(ex, "Recoverable error during write to {Host} (attempt {Attempt}/{Max})", 
+                        this, sendAttempt + 1, maxSendAttempts);
+                    
+                    Disconnect();
+                    
+                    // If this wasn't the last attempt, reconnect and retry
+                    if (sendAttempt < maxSendAttempts - 1)
+                    {
+                        logger.LogDebug("Attempting to reconnect to {Host} for retry...", this);
+                        await Task.Delay(200, cancellationToken).ConfigureAwait(false);
+                        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                }
+            }
+            
+            // If we still have an exception after all retries, throw it
+            if (lastSendException is not null)
+            {
+                throw new IOException($"Failed to send request to server after {maxSendAttempts} attempts (stale connection)", lastSendException);
+            }
 
             // Read response
             using var cts = new CancellationTokenSource(Timeout);
@@ -168,31 +255,71 @@ namespace TeamZaps.Backend;
 
                     // ElectrumX responses are newline-delimited
                     var response = responseBuilder.ToString();
-                    if (response.Contains('\n'))
+                    var newlineIndex = response.IndexOf('\n');
+                    if (newlineIndex >= 0)
                     {
-                        // Get the first complete line
-                        var lines = response.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-                        if (lines.Length > 0)
+                        // Extract the first complete line (everything before the newline)
+                        var firstLine = response.Substring(0, newlineIndex).Trim();
+                        if (string.IsNullOrEmpty(firstLine))
                         {
-                            var rspJson = JsonNode.Parse(lines[0]);
-                            if (rspJson?["error"] is JsonNode error)
-                                throw new Exception($"ElectrumX error: {error?["message"]?.GetValue<string>() ?? "Unknown error"}");
-                            if (rspJson?["result"] is JsonNode result)
-                            {
-                                SentRequests++;
-                                return (result);
-                            }
-                            
-                            throw new Exception("No response from ElectrumX server");
+                            // Empty line, remove it and keep reading
+                            responseBuilder.Clear();
+                            responseBuilder.Append(response.Substring(newlineIndex + 1));
+                            continue;
                         }
+
+                        // Handle responses
+                        var rspJson = JsonNode.Parse(firstLine);
+                        if (rspJson?["error"] is JsonNode error)
+                            throw new Exception($"ElectrumX error: {error?["message"]?.GetValue<string>() ?? "Unknown error"}");
+                        if (rspJson?["result"] is JsonNode result)
+                        {
+                            SentRequests++;
+                            return (result);
+                        }
+                        
+                        // Log the unexpected response format with details
+                        logger.LogWarning(
+                            "Unknown ElectrumX response format from {Host}. " +
+                            "Keys: [{Keys}], HasId: {HasId}, HasResult: {HasResult}, HasError: {HasError}, HasMethod: {HasMethod}, HasJsonRpc: {HasJsonRpc}. " +
+                            "Response: {Response}", 
+                            this, 
+                            string.Join(", ", rspJson?.AsObject().Select(kv => kv.Key).ToArray() ?? Array.Empty<string>()), 
+                            rspJson?["id"] != null, 
+                            rspJson?["result"] != null, 
+                            rspJson?["error"] != null, 
+                            rspJson?["method"] != null, 
+                            rspJson?["jsonrpc"] != null, 
+                            firstLine);
+                        
+                        // Remove this response and keep reading for the actual response
+                        responseBuilder.Clear();
+                        responseBuilder.Append(response.Substring(newlineIndex + 1));
+                        continue;
                     }
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
             FailedRequests++;
-            throw;
+
+            // Disconnect on connection-related errors
+            if (ex is IOException or TimeoutException or OperationCanceledException || 
+                !Connected || 
+                ex.Message.Contains("closed", StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogDebug(ex, "Disconnecting from {Host} due to error", this);
+                Disconnect();
+            }
+            
+            // Re-throw with context
+            throw ex switch
+            {
+                TimeoutException => new TimeoutException($"Request '{method}' timed out with '{this}'!", ex),
+                IOException => new IOException($"IO error occurred during '{method}' with '{this}'!", ex),
+                _ => new Exception($"Error occurred during '{method}' with '{this}'!", ex)
+            };
         }
     }
 
@@ -336,7 +463,8 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
     /// <exception cref="AggregateException"></exception>
     private async Task<JsonNode?> TrySendRequestAsync(bool enableStale, string method, JsonArray? parameters = null, CancellationToken cancellationToken = default)
     {
-        var failures = 0;
+        List<Exception>? exceptions = null;
+
         var timeout = Stopwatch.StartNew();
         var maxRequests = (Hosts.Count * (RequestRetries + 1));
         for (int i = 0; i < maxRequests; i++)
@@ -346,8 +474,8 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
                 logger.LogDebug("Abort sending request since all hosts were recently used.");
                 break;
             }
-            if ((i >= Hosts.Count) && (timeout.Elapsed > RequestTimeout))
-                throw new Exception($"Request '{method}' timed out after {failures} failure(s)! Refer to debug log for details.");
+            if ((exceptions?.IsEmpty() == false) && (timeout.Elapsed > RequestTimeout))
+                throw new AggregateException($"Request '{method}' timed out after {exceptions!.Count} failure(s)! Refer to debug log for details.", exceptions);
 
             try
             {
@@ -356,23 +484,28 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
                     throw new Exception("No response from ElectrumX server");
                 else
                 {
-                    if (failures > 0)
-                        logger.LogWarning("Request '{Method}' succeeded after {Count} previous failure(s).", method, failures);
+                    if (exceptions is not null)
+                    {
+                        var messages = string.Join("\n", exceptions.Select(ex => $"- {ex.Message}"));
+                        logger.LogDebug($"Failed requests:\n{messages}", method, exceptions.Count);
+                        logger.LogWarning("Request '{Method}' succeeded after {Count} previous failure(s).", method, exceptions.Count);
+                    }
 
                     return (result);
                 }
             }
             catch (Exception ex)
             {
-                logger.LogDebug(ex, "Request '{Method}' failed!", method);
-                failures++;
+                if (exceptions is null)
+                    exceptions = new();
+                exceptions.Add(ex);
             }
         }
 
-        if (failures == 0)
+        if (exceptions is null)
             return (null); // All hosts were recently used.
         else
-            throw new Exception($"Request '{method}' aborted after {failures} failure(s)! Refer to debug log for details.");
+            throw new AggregateException($"Request '{method}' aborted after {exceptions.Count} failure(s)! Refer to debug log for details.", exceptions);
     }
     #endregion
     #region Operation
