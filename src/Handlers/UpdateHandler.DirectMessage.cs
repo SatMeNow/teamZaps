@@ -158,14 +158,20 @@ public partial class UpdateHandler
                 case SessionPhase.WaitingForInvoice:
                     // Check if this user is a winner waiting to submit an invoice
                     var winnerUser = session.GetWinnerUser(user.Id);
-                    if (winnerUser?.SubmittedInvoice == false)
+                    if (winnerUser is null)
+                        throw new InvalidOperationException($"You are not a winner in the current session!")
+                            .AddLogLevel(LogLevel.Warning)
+                            .AnswerUser();
+                    if (winnerUser!.SubmittedInvoice)
+                        throw new InvalidOperationException($"You have already submitted your invoice for this session!")
+                            .AddLogLevel(LogLevel.Information)
+                            .AnswerUser();
+
+                    // This looks like an invoice submission
+                    if (text.IsLightningInvoice(out var invoice))
                     {
-                        // This looks like an invoice submission
-                        if (text.IsLightningInvoice(out var invoice))
-                        {
-                            await ProcessWinnerInvoiceAsync(botClient, session, winnerUser, invoice, cancellationToken).ConfigureAwait(false);
-                            return (true);
-                        }
+                        await ProcessWinnerInvoiceAsync(botClient, session, winnerUser, invoice, cancellationToken).ConfigureAwait(false);
+                        return (true);
                     }
                     break;
 
@@ -176,7 +182,7 @@ public partial class UpdateHandler
             }
         }
         
-        throw new NotImplementedException("Sorry, push the `payment` button for instructions or use `/help` for commands.")
+        throw new NotImplementedException($"Sorry, push the `payment` button for instructions or use `{BotPmCommand.Help}` for commands.")
             .AnswerUser();
     }
     private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, User user, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
@@ -265,16 +271,16 @@ public partial class UpdateHandler
         var invoiceSats = lightningBackend.GetInvoiceAmount(bolt11);
         ValidateInvoiceAmount(winnerInfo.SatsAmount, invoiceSats);
 
-        winnerUser!.SubmittedInvoice = true;
-
         await botClient.SendMessage(winnerUser.UserId, "✅ Invoice received!\n⏳ Processing payout...", cancellationToken: cancellationToken).ConfigureAwait(false);
 
         try
         {
             var paymentResult = await lightningBackend.PayInvoiceAsync(bolt11!, cancellationToken).ConfigureAwait(false);
             if (paymentResult is null)
-                throw new InvalidOperationException("Failed to execute payout. Please try again later.");
+                throw new InvalidOperationException("Failed to execute payout. Please retry with sending a new invoice.");
                 
+            winnerUser!.SubmittedInvoice = true;
+
             if (session.PayoutCompleted)
             {
                 session.Phase = SessionPhase.Completed;
@@ -317,8 +323,7 @@ public partial class UpdateHandler
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error executing payout by {User} for session {Session}.", winnerUser, session);
-            await botClient.SendMessage(session.ChatId, "❌ Error during payout. Please contact support.", cancellationToken: cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException("Error during payout. Please retry or contact support.", ex);
         }
     }
     /// <summary>

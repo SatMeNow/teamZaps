@@ -69,6 +69,14 @@ public partial class UpdateHandler
             throw new InvalidOperationException("Only group administrators can start a session.")
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser();
+        
+        // Check server-wide budget limit
+        var minBudget = botBehaviour.BudgetChoices.Min();
+        if (!CheckServerBudgetLimit(minBudget))
+            throw new InvalidOperationException("💸 Starting a new session would exceed the server-wide budget limit!\n\n" +
+                "Please try again later when some budgets are available.")
+                .AddLogLevel(LogLevel.Information)
+                .AnswerUser();
 
         var session = await workflowService.TryStartSessionAsync(chat, command).ConfigureAwait(false);
         if (session is not null)
@@ -300,7 +308,9 @@ public partial class UpdateHandler
         if (await DeleteMessageAsync(botClient, chatId, participant.BudgetSelectionMessageId, cancellationToken).ConfigureAwait(false))
             participant.BudgetSelectionMessageId = null;
 
+        var availBudget = sessionManager.AvailableServerBudget;
         var keyboard = botBehaviour.BudgetChoices
+            .Where(c => (availBudget is null) || (c <= availBudget!))
             .Select(c => InlineKeyboardButton.WithCallbackData($"{c}{BotBehaviorOptions.AcceptedFiatCurrency.ToSymbol()}", $"{CallbackActions.SelectBudget}_{c}"))
             .Chunk(4)
             .ToArray();
