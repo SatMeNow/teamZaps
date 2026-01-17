@@ -139,7 +139,7 @@ public class ElectrumXTests_Constructor : ElectrumXTests
 public class ElectrumXTests_HostRotation : CommunicativeElectrumXTests
 {
     #region Constants
-    private const string AllHostsStale = "all hosts are stale";
+    private const string AllHostsRecentlyUsed = "all hosts were recently used";
     private const string ReceivedNewBlock = "Received new block";
     private const string KeepUsingLastBlock = "Keep using last block";
     #endregion
@@ -147,12 +147,12 @@ public class ElectrumXTests_HostRotation : CommunicativeElectrumXTests
 
     [Fact]
     [Trait("Category", "Communication")]
-    public async Task StaleHostsFor30Seconds()
+    public async Task RecentlyUsedHostsFor30Seconds()
     {
-        var staleWatch = Stopwatch.StartNew();
+        var testWatch = Stopwatch.StartNew();
 
         // First 5 requests should succeed (one per host):
-        // Each host is used once and becomes stale
+        // Each host is used once and becomes recently used
         // Service rotates to next fresh host for each request:
         for (int i = 0; i < 5; i++)
         {
@@ -160,21 +160,21 @@ public class ElectrumXTests_HostRotation : CommunicativeElectrumXTests
             LogTest($"Requesting block {i + 1}");
             var block = await service.GetCurrentBlockAsync(CancellationToken.None);
             Assert.NotNull(block);
-            Assert.DoesNotContain(logMessages, m => m.Contains(AllHostsStale, StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(logMessages, m => m.Contains(AllHostsRecentlyUsed, StringComparison.OrdinalIgnoreCase));
         }
 
         // Sixth request (within 30s):
-        // All hosts are now stale, should return last block from cache:
+        // All hosts are now recently used, should return last block from cache:
         logMessages.Clear();
         LogTest("Requesting block 6");
         var block6 = await service.GetCurrentBlockAsync(CancellationToken.None);
         Assert.NotNull(block6);
-        Assert.Single(logMessages, m => m.Contains(AllHostsStale, StringComparison.OrdinalIgnoreCase));
+        Assert.Single(logMessages, m => m.Contains(AllHostsRecentlyUsed, StringComparison.OrdinalIgnoreCase));
 
-        // [Debug] Expect that we are within staleness threshold:
-        Assert.InRange(staleWatch.Elapsed, TimeSpan.Zero, ElectrumXClient.StaleThreshold);
-        // Wait for staleness period to expire (30s + 3s buffer):
-        var timeToWait = (ElectrumXClient.StaleThreshold + TimeSpan.FromSeconds(3) - staleWatch.Elapsed);
+        // [Debug] Expect that we are within reuse delay threshold:
+        Assert.InRange(testWatch.Elapsed, TimeSpan.Zero, ElectrumXClient.ReuseDelay);
+        // Wait for reuse delay period to expire (30s + 3s buffer):
+        var timeToWait = (ElectrumXClient.ReuseDelay + TimeSpan.FromSeconds(3) - testWatch.Elapsed);
         await Task.Delay(timeToWait);
 
         // Seventh request (after 30s):
@@ -183,7 +183,7 @@ public class ElectrumXTests_HostRotation : CommunicativeElectrumXTests
         LogTest("Requesting block 7");
         var block7 = await service.GetCurrentBlockAsync(CancellationToken.None);
         Assert.NotNull(block7);
-        Assert.DoesNotContain(logMessages, m => m.Contains(AllHostsStale, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(logMessages, m => m.Contains(AllHostsRecentlyUsed, StringComparison.OrdinalIgnoreCase));
         
         // Should contain either "Received new block" or "Keep using last block"
         // depending on whether blockchain had a new block (both are valid outcomes):

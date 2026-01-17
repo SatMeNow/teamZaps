@@ -20,7 +20,7 @@ namespace TeamZaps.Backend;
     public const int TcpPort = 50001;
     public const int SslPort = 50002;
     
-    public static readonly TimeSpan StaleThreshold = TimeSpan.FromSeconds(30);
+    public static readonly TimeSpan ReuseDelay = TimeSpan.FromSeconds(30);
     #endregion
 
 
@@ -66,9 +66,9 @@ namespace TeamZaps.Backend;
 
     public bool Connected => Client.Connected;
     /// <summary>
-    /// Gets whether the last read time exceeds the stale threshold.
+    /// Gets whether this host was recently used and should be skipped to allow other hosts to be used (load balancing).
     /// </summary>
-    public bool IsStale => (lastRead is not null) && ((DateTime.UtcNow - lastRead!) < StaleThreshold);
+    public bool RecentlyUsed => (lastRead is not null) && ((DateTime.UtcNow - lastRead!) < ReuseDelay);
     private DateTime? lastRead = null;
     #endregion
     #region Properties
@@ -298,20 +298,20 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
     #region Communication
     private Task<T> SendRequestAsync<T>(string method, JsonArray? parameters, CancellationToken cancellationToken, string propertyName) => SendRequestAsync<T>("blockchain.headers.subscribe", null, cancellationToken, (res) => GetValue<T>(res, propertyName));
     /// <summary>
-    /// Sends a request to the configured ElectrumX hosts. Stale hosts are are considered to be used.
+    /// Sends a request to the configured ElectrumX hosts. Recently used hosts are also considered.
     /// </summary>
     private async Task<T> SendRequestAsync<T>(string method, JsonArray? parameters, CancellationToken cancellationToken, Func<JsonNode, T> valueFactory)
     {
         var result = await TrySendRequestAsync(true, method, parameters, cancellationToken).ConfigureAwait(false);
         if (result is null)
-            // This should never happen, as stale hosts are enabled
+            // This should never happen, as recently used hosts are enabled
             throw new NotImplementedException("Internal error on sending request to ElectrumX hosts.");
         else
             // Create value from response:
             return (valueFactory(result));
     }
     /// <summary>
-    /// Sends a request to the configured ElectrumX hosts. Stale hosts are only considered if no default value could be provided.
+    /// Sends a request to the configured ElectrumX hosts. Recently used hosts are only considered if no default value could be provided.
     /// </summary>
     private async Task<T> SendRequestAsync<T>(string method, JsonArray? parameters, CancellationToken cancellationToken, T? defaultValue, Func<JsonNode, T> valueFactory)
     {
@@ -331,8 +331,8 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
     /// <summary>
     /// Tries to send a request to the configured ElectrumX hosts, rotating through them until one succeeds or all fail.
     /// </summary>
-    /// <param name="enableStale">If <c>true</c>, stale hosts will also be considered.</param>
-    /// <returns>Returns the received response as a <see cref="JsonNode"/>, or <c>null</c> if all hosts are stale.</returns>
+    /// <param name="enableStale">If <c>true</c>, recently used hosts will also be considered.</param>
+    /// <returns>Returns the received response as a <see cref="JsonNode"/>, or <c>null</c> if all hosts were recently used.</returns>
     /// <exception cref="AggregateException"></exception>
     private async Task<JsonNode?> TrySendRequestAsync(bool enableStale, string method, JsonArray? parameters = null, CancellationToken cancellationToken = default)
     {
@@ -343,7 +343,7 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
         {
             if ((!TryGetRotatedHost(out var host)) && (!enableStale))
             {
-                logger.LogDebug("Abort sending request hence all hosts are stale.");
+                logger.LogDebug("Abort sending request since all hosts were recently used.");
                 break;
             }
             if ((i >= Hosts.Count) && (timeout.Elapsed > RequestTimeout))
@@ -370,7 +370,7 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
         }
 
         if (failures == 0)
-            return (null); // All hosts are stale at the moment.
+            return (null); // All hosts were recently used.
         else
             throw new Exception($"Request '{method}' aborted after {failures} failure(s)! Refer to debug log for details.");
     }
@@ -451,21 +451,21 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
         }
     }
     /// <summary>
-    /// Tries to return the next host that is not stale.
+    /// Tries to return the next host that hasn't been recently used.
     /// </summary>
-    /// <returns>Gets the next host, but will return <c>true</c> if only a non-stale host could be found.</returns>
+    /// <returns>Returns <c>true</c> if a host that's not on cooldown was found; otherwise <c>false</c>.</returns>
     private bool TryGetRotatedHost(out ElectrumXClient host)
     {
         if (rotatingHosts.IsEmpty())
             throw new InvalidOperationException("No hosts configured!");
 
-        // Get next rotated host that is not stale:
+        // Get next rotated host that hasn't been recently used:
         lock (rotatingHosts)
         {
             for (int i = 0; i < rotatingHosts.Count; i++)
             {
                 host = rotatingHosts.First();
-                if (host.IsStale)
+                if (host.RecentlyUsed)
                     rotatingHosts.Rotate();
                 else
                     return (true);

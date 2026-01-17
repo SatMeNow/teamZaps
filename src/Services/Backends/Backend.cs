@@ -70,9 +70,9 @@ public interface IBackendClient
     bool Connected { get; }
 
     /// <summary>
-    /// Gets whether the last read time exceeds the stale threshold.
+    /// Gets whether this host was recently used and should be skipped to allow other hosts to be used (load balancing).
     /// </summary>
-    bool IsStale { get; }
+    bool RecentlyUsed { get; }
     #endregion
     #region Properties
     string Hostname { get; }

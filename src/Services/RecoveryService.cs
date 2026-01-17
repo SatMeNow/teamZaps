@@ -21,15 +21,28 @@ public class RecoveryService : BackgroundService
     #endregion
 
 
-    public RecoveryService(ILogger<RecoveryService> logger, FileService<LostSatsRecord> lostSatsFile, ITelegramBotClient botClient, IOptions<DebugSettings> debugSettings)
+    public RecoveryService(ILogger<RecoveryService> logger, FileService<LostSatsRecord> lostSatsFile, ITelegramBotClient botClient, IOptions<DebugSettings> debugSettings, SessionManager sessionManager)
     {
         this.logger = logger;
         this.lostSatsFile = lostSatsFile;
         this.botClient = botClient;
         this.debugSettings = debugSettings.Value;
+        this.sessionManager = sessionManager;
+
+        this.sessionManager.OnSessionRemoved += OnSessionRemoved;
     }
 
 
+    #region Events
+    private void OnSessionRemoved(object? sender, SessionState session)
+    {
+        // Clear recovery files for all participants in the removed session:
+        ClearLostSats(session);
+    }
+    #endregion
+
+
+    #region Initialization
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         #if DEBUG
@@ -55,8 +68,13 @@ public class RecoveryService : BackgroundService
             
         } while ((!stoppingToken.IsCancellationRequested) && (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false)));
     }
+    public override void Dispose()
+    {
+        this.sessionManager.OnSessionRemoved -= OnSessionRemoved;
 
-
+        base.Dispose();
+    }
+    #endregion
     #region Management
     /// <summary>
     /// Records lost sats for a user (creates/updates recovery file).
@@ -176,6 +194,7 @@ public class RecoveryService : BackgroundService
     private readonly FileService<LostSatsRecord> lostSatsFile;
     private readonly ITelegramBotClient botClient;
     private readonly DebugSettings debugSettings;
+    private readonly SessionManager sessionManager;
 }
 
 

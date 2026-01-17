@@ -179,9 +179,9 @@ internal static partial class Ext
     }
     public static void AppendSessionState(this StringBuilder source, SessionState session)
     {
-        var title = (session.SessionTitle ?? "Session status");
+        var title = (session.SessionTitle ?? "*Session status*");
 
-        source.AppendLine($"📊 *{title}*");
+        source.AppendLine($"📊 {title}");
         source.AppendLine();
         source.AppendLine($"• Phase: *{session.Phase.GetDescription()}*");
         source.AppendLine($"• Started at block: {session.StartedAtBlock!.FormatHeight()}");
