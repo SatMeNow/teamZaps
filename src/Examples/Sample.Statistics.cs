@@ -92,8 +92,8 @@ public class Sample_Statistics
                     IsBot = false,
                     FirstName = $"User{userId}"
                 }),
-                StartedAtBlock = new MockBlockHeader(startBlock),
-                CompletedAtBlock = new MockBlockHeader(startBlock + random.Next(6, 36))
+                StartedAtBlock = CreateBlockHeader(startBlock),
+                CompletedAtBlock = CreateBlockHeader(startBlock + random.Next(6, 36))
             };
 
             // Add random participants with payments
@@ -146,19 +146,16 @@ public class Sample_Statistics
         return sessions;
     }
 
-    private class MockBlockHeader : BlockHeader
+    private static BlockHeader CreateBlockHeader(int height)
     {
-        #region Constants
-        private static readonly DateTimeOffset GenesisTime = new(2009, 1, 3, 19, 15, 5, TimeSpan.Zero);
-        private const int BlockTimeMinutes = 10;
-        #endregion
-
-
-        public MockBlockHeader(int height)
+        const int BlockTimeMinutes = 10;
+        var genesisTime = new DateTimeOffset(2009, 1, 3, 19, 15, 5, TimeSpan.Zero);
+        
+        return new BlockHeader
         {
-            this.Height = height;
-            this.Hash = height.ToString().PadLeft(64, '0');
-            this.BlockTime = GenesisTime.AddMinutes(Height * BlockTimeMinutes);
-        }
+            Height = height,
+            Hash = height.ToString().PadLeft(64, '0'),
+            BlockTime = genesisTime.AddMinutes(height * BlockTimeMinutes)
+        };
     }
 }

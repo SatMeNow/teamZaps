@@ -273,7 +273,7 @@ internal static partial class Ext
             source.AppendLine($"• {label} in {latest.Key:Y}: {formatter(latest.Value)}"); // Oktober 2008
         return (source);
     }
-    public static StringBuilder AppendMappedValue(this StringBuilder source, string label, MappedValue<BlockHeader> blockValue, StatisticService statistics)
+    public static StringBuilder AppendMappedValue(this StringBuilder source, string label, MappedValue<IBlockHeader> blockValue, StatisticService statistics)
     {
         if (blockValue.Resolve(statistics, out var group))
             source.AppendLine($"• {label}: {blockValue.Value.FormatHeight()}\n  by _{group.ChatTitle}_");

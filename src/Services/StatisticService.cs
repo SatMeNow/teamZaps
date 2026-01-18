@@ -40,7 +40,7 @@ public class StatisticService : IHostedService
     private Dictionary<long, UserStatistics> userStats = new();
     public GroupRankingStatistics? GroupRanking { get; set; } = null;
 
-    protected BlockHeader? CurrentBlock { get; private set; }
+    protected IBlockHeader? CurrentBlock { get; private set; }
     protected int CurrentBlockHeight => (CurrentBlock?.Height ?? 0);
     #endregion
 
@@ -79,7 +79,7 @@ public class StatisticService : IHostedService
         return (UpdateStatisticsAsync(session, indexerBackend.LastBlock!));
     }
     
-    internal async Task<bool> UpdateStatisticsAsync(SessionState session, BlockHeader currentBlock)
+    internal async Task<bool> UpdateStatisticsAsync(SessionState session, IBlockHeader currentBlock)
     {
         Debug.Assert(currentBlock is not null);
 
@@ -122,7 +122,7 @@ public class StatisticService : IHostedService
         stats.TotalSessions++;
         stats.TotalGroups = GroupStats.Count;
         stats.Duration += (ulong)session.Duration!.Value;
-        stats.StartedAtBlock ??= new MappedValue<BlockHeader>(session.ChatId, session.StartedAtBlock!);
+        stats.StartedAtBlock ??= new MappedValue<IBlockHeader>(session.ChatId, session.StartedAtBlock!);
         stats.TotalSats += (ulong)session.SatsAmount;
         stats.TotalTippedSats += (ulong)session.TipAmount;
         // Update parallel session metrics
@@ -234,7 +234,7 @@ public class StatisticService : IHostedService
 
         CleanupMonthly(source, CurrentBlock!);
     }
-    private void CleanupMonthly<T>(Dictionary<DateOnly, T> source, BlockHeader referenceBlock)
+    private void CleanupMonthly<T>(Dictionary<DateOnly, T> source, IBlockHeader referenceBlock)
     {
         var holdBack = DateOnly.FromDateTime(referenceBlock.LocalTime.DateTime.Subtract(HoldBackTime));
         var toRemove = source.Keys
@@ -295,7 +295,7 @@ public record GeneralStatistics
     /// <summary>
     /// Block height of first session.
     /// </summary>
-    public MappedValue<BlockHeader> StartedAtBlock { set; get; } = null!;
+    public MappedValue<IBlockHeader> StartedAtBlock { set; get; } = null!;
 
     /// <summary>
     /// Total amount of spent sats.
@@ -378,7 +378,7 @@ public record GroupStatistics
     /// <inheritdoc cref="GeneralStatistics.Duration"/> 
     public ulong Duration { set; get; }
     /// <inheritdoc cref="GeneralStatistics.StartedAtBlock"/> 
-    public BlockHeader StartedAtBlock { set; get; } = null!;
+    public IBlockHeader StartedAtBlock { set; get; } = null!;
 
     /// <inheritdoc cref="GeneralStatistics.TotalSats"/> 
     public ulong TotalSats { set; get; }
@@ -415,8 +415,8 @@ public record SessionStatistics
 
     /// <inheritdoc cref="GeneralStatistics.Duration"/> 
     public int Duration => (EndBlock.Height - StartBlock.Height);
-    public BlockHeader StartBlock { set; get; } = null!;
-    public BlockHeader EndBlock { set; get; } = null!;
+    public IBlockHeader StartBlock { set; get; } = null!;
+    public IBlockHeader EndBlock { set; get; } = null!;
 
     /// <inheritdoc cref="GeneralStatistics.TotalSats"/> 
     public long TotalSats { set; get; }
@@ -452,7 +452,7 @@ public record UserStatistics
     /// <inheritdoc cref="GeneralStatistics.Duration"/> 
     public ulong Duration { set; get; }
     /// <inheritdoc cref="GeneralStatistics.StartedAtBlock"/> 
-    public BlockHeader StartedAtBlock { set; get; } = null!;
+    public IBlockHeader StartedAtBlock { set; get; } = null!;
 
     /// <inheritdoc cref="GeneralStatistics.TotalSats"/> 
     public ulong TotalSats { set; get; }

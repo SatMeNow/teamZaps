@@ -20,12 +20,15 @@ public class Sample_ElectrumX
             var header = await electrumX.GetCurrentBlockAsync();
             
             Console.WriteLine($"Current Block Height: {header.Height}");
-            Console.WriteLine($"Current Block Time: {header.BlockTime}");
-            Console.WriteLine($"Block Time (UTC): {header.BlockTime:yyyy-MM-dd HH:mm:ss}");
+            if (header is BlockHeader blockHeader)
+            {
+                Console.WriteLine($"Current Block Time: {blockHeader.BlockTime}");
+                Console.WriteLine($"Block Time (UTC): {blockHeader.BlockTime:yyyy-MM-dd HH:mm:ss}");
 
-            // Calculate how long ago the block was mined
-            var timeSinceBlock = DateTimeOffset.UtcNow - header.BlockTime;
-            Console.WriteLine($"Time since last block: {timeSinceBlock.TotalMinutes:F1} minutes");
+                // Calculate how long ago the block was mined
+                var timeSinceBlock = DateTimeOffset.UtcNow - blockHeader.BlockTime;
+                Console.WriteLine($"Time since last block: {timeSinceBlock.TotalMinutes:F1} minutes");
+            }
 
             // Get a specific block header (e.g., block 100,000)
             Console.WriteLine("\nGetting block 100,000...");

@@ -179,8 +179,15 @@ public static partial class Extensions
         else
             return ($"{source:N2}{currency.ToSymbol()}"); // `1,234.56`
     }
-    public static string Format(this BlockHeader source) => $"{source.FormatHeight()} ({source.LocalTime:g})"; // `31.10.2008 17:04`
-    public static string FormatHeight(this BlockHeader source) => $"[{source.Height.ToString("N0")}](https://mempool.space/block/{source.Hash})";
+    public static string Format(this IBlockHeader source) => $"{source.FormatHeight()} ({source.LocalTime:g})"; // `31.10.2008 17:04`
+    public static string FormatHeight(this IBlockHeader source)
+    {
+        var blockHeight = source.Height.ToString("N0");
+        if (source is BlockHeader blockHeader)
+            return $"[{blockHeight}](https://mempool.space/block/{blockHeader.Hash})";
+        else
+            return ($"`~{blockHeight}`");
+    }
     
     public static double ToMinutes(this int blocks) => (blocks * 10);
     public static double ToHours(this int blocks) => (blocks / 6.0);
