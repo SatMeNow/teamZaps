@@ -520,7 +520,7 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
     /// <summary>
     /// Gets the current blockchain header information including block height and time.
     /// </summary>
-    public async Task<BlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default)
+    public async Task<IBlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -560,7 +560,27 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
         }
         catch (Exception ex)
         {
-            throw new Exception("Failed to get current block!", ex);
+            ex = new Exception("Failed to get current block!", ex);
+
+            // If we have a recent block, estimate the current height
+            if (LastBlock is not null)
+            {
+                var timeSinceLastBlock = (DateTimeOffset.UtcNow - LastBlock.BlockTime);
+                var estimatedBlocksSince = (int)(timeSinceLastBlock.TotalMinutes / 10.0);
+                var estimatedHeight = (LastBlock.Height + estimatedBlocksSince);
+                
+                logger.LogError(ex, 
+                    "Failed to get current block! Using estimated height {EstimatedHeight} based on last known block {LastHeight} as fallback.", 
+                    estimatedHeight, LastBlock.Height);
+                
+                return (new EstimatedBlockHeader 
+                { 
+                    Height = estimatedHeight,
+                    LocalTime = DateTimeOffset.UtcNow
+                });
+            }
+            else
+                throw ex.AddHelp("Please try again in a few seconds.");
         }
     }
     public async Task<string> GetBlockAsync(int height, CancellationToken cancellationToken = default)

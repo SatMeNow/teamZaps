@@ -7,15 +7,39 @@ namespace TeamZaps.Backend;
 
 
 /// <summary>
-/// Represents a Bitcoin block.
+/// Block header information.
 /// </summary>
-public class BlockHeader
+[JsonPolymorphic(
+    TypeDiscriminatorPropertyName = "$type",
+    UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToNearestAncestor)]
+[JsonDerivedType(typeof(BlockHeader), "block")]
+[JsonDerivedType(typeof(EstimatedBlockHeader), "estimated")]
+public interface IBlockHeader
+{
+    int Height { get; }
+    DateTimeOffset LocalTime { get; }
+}
+/// <summary>
+/// Standard block header implementation.
+/// </summary>
+public class BlockHeader : IBlockHeader
 {
     public int Height { get; set; }
     public string Hash { get; set; } = string.Empty;
     public DateTimeOffset BlockTime { get; set; }
     [JsonIgnore]
     public DateTimeOffset LocalTime => BlockTime.ToLocalTime();
+
+
+    public override string ToString() => this.Format();
+}
+/// <summary>
+/// Estimated block header implementation.
+/// </summary>
+public class EstimatedBlockHeader : IBlockHeader
+{
+    public int Height { get; set; }
+    public DateTimeOffset LocalTime { get; set; }
 
 
     public override string ToString() => this.Format();
@@ -88,7 +112,7 @@ public interface IIndexerBackend : IBackend
     BlockHeader? LastBlock { get; }
 
 
-    Task<BlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default);
+    Task<IBlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default);
 }
 /// <summary>
 /// Interface for exchange-rate backend services.
