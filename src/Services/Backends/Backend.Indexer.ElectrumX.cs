@@ -46,7 +46,7 @@ namespace TeamZaps.Backend;
 
 
     #region Properties.Management
-    private TcpClient Client { get; } = new();
+    private TcpClient Client { set; get; } = null!;
     private Stream Stream
     {
         get
@@ -64,7 +64,7 @@ namespace TeamZaps.Backend;
 	public long SentRequests { get; private set; }
 	public long FailedRequests { get; private set; }
 
-    public bool Connected => Client.Connected;
+    public bool Connected => (Client?.Connected ?? false);
     /// <summary>
     /// Gets whether this host was recently used and should be skipped to allow other hosts to be used (load balancing).
     /// </summary>
@@ -92,8 +92,13 @@ namespace TeamZaps.Backend;
         {
             sslStream?.Dispose();
             sslStream = null;
-            if (Client.Connected)
+
+            if (Client is not null)
+            {
                 Client.Close();
+                Client.Dispose();
+                Client = null!;
+            }
         }
         catch
         {
@@ -104,6 +109,9 @@ namespace TeamZaps.Backend;
     {
         if (Connected)
             return;
+
+        // Create new TcpClient for this connection
+        this.Client = new TcpClient();
 
         using var cts = new CancellationTokenSource(Timeout);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token);
@@ -350,7 +358,7 @@ namespace TeamZaps.Backend;
 public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnectionBackend, IDisposable
 {
     #region Constants
-    private const int RecommendedConnections = 3;
+    private const int RecommendedConnections = 2;
     private static readonly int RequestRetries = 1;
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
     #endregion
