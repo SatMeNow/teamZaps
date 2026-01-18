@@ -265,19 +265,17 @@ ElectrumX provides real-time Bitcoin blockchain data including current block hei
 
 You can configure multiple ElectrumX servers. The bot will automatically try each server in sequence ensuring continuous blockchain data access. This helps avoid service disruptions when a single server becomes unavailable due to rate limiting, spam protection, maintenance, or network issues, etc.
 
-> For improved reliability, it is recommended to configure at least 3 ElectrumX servers!
+> For improved reliability, it is recommended to configure 2 ElectrumX servers (primary + fallback)!
 
 ```json
 {
   "Backends": {
     "ElectrumX": {
-      "Host": "electrum.blockstream.info",
-      "Port": 50002,
       "Hosts": [
-        "electrum.blockstream.info:50002",
-        "electrum.qtornado.com",
-        "bitcoin.aranguren.org:50001"
+        "electrum.blockstream.info",
+        "fulcrum.sethforprivacy.com"
       ],
+      "Port": 50002,
       "ValidateSslCertificate": true,
       "Timeout": 10000
     }
