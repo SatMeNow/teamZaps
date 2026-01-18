@@ -232,13 +232,19 @@ public partial class UpdateHandler : IUpdateHandler
     {
         try
         {
+            // Check if user is in root users list:
+            if (telegramSettings.RootUsers.Contains(userId))
+                return (true);
+            // Check if user is admin in the group:
             var member = await botClient.GetChatMember(chatId, userId, cancellationToken).ConfigureAwait(false);
-            return member.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator;
+            if (member.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
+                return (true);
         }
         catch
         {
-            return false;
         }
+        
+        return (false);
     }
     #endregion
 
