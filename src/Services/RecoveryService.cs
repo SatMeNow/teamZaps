@@ -156,12 +156,15 @@ public class RecoveryService : BackgroundService
             return;
         #endif
 
-        var lostSatsRecords = await GetAllLostSatsAsync().ConfigureAwait(false);
+        // Get lost sats of inactive(!) sessions/users:
+        var lostSatsRecords = (await GetAllLostSatsAsync().ConfigureAwait(false))
+            .Where(r => !sessionManager.ActiveParticipants.Contains(p => p.UserId == r.UserId))
+            .ToArray();
         if (lostSatsRecords.IsEmpty())
             return;
 
         var totalLostSats = lostSatsRecords.Sum(r => r.SatsAmount);
-        logger.LogWarning("⚠️ LOST SATS DETECTED! Found {Count} user(s) with {TotalSats} of lost funds.", lostSatsRecords.Count, totalLostSats.Format());
+        logger.LogWarning("⚠️ LOST SATS DETECTED! Found {Count} user(s) with {TotalSats} of lost funds.", lostSatsRecords.Length, totalLostSats.Format());
 
         // Notify users:
         foreach (var record in lostSatsRecords.Where(r => r.NotificationRequired))
