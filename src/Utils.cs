@@ -209,6 +209,34 @@ namespace TeamZaps.Utils
             foreach (T item in source)
                 action(item);
         }
+        
+        public static bool Contains<T>(this IEnumerable<T> source, Predicate<T> predicate)
+        {
+            foreach (var item in source)
+            {
+                if (predicate(item))
+                    return (true);
+            }
+            return (false);
+        }
+        public static bool Contains<T, TVal>(this IEnumerable<T> source, TVal value, Func<T, TVal> selector)
+        {
+            foreach (var item in source)
+            {
+                if (selector(item)!.Equals(value))
+                    return (true);
+            }
+            return (false);
+        }
+        public static bool Contains<T>(this IEnumerable source)
+        {
+            foreach (var item in source)
+            {
+                if (item is T)
+                    return (true);
+            }
+            return (false);
+        }
     }
     internal static partial class ExtList
     {
