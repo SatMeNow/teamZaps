@@ -1,14 +1,12 @@
 using System.Text;
-using TeamZaps.Statistic;
-using TeamZaps.Session;
-using Telegram.Bot.Types;
-using TeamZaps.Utils;
 using System.Numerics;
-using TeamZaps.Backend;
-using TeamZaps.Services;
 using System.Diagnostics;
+using TeamZaps.Backends;
+using TeamZaps.Services;
+using TeamZaps.Session;
+using TeamZaps.Utils;
 
-namespace TeamZaps.Helper;
+namespace TeamZaps.Handlers;
 
 /// <summary>
 /// Server overview statistics message showing platform-wide metrics.

@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text;
 using TeamZaps.Configuration;
-using TeamZaps.Helper;
 using TeamZaps.Services;
 using TeamZaps.Session;
 using TeamZaps.Utils;

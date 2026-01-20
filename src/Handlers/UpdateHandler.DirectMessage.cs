@@ -1,14 +1,12 @@
 using System.Diagnostics;
 using System.Text;
 using TeamZaps;
-using TeamZaps.Backend;
+using TeamZaps.Backends;
 using TeamZaps.Configuration;
-using TeamZaps.Helper;
+using TeamZaps.Payment;
 using TeamZaps.Services;
 using TeamZaps.Session;
-using TeamZaps.Statistic;
 using TeamZaps.Utils;
-using Telegram.Bot.Types.ReplyMarkups;
 
 namespace TeamZaps.Handlers;
 
@@ -129,61 +127,72 @@ public partial class UpdateHandler
             if (text.IsLightningInvoice(out var recoveryInvoice))
             {
                 var lostSats = await recoveryService.TryGetLostSatsAsync(user.Id).ConfigureAwait(false);
-                if (lostSats is not null)
+                if (lostSats is null)
+                    throw new InvalidOperationException("Are you looking for *lost sats to recover*?\nSorry, there aren't any 🤷‍♂️")
+                        .AddLogLevel(LogLevel.Information)
+                        .AnswerUser();
+                else
                 {
                     await ProcessRecoveryInvoiceAsync(botClient, user, recoveryInvoice, lostSats, cancellationToken).ConfigureAwait(false);
                     return (true);
                 }
             }
+            return (false);
         }
         else
         {
-            switch (session.Phase)
+            // Check for payment:
+            if (PaymentParser.TryParse(text, out var tokens, out var error))
             {
-                case SessionPhase.WaitingForLotteryParticipants:
-                    throw new InvalidOperationException("Payments are blocked until someone enters the lottery!\n\n" +
-                        "Use the 🎰 Enter Lottery button in your welcome message or ask someone to enter the lottery first.")
-                        .AddLogLevel(LogLevel.Warning)
-                        .AnswerUser();
-
-                case SessionPhase.AcceptingPayments:
-                    // Try to parse as payment from session participant
-                    if (PaymentParser.TryParse(text, out var tokens, out var error))
-                    {
-                        await ProcessPrivatePaymentAsync(botClient, session, user, tokens, text, cancellationToken).ConfigureAwait(false);
-                        return (true);   
-                    }
-                    break;
-
-                case SessionPhase.WaitingForInvoice:
-                    // Check if this user is a winner waiting to submit an invoice
-                    var winnerUser = session.GetWinnerUser(user.Id);
-                    if (winnerUser is null)
-                        throw new InvalidOperationException($"You are not a winner in the current session!")
+                switch (session.Phase)
+                {
+                    case SessionPhase.WaitingForLotteryParticipants:
+                        throw new InvalidOperationException("Payments are blocked until someone enters the lottery!\n\n" +
+                            "Use the 🎰 Enter Lottery button in your welcome message or ask someone to enter the lottery first.")
                             .AddLogLevel(LogLevel.Warning)
                             .AnswerUser();
-                    if (winnerUser!.SubmittedInvoice)
-                        throw new InvalidOperationException($"You have already submitted your invoice for this session!")
-                            .AddLogLevel(LogLevel.Information)
-                            .AnswerUser();
 
-                    // This looks like an invoice submission
-                    if (text.IsLightningInvoice(out var invoice))
-                    {
-                        await ProcessWinnerInvoiceAsync(botClient, session, winnerUser, invoice, cancellationToken).ConfigureAwait(false);
+                    case SessionPhase.AcceptingPayments:
+                        await ProcessPrivatePaymentAsync(botClient, session, user, tokens, text, cancellationToken).ConfigureAwait(false);
                         return (true);
-                    }
-                    break;
 
-                default:
-                    throw new InvalidOperationException($"Payments are not available in current session phase '{session.Phase}'.")
-                        .AddLogLevel(LogLevel.Warning)
-                        .AnswerUser();
+                    default:
+                        throw new InvalidOperationException($"Payments are not available in current session phase `{session.Phase.GetDescription()}`.")
+                            .AddLogLevel(LogLevel.Warning)
+                            .AnswerUser();
+                }
             }
+            // Check for invoice submission:
+            else if (text.IsLightningInvoice(out var invoice))
+            {
+                switch (session.Phase)
+                {
+                    case SessionPhase.WaitingForInvoice:
+                        // Check if this user is a winner waiting to submit an invoice
+                        var winnerUser = session.GetWinnerUser(user.Id);
+                        if (winnerUser is null)
+                            throw new InvalidOperationException($"Nice try! Sorry, *you are not a winner* in the current session 😉")
+                                .AddLogLevel(LogLevel.Information)
+                                .AnswerUser();
+                        if (winnerUser!.SubmittedInvoice)
+                            throw new InvalidOperationException($"You have *already submitted your invoice* for this session!")
+                                .AddLogLevel(LogLevel.Information)
+                                .AnswerUser();
+
+                        await ProcessWinnerInvoiceAsync(botClient, session, winnerUser, invoice!, cancellationToken).ConfigureAwait(false);
+                        return (true);
+
+                    default:
+                        throw new InvalidOperationException($"Invoices are not available in current session phase `{session.Phase.GetDescription()}`.")
+                            .AddLogLevel(LogLevel.Warning)
+                            .AnswerUser();
+                }
+            }
+            // Unknown input:
+            else
+                throw new NotImplementedException($"Sorry, push the `payment` button for instructions or use `{BotPmCommand.Help}` for commands.")
+                    .AnswerUser();
         }
-        
-        throw new NotImplementedException($"Sorry, push the `payment` button for instructions or use `{BotPmCommand.Help}` for commands.")
-            .AnswerUser();
     }
     private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, User user, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
     {

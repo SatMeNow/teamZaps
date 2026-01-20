@@ -1,13 +1,9 @@
-using System.Collections.Immutable;
-using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Numerics;
 using System.Text.RegularExpressions;
-using Microsoft.VisualBasic;
-using TeamZaps.Configuration;
 using TeamZaps.Utils;
 
-namespace TeamZaps.Session;
+namespace TeamZaps.Payment;
 
 public record PaymentToken : IFormattableAmount
 {
@@ -96,21 +92,24 @@ public static class PaymentParser
 
 public static partial class Extensions
 {
-    public static bool IsLightningInvoice(this string source, out string parsedInvoice)
+    public static bool IsLightningInvoice(this string source, [NotNullWhen(true)] out string? parsedInvoice)
     {
-        parsedInvoice = source
+        parsedInvoice = null;
+
+        var invoice = source
             .ToLower()
             .Replace("lightning:", "");
-        if (!parsedInvoice.StartsWith("ln"))
+        if (!invoice.StartsWith("ln"))
             return (false);
-        if (parsedInvoice.Length < 50)
+        if (invoice.Length < 50)
             return (false);
-        if (!parsedInvoice
+        if (!invoice
             .Select(char.ToLowerInvariant)
             .All(c => 'a' <= c && c <= 'z' ||
                       '0' <= c && c <= '9'))
             return (false);
             
+        parsedInvoice = invoice;
         return (true);
     }
     public static bool IsPaymentRequest(this string source)

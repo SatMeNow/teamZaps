@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
-using TeamZaps.Backend;
+using TeamZaps.Backends;
 using TeamZaps.Configuration;
 
 namespace TeamZaps.Tests.Backend;

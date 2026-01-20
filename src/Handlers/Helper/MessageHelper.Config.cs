@@ -1,11 +1,8 @@
 using TeamZaps.Configuration;
 using TeamZaps.Services;
-using TeamZaps.Session;
-using Telegram.Bot;
-using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace TeamZaps.Helper;
+namespace TeamZaps.Handlers;
 
 internal static class ConfigMessage
 {

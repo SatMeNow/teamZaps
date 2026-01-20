@@ -1,12 +1,12 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
-using Microsoft.Extensions.Logging;
 using TeamZaps.Services;
-using TeamZaps.Backend;
+using TeamZaps.Backends;
 using TeamZaps.Utils;
+using TeamZaps.Session;
 
-namespace TeamZaps.Session;
+namespace TeamZaps.Handlers;
 
 internal static class WinnerMessage
 {

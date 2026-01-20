@@ -1,10 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
-using TeamZaps.Backend;
 using TeamZaps.Handlers;
-using TeamZaps.Logging;
-using TeamZaps.Session;
-using TeamZaps.Utils;
 
 namespace TeamZaps.Services;
 

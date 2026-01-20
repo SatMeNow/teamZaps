@@ -1,10 +1,9 @@
-using System.ComponentModel;
 using System.Text;
-using Microsoft.Extensions.Logging;
-using TeamZaps.Services;
+using TeamZaps.Payment;
+using TeamZaps.Session;
 using TeamZaps.Utils;
 
-namespace TeamZaps.Session;
+namespace TeamZaps.Handlers;
 
 internal static class PaymentMessage
 {

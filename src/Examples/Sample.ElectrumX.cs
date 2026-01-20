@@ -1,7 +1,5 @@
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using TeamZaps.Backend;
-using TeamZaps.Configuration;
+using TeamZaps.Backends;
+using TeamZaps.Backends.Indexer;
 
 namespace TeamZaps.Examples;
 

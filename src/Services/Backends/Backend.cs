@@ -3,7 +3,7 @@ using NLightning.Bolt11.Models;
 using TeamZaps.Configuration;
 using TeamZaps.Utils;
 
-namespace TeamZaps.Backend;
+namespace TeamZaps.Backends;
 
 
 /// <summary>

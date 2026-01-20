@@ -1,4 +1,3 @@
-using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -6,12 +5,12 @@ using System.Text.Json.Nodes;
 using System.Security.Cryptography;
 using TeamZaps.Configuration;
 using TeamZaps.Utils;
-using System.Diagnostics.CodeAnalysis;
-using Microsoft.VisualBasic;
+using TeamZaps.Services;
+using TeamZaps.Session;
 using System.Diagnostics;
 using System.Net.Security;
 
-namespace TeamZaps.Backend;
+namespace TeamZaps.Backends.Indexer;
 
 
  public class ElectrumXClient : IBackendClient, IDisposable

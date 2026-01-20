@@ -3,7 +3,7 @@ using TeamZaps.Services;
 using TeamZaps.Session;
 using TeamZaps.Utils;
 
-namespace TeamZaps.Helper;
+namespace TeamZaps.Handlers;
 
 internal static partial class Ext
 {
