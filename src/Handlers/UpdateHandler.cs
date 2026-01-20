@@ -6,6 +6,7 @@ using TeamZaps.Session;
 using TeamZaps.Utils;
 using TeamZaps.Statistic;
 using TeamZaps.Logging;
+using Microsoft.VisualBasic;
 
 namespace TeamZaps.Handlers;
 
@@ -105,6 +106,18 @@ public partial class UpdateHandler : IUpdateHandler
         
         var res = true;
         var isCmd = message.TryGetCommand(out var cmd);
+
+        // Check if command is for us:
+        var explicitRecipient = false;
+        if (!string.IsNullOrEmpty(cmd?.Recipient))
+        {
+            var bot = await botClient.GetBotUser(cancellationToken).ConfigureAwait(false);
+            if (string.Equals(cmd!.Value.Recipient, bot.Username, StringComparison.OrdinalIgnoreCase))
+                explicitRecipient = true; // Command is explicitly sent to us.
+            else
+                return; // Command is sent to another user.
+        }
+        
         switch (message.Chat.Type)
         {
             case ChatType.Private:
@@ -116,17 +129,19 @@ public partial class UpdateHandler : IUpdateHandler
 
             case ChatType.Group:
             case ChatType.Supergroup:
-                if (isCmd)
-                    res = await HandleGroupCommandAsync(botClient, cmd!.Value, cancellationToken).ConfigureAwait(false);
-                else
-                    res = true; // Just ignore regular group messages.
+                if (!isCmd)
+                    return; // Just ignore regular group messages.
+
+                res = await HandleGroupCommandAsync(botClient, cmd!.Value, cancellationToken).ConfigureAwait(false);
+                if (!explicitRecipient)
+                    return; // Ignore unknown commands in groups.
                 break;
         }
-            
+
         if (res)
             ; // Succeeded.
         else if (isCmd)
-            throw new ArgumentException("Error handling unknown command!");
+            throw new ArgumentException($"Error handling unknown command `{cmd!.Value}`!");
         else
             throw new Exception("Unable to process message!");
     }

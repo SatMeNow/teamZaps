@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using TeamZaps.Backend;
 using TeamZaps.Handlers;
 using TeamZaps.Logging;
@@ -26,7 +27,7 @@ public interface IUser : IUserName
     string IUserName.UserName => User.Username.DisplayName(null);
 }
 
-public record struct CommandMessage(Message Source, string Value, string[] Arguments)
+public record struct CommandMessage(Message Source, string Value, string? Recipient, string[] Arguments)
 {
     #region  Properties
     public long ChatId => Source.Chat.Id;
@@ -145,11 +146,16 @@ internal static partial class Ext
     {
         if (source?.IsCommand() == true)
         {
-            var items = source.Text!.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var items = source.Text!
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var cmd = items
+                .First()
+                .Split('@');
             command = new CommandMessage(
                 source,
-                items.First().ToLower(),
-                items.Skip(1).ToArray()
+                cmd.First().ToLower(), // Command name
+                cmd.ElementAtOrDefault(1), // Recipient (if any)
+                items.Skip(1).ToArray() // Arguments
             );
         }
         else
@@ -157,12 +163,19 @@ internal static partial class Ext
 
         return (command is not null);
     }
+    public static async Task<User> GetBotUser(this ITelegramBotClient botClient, CancellationToken cancellationToken = default)
+    {
+        if (botUser is null)
+            botUser = await botClient.GetMe(cancellationToken).ConfigureAwait(false);
+        return (botUser);
+    }
+    private static User? botUser = null;
     public static async Task<bool> BotCanPinMessagesAsync(this ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken = default)
     {
         try
         {
-            var me = await botClient.GetMe(cancellationToken).ConfigureAwait(false);
-            var member = await botClient.GetChatMember(chatId, me.Id, cancellationToken).ConfigureAwait(false);
+            var bot = await GetBotUser(botClient, cancellationToken).ConfigureAwait(false);
+            var member = await botClient.GetChatMember(chatId, bot.Id, cancellationToken).ConfigureAwait(false);
             if (member is ChatMemberOwner)
                 return (true);
             if (member is ChatMemberAdministrator admin)
