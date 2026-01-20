@@ -349,28 +349,24 @@ This setting controls:
 
 **Supported Locales:** `en-US`, `de-DE`, `it-IT`, `fr-FR`, `es-ES`, `pt-BR`, `ja-JP`, `ko-KR`, `zh-CN`, `zh-TW`, etc.
 
-### EnableRecovery
+### Recovery Settings
 
-Disables the lost sats recovery system during development.
-- **Default**: `enabled`
+Configure the lost sats recovery system for interrupted sessions.
 
-Completely disables all recovery operations:
-- No lost sats records will be created
-- Existing recovery files will not be processed
-- Background scanning for lost sats will be skipped
+**Configuration:**
+- `Enable` - Enable or disable the recovery system (default: `true`)
+- `DailyScanTime` - Time of day when the recovery scan runs in HH:MM:SS format (default: `08:00:00`)
 
 ```json
 {
-  "Debug": {
-    "DisableRecovery": true
+  "Recovery": {
+    "Enable": true,
+    "DailyScanTime": "03:00:00"
   }
 }
 ```
 
-**Use cases:**
-- Testing payment flows without recovery interference
-- Preventing recovery file creation during development
-- Debugging session lifecycle without recovery noise
+When disabled, all recovery operations are stopped: no lost sats records are created, existing recovery files are not processed, and background scanning is skipped. Schedule scans during low-traffic hours and adjust timing based on your user time zones
 
 ## 🧠 Core Concepts
 
@@ -409,8 +405,8 @@ Team Zaps includes a comprehensive **Lost and Found** recovery system to protect
 
 **User Notification:**
 - Users with lost sats receive automatic notifications via direct message
-- Notifications include recovery amount and instructions
-- Notifications are sent weekly until recovery is completed
+- Notifications include recovery amount and instructions to clain lost sats
+- Notifications are sent up to 3 times before the bot stops trying (sent during daily recovery scans)
 
 ### Message Management
 

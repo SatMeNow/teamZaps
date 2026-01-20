@@ -45,6 +45,10 @@ services:
       # Backend: CoinGecko (Exchange Rates - Deprecated, requires API key)
       # - Backends__CoinGecko__ApiKey=${COINGECKO_API_KEY}
       
+      # Recovery System
+      - Recovery__Enable=${RECOVERY_ENABLE}
+      - Recovery__DailyScanTime=${RECOVERY_DAILY_SCAN_TIME}
+      
     volumes:
       # Mount appsettings.json if you want to configure it from the host
       - ./appsettings.json:/app/appsettings.json

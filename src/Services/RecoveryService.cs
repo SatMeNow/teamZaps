@@ -15,22 +15,22 @@ namespace TeamZaps.Services;
 /// </summary>
 public class RecoveryService : BackgroundService
 {
-    #region Constants.Settings
-    static readonly TimeSpan InitTimeout = TimeSpan.FromSeconds(5);
-    static readonly TimeSpan ScanPeriod = TimeSpan.FromHours(6);
-    #endregion
-
-
-    public RecoveryService(ILogger<RecoveryService> logger, FileService<LostSatsRecord> lostSatsFile, ITelegramBotClient botClient, IOptions<DebugSettings> debugSettings, SessionManager sessionManager)
+    public RecoveryService(ILogger<RecoveryService> logger, FileService<LostSatsRecord> lostSatsFile, ITelegramBotClient botClient, IOptions<RecoverySettings> recoverySettings, SessionManager sessionManager)
     {
         this.logger = logger;
         this.lostSatsFile = lostSatsFile;
         this.botClient = botClient;
-        this.debugSettings = debugSettings.Value;
+        this.recoverySettings = recoverySettings.Value;
         this.sessionManager = sessionManager;
 
         this.sessionManager.OnSessionRemoved += OnSessionRemoved;
     }
+
+
+    #region Poperties.Management
+    public bool Enabled => recoverySettings.Enable;
+    public TimeSpan DailyScanTime => recoverySettings.DailyScanTime;
+    #endregion
 
 
     #region Events
@@ -45,28 +45,46 @@ public class RecoveryService : BackgroundService
     #region Initialization
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        #if DEBUG
-        if (debugSettings.EnableRecovery == false)
+        if (recoverySettings.Enable == false)
             return;
-        #endif
 
-        await Task.Delay(InitTimeout).ConfigureAwait(false);
+        // Start daily scan loop:
+        logger.LogInformation("Recovery service scheduled daily can at {DailyScanTime}.", DailyScanTime);
 
-        // Schedule periodic scans:
-        logger.LogInformation("Recovery service starting periodic scans.");
-        using var timer = new PeriodicTimer(ScanPeriod);
-        do
+        var nextScanTime = GetNextScanTime(DateTimeOffset.Now);
+        while (!stoppingToken.IsCancellationRequested)
         {
+            var delay = (nextScanTime - DateTimeOffset.Now);
+            if (delay > TimeSpan.Zero)
+            {
+                try
+                {
+                    await Task.Delay(delay, stoppingToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+            }
+
+            if (stoppingToken.IsCancellationRequested)
+                break;
+
             try
             {
                 await ScanForLostSatsAsync().ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error during periodic scan for lost sats.");
+                logger.LogError(ex, "Error during scheduled scan for lost sats.");
             }
-            
-        } while ((!stoppingToken.IsCancellationRequested) && (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false)));
+
+            nextScanTime = GetNextScanTime(nextScanTime.AddDays(1));
+        }
     }
     public override void Dispose()
     {
@@ -81,26 +99,21 @@ public class RecoveryService : BackgroundService
     /// </summary>
     public async Task RecordLostSatsAsync(ParticipantState participant, string reason)
     {
-        #if DEBUG
-        if (debugSettings.EnableRecovery == false)
+        if (recoverySettings.Enable == false)
             return;
-        #endif
 
         try
         {
-            // Create recovery record:
             var record = new LostSatsRecord
             {
                 UserId = participant.UserId,
                 UserName = participant.UserName(),
                 SatsAmount = participant.SatsAmount,
                 Timestamp = DateTimeOffset.Now,
-                Reason = reason,
-                LastNotified = null // Reset notification timestamp for new payment
+                Reason = reason
             };
             await lostSatsFile.WriteAsync(record.UserId, record).ConfigureAwait(false);
-
-            //logger.LogInformation("Recorded lost sats for user {User}): {SatsAmount}", participant, participant.SatsAmount.Format());
+            logger.LogDebug("Recorded lost sats for user {User}: {SatsAmount}", participant, record.SatsAmount.Format());
         }
         catch (Exception ex)
         {
@@ -109,19 +122,15 @@ public class RecoveryService : BackgroundService
     }
     public Task ClearLostSatsAsync(long userId)
     {
-        #if DEBUG
-        if (debugSettings.EnableRecovery == false)
+        if (recoverySettings.Enable == false)
             return (Task.CompletedTask);
-        #endif
 
         return (lostSatsFile.DeleteAsync(userId));
     }
     public void ClearLostSats(SessionState session)
     {
-        #if DEBUG
-        if (debugSettings.EnableRecovery == false)
+        if (recoverySettings.Enable == false)
             return;
-        #endif
 
         lostSatsFile.Delete(session.Participants.Values
             .Select(p => p.UserId));
@@ -129,10 +138,8 @@ public class RecoveryService : BackgroundService
 
     public Task<LostSatsRecord?> TryGetLostSatsAsync(long userId)
     {
-        #if DEBUG
-        if (debugSettings.EnableRecovery == false)
+        if (recoverySettings.Enable == false)
             return (Task.FromResult<LostSatsRecord?>(null));
-        #endif
 
         return (lostSatsFile.ReadAsync(userId));
     }
@@ -141,22 +148,16 @@ public class RecoveryService : BackgroundService
     /// </summary>
     public Task<ICollection<LostSatsRecord>> GetAllLostSatsAsync()
     {
-        #if DEBUG
-        if (debugSettings.EnableRecovery == false)
+        if (recoverySettings.Enable == false)
             return (Task.FromResult<ICollection<LostSatsRecord>>(Array.Empty<LostSatsRecord>()));
-        #endif
 
         return (lostSatsFile.ReadAllAsync());
     }
 
     public async Task ScanForLostSatsAsync()
     {
-        #if DEBUG
-        if (debugSettings.EnableRecovery == false)
-            return;
-        #endif
-
         // Get lost sats of inactive(!) sessions/users:
+        logger.LogDebug("Starting scan for lost sats.");
         var lostSatsRecords = (await GetAllLostSatsAsync().ConfigureAwait(false))
             .Where(r => !sessionManager.ActiveParticipants.Contains(p => p.UserId == r.UserId))
             .ToArray();
@@ -165,6 +166,11 @@ public class RecoveryService : BackgroundService
 
         var totalLostSats = lostSatsRecords.Sum(r => r.SatsAmount);
         logger.LogWarning("⚠️ LOST SATS DETECTED! Found {Count} user(s) with {TotalSats} of lost funds.", lostSatsRecords.Length, totalLostSats.Format());
+        var exceededRecords = lostSatsRecords
+            .Where(r => r.NotificationReminderLimitExceeded)
+            .ToArray();
+        if (!exceededRecords.IsEmpty())
+            logger.LogWarning("{Count} user(s) aren't being notified about lost sats anymore.", exceededRecords.Length);
 
         // Notify users:
         foreach (var record in lostSatsRecords.Where(r => r.NotificationRequired))
@@ -177,10 +183,11 @@ public class RecoveryService : BackgroundService
                     .ToString();
                 await botClient.SendMessage(record.UserId, message, 
                     parseMode: ParseMode.Markdown).ConfigureAwait(false);
+                logger.LogDebug("Sent notification #{Count} about {SatsAmount} of lost funds to user {User}.",
+                    record.NotifiedCount, record.SatsAmount.Format(), record.DisplayName());
                     
-                logger.LogInformation("Notified user {User} about {SatsAmount} of lost funds.", record.DisplayName(), record.SatsAmount.Format());
-                
-                // Update the record with notification timestamp:
+                // Update record:
+                record.NotifiedCount++;
                 record.LastNotified = DateTimeOffset.Now;
                 await lostSatsFile.WriteAsync(record.UserId, record).ConfigureAwait(false);
             }
@@ -191,13 +198,32 @@ public class RecoveryService : BackgroundService
         }
     }
     #endregion
+    #region Helper
+    private DateTimeOffset GetNextScanTime(DateTimeOffset referenceTime)
+    {
+        var baseDate = new DateTimeOffset(referenceTime.Year, referenceTime.Month, referenceTime.Day, 0, 0, 0, referenceTime.Offset);
+        var dailyScanTime = NormalizeTimeOfDay(DailyScanTime);
+        var candidate = baseDate.Add(dailyScanTime);
+        if (candidate < referenceTime)
+            candidate = candidate.AddDays(1);
+        return (candidate);
+    }
+    private static TimeSpan NormalizeTimeOfDay(TimeSpan value)
+    {
+        var day = TimeSpan.FromDays(1);
+        var normalized = TimeSpan.FromTicks(value.Ticks % day.Ticks);
+        if (normalized < TimeSpan.Zero)
+            normalized += day;
+        return (normalized);
+    }
+    #endregion
 
 
     private readonly ILogger<RecoveryService> logger;
     private readonly FileService<LostSatsRecord> lostSatsFile;
     private readonly ITelegramBotClient botClient;
-    private readonly DebugSettings debugSettings;
     private readonly SessionManager sessionManager;
+    private readonly RecoverySettings recoverySettings;
 }
 
 
@@ -208,21 +234,39 @@ public class RecoveryService : BackgroundService
 public class LostSatsRecord : IUserName
 {
     #region Constants.Settings
-    static readonly TimeSpan RecoveryNotificationPeriod = TimeSpan.FromDays(7);
+    static readonly TimeSpan MinRecoveryNotificationThreshold = TimeSpan.FromHours(12);
+    private const int RecoveryNotificationMaxReminders = 3;
     #endregion
 
 
     #region Properties.Management
     [JsonIgnore]
-    public bool NotificationRequired => (LastNotified is null) || ((DateTimeOffset.Now - LastNotified.Value) < RecoveryNotificationPeriod);
+    public bool NotificationReminderLimitExceeded => (NotifiedCount >= RecoveryNotificationMaxReminders);
+    [JsonIgnore]
+    public bool NotificationRequired
+    {
+        get
+        {
+            if (NotificationReminderLimitExceeded)
+                return (false);
+            if (LastNotified is null)
+                return (true);
+            if ((DateTimeOffset.Now - LastNotified.Value) >= MinRecoveryNotificationThreshold)
+                return (true);
+            return (false);
+        }
+    }
     #endregion
     #region Properties
     public required long UserId { get; set; }
     public required string UserName { get; set; } = string.Empty;
+
     public required long SatsAmount { get; set; }
     public required DateTimeOffset Timestamp { get; set; }
     public string? Reason { get; set; }
-    public DateTimeOffset? LastNotified { get; set; }
+
+    public DateTimeOffset? LastNotified { get; set; } = null;
+    public int NotifiedCount { get; set; } = 0;
     #endregion
 
 

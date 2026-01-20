@@ -383,7 +383,9 @@ public partial class UpdateHandler
         diag.AppendLineIfNotNull("• Total locked amount: *{0}*", sessionManager.FormatAmount(), "💤 none");
 
         // Lost and Found Recovery Information
-        diag.AppendLine("\n🔍 *Lost and Found recovery:*");
+        diag.AppendLine("\n🔍 *Lost and Found sats recovery:*");
+        diag.AppendLine($"• Enabled: *{recoveryService.Enabled}*");
+        diag.AppendLine($"• Daily scan time: *{recoveryService.DailyScanTime}*");
         var allLostSats = await recoveryService.GetAllLostSatsAsync().ConfigureAwait(false);
         if (allLostSats.IsEmpty())
             diag.AppendLine("• Lost sats records: ✅ *None*");
