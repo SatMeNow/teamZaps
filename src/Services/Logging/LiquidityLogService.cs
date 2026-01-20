@@ -22,7 +22,7 @@ public class LiquidityLogService : IHostedService
 {
     #region Constants
     private static readonly string LogPath = Path.Combine(Common.LogPath, "liquidity.csv");
-    private static readonly string[] Columns = [ "Timestamp", "Sessions", PaymentCurrency.Sats.GetDescription(), BotBehaviorOptions.AcceptedFiatCurrency.GetDescription() ];
+    private static readonly string[] Columns = [ "Timestamp", "Participants", "Sessions", PaymentCurrency.Sats.GetDescription(), BotBehaviorOptions.AcceptedFiatCurrency.GetDescription() ];
     #endregion
 
 
@@ -57,11 +57,12 @@ public class LiquidityLogService : IHostedService
             var line = $"{DateTime.UtcNow:O},";
             if (tag is null)
             {
+                var participantCount = sessionManager.ActiveParticipants.Count();
                 var sessionCount = sessionManager.ActiveSessions.Count();
                 var lockedSats = sessionManager.TotalLockedSats;
                 var lockedFiat = sessionManager.TotalLockedFiat;
 
-                line += $"{sessionCount},{lockedSats},{lockedFiat.ToString("N2", CultureInfo.InvariantCulture)}";
+                line += $"{participantCount},{sessionCount},{lockedSats},{lockedFiat.ToString("N2", CultureInfo.InvariantCulture)}";
             }
             else
                 // Write specific tag to file
