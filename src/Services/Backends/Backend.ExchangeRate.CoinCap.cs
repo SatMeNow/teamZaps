@@ -1,9 +1,8 @@
-using TeamZaps.Backend;
-using TeamZaps.Configuration;
+using TeamZaps.Services;
 using TeamZaps.Session;
 using TeamZaps.Utils;
 
-namespace TeamZaps.Backend;
+namespace TeamZaps.Backends.ExchangeRate;
 
 /// <summary>
 /// CoinCap exchange rate backend.

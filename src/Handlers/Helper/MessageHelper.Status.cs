@@ -1,13 +1,10 @@
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Text;
-using Microsoft.Extensions.Logging;
-using TeamZaps.Configuration;
 using TeamZaps.Services;
+using TeamZaps.Session;
 using TeamZaps.Utils;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace TeamZaps.Session;
+namespace TeamZaps.Handlers;
 
 
 /// <summary>

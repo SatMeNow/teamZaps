@@ -1,16 +1,8 @@
-using System;
-using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 using NBitcoin;
 using NBitcoin.Secp256k1;
 using NNostr.Client;
-using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace TeamZaps.Communication;
 

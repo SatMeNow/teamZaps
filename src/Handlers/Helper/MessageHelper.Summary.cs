@@ -1,12 +1,11 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
-using Microsoft.Extensions.Logging;
-using TeamZaps.Configuration;
 using TeamZaps.Services;
+using TeamZaps.Session;
 using TeamZaps.Utils;
 
-namespace TeamZaps.Session;
+namespace TeamZaps.Handlers;
 
 
 /// <summary>
