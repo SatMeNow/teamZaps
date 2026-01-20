@@ -70,6 +70,18 @@ Payment flow summary:
 4. Admin closes session → winner is drawn
 5. Winner submits Lightning invoice → automatic payout
 
+## Payments and Invoices
+
+If a winner is asked to submit a Lightning invoice for a payout, it's fine to split the total amount into multiple invoices. This helps when a wallet, route, or node limits single-invoice size.
+
+How to split invoices:
+- Create one or more Lightning invoices whose summed sats equal the requested amount.
+- Send the invoices sequentially to the bot in your private chat until the total is met.
+- The bot will always show you the remaining amount to claim.
+
+Tips:
+- If you encounter routing failures, try smaller invoices (for example, 50–90% of the problematic route size) and send multiple invoices.
+
 ## ⚡ Payment Examples
 
 The bot accepts various payment formats:
@@ -134,6 +146,18 @@ Team Zaps includes a **Lost and Found** system to protect your payments. If some
 - Request a Lightning invoice for that exact amount
 - Pay your invoice once verified
 - Clear your recovery record
+
+**Splitting Recovery into Multiple Invoices:**
+
+You can split it into multiple invoices. This helps when a wallet, route, or node limits single-invoice size.
+
+How to split invoices:
+- Create one or more Lightning invoices whose summed sats equal the requested amount.
+- Send the invoices sequentially to the bot in your private chat until the total is met.
+- The bot will always show you the remaining amount to claim.
+
+Tips:
+- If you encounter routing failures, try smaller invoices (for example, 50–90% of the problematic route size) and send multiple invoices.
 
 ### When Does Recovery Happen?
 

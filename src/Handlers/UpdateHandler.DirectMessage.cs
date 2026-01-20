@@ -141,8 +141,23 @@ public partial class UpdateHandler
         }
         else
         {
+            // Check for invoice submission:
+            if (text.IsLightningInvoice(out var invoice))
+            {
+                switch (session.Phase)
+                {
+                    case SessionPhase.WaitingForInvoice:
+                        await ProcessWinnerInvoiceAsync(botClient, session, user, invoice!, cancellationToken).ConfigureAwait(false);
+                        return (true);
+
+                    default:
+                        throw new InvalidOperationException($"Invoices are not available in current session phase `{session.Phase.GetDescription()}`.")
+                            .AddLogLevel(LogLevel.Warning)
+                            .AnswerUser();
+                }
+            }
             // Check for payment:
-            if (PaymentParser.TryParse(text, out var tokens, out var error))
+            else if (PaymentParser.TryParse(text, out var tokens, out var error))
             {
                 switch (session.Phase)
                 {
@@ -158,32 +173,6 @@ public partial class UpdateHandler
 
                     default:
                         throw new InvalidOperationException($"Payments are not available in current session phase `{session.Phase.GetDescription()}`.")
-                            .AddLogLevel(LogLevel.Warning)
-                            .AnswerUser();
-                }
-            }
-            // Check for invoice submission:
-            else if (text.IsLightningInvoice(out var invoice))
-            {
-                switch (session.Phase)
-                {
-                    case SessionPhase.WaitingForInvoice:
-                        // Check if this user is a winner waiting to submit an invoice
-                        var winnerUser = session.GetWinnerUser(user.Id);
-                        if (winnerUser is null)
-                            throw new InvalidOperationException($"Nice try! Sorry, *you are not a winner* in the current session 😉")
-                                .AddLogLevel(LogLevel.Information)
-                                .AnswerUser();
-                        if (winnerUser!.SubmittedInvoice)
-                            throw new InvalidOperationException($"You have *already submitted your invoice* for this session!")
-                                .AddLogLevel(LogLevel.Information)
-                                .AnswerUser();
-
-                        await ProcessWinnerInvoiceAsync(botClient, session, winnerUser, invoice!, cancellationToken).ConfigureAwait(false);
-                        return (true);
-
-                    default:
-                        throw new InvalidOperationException($"Invoices are not available in current session phase `{session.Phase.GetDescription()}`.")
                             .AddLogLevel(LogLevel.Warning)
                             .AnswerUser();
                 }
@@ -267,66 +256,92 @@ public partial class UpdateHandler
             await botClient.SendException(user, ex, cancellationToken).ConfigureAwait(false);
         }
     }
-    private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, ParticipantState winnerUser, string bolt11, CancellationToken cancellationToken)
+    private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, User user, string bolt11, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Winner invoice submitted by {User} for session {Session}.", winnerUser, session);
+        // Check if this user is a winner waiting to submit an invoice
+        if (!session.WinnerPayouts.TryGetValue(user.Id, out var winnerPayout))
+            throw new InvalidOperationException($"Nice try! Sorry, *you are not a winner* in the current session 😉")
+                .AddLogLevel(LogLevel.Information)
+                .AnswerUser();
+        if (winnerPayout.PaymentCompleted)
+            throw new InvalidOperationException($"You have *already submitted your invoice* for this session!")
+                .AddLogLevel(LogLevel.Information)
+                .AnswerUser();
 
-        var winnerInfo = session.Winners[winnerUser];
+        var participant = session.Participants[user.Id];
+        logger.LogInformation("Winner invoice submitted by {Participant} for session {Session}.", participant, session);
 
         // Obtain block header at session end
         var currentBlock = await indexerBackend.GetCurrentBlockAsync(cancellationToken).ConfigureAwait(false);
 
         // Decode and validate the invoice amount
         var invoiceSats = lightningBackend.GetInvoiceAmount(bolt11);
-        ValidateInvoiceAmount(winnerInfo.SatsAmount, invoiceSats);
+        ValidateInvoiceAmount(winnerPayout.RemainingAmount, invoiceSats);
 
-        await botClient.SendMessage(winnerUser.UserId, "✅ Invoice received!\n⏳ Processing payout...", cancellationToken: cancellationToken).ConfigureAwait(false);
+        await botClient.SendMessage(participant.UserId,
+            "✅ Invoice received!\n" +
+            "⏳ Processing payout...",
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         try
         {
             var paymentResult = await lightningBackend.PayInvoiceAsync(bolt11!, cancellationToken).ConfigureAwait(false);
             if (paymentResult is null)
                 throw new InvalidOperationException("Failed to execute payout. Please retry with sending a new invoice.");
-                
-            winnerUser!.SubmittedInvoice = true;
 
-            if (session.PayoutCompleted)
+            logger.LogInformation("Payout executed successfully by {Participant} for session {Session}.", participant, session);
+            winnerPayout.AddPayment(invoiceSats);
+
+            if (winnerPayout.PaymentCompleted)
             {
-                session.Phase = SessionPhase.Completed;
+                if (session.PayoutCompleted)
+                {
+                    session.Phase = SessionPhase.Completed;
+                    session.CompletedAtBlock = currentBlock;
 
-                await WinnerMessage.UpdateAsync(session, PaymentStatus.Paid, paymentResult, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+                    // Update the pinned winner message
+                    await WinnerMessage.UpdateAsync(session, PaymentStatus.Paid, paymentResult, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+                    
+                    // Notify winner about successful payout
+                    await botClient.SendMessage(user.Id,
+                        $"✅ Successfully paid out *{invoiceSats.Format()}*.\n" +
+                        $"🎉 *Session completed!*",
+                        parseMode: ParseMode.Markdown,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+                
+                // Update the pinned status message
+                await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+                // Update user status messages for all participants
+                foreach (var p in session.Participants.Values)
+                    await UserStatusMessage.UpdateAsync(session, p, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
             }
-            
-            session.CompletedAtBlock = currentBlock;
+            else
+            {
+                // Update lost sats for crash recovery
+                await recoveryService.WriteLostSatsAsync(participant, winnerPayout.RemainingAmount, $"Partial payout in session *{session.ChatTitle}*").ConfigureAwait(false);
 
-            // Update the pinned status message
-            await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
-            
-            // Update user status messages for all participants
-            foreach (var participant in session.Participants.Values)
-                await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
-            
+                // Notify winner about partial payout
+                await botClient.SendMessage(participant.UserId,
+                    $"✅ Partially paid out *{invoiceSats.Format()}*.\n" +
+                    $"⚡ Please send me a new invoice for the remaining amount of *{winnerPayout.RemainingAmount.Format()}*.",
+                    parseMode: ParseMode.Markdown,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+
             if (session.Phase.IsClosed())
             {
                 // Clean up session
                 workflowService.TryCloseSession(session, false);
 
-                logger.LogInformation("Payout executed successfully by {User} for session {Session}.", winnerUser, session);
+                await statisticService.OnSessionCompleteAsync(session).ConfigureAwait(false);
+                Debug.Assert(session.Statistics is not null);
+
+                // Send statistics
+                await GroupStatisticsMessage.SendIfAsync(botClient, statisticService, session, cancellationToken).ConfigureAwait(false);
+                foreach (var p in session.Participants.Values)
+                    await UserStatisticsMessage.SendIfAsync(botClient, statisticService, p, cancellationToken).ConfigureAwait(false);
             }
-        
-            await botClient.SendMessage(winnerUser.UserId,
-                $"🎉 *Session completed!*\n\n" +
-                $"✅ Successfully paid out *{invoiceSats.Format()}*.",
-                parseMode: ParseMode.Markdown,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-
-            await statisticService.OnSessionCompleteAsync(session).ConfigureAwait(false);
-            Debug.Assert(session.Statistics is not null);
-
-            // Send statistics
-            await GroupStatisticsMessage.SendIfAsync(botClient, statisticService, session, cancellationToken).ConfigureAwait(false);
-            foreach (var participant in session.Participants.Values)
-                await UserStatisticsMessage.SendIfAsync(botClient, statisticService, participant, cancellationToken).ConfigureAwait(false);
             
             await liquidityLogService.LogAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -507,29 +522,50 @@ public partial class UpdateHandler
         ValidateInvoiceAmount(expectedSats, invoiceSats);
 
         await botClient.SendMessage(user.Id, 
-            "✅ Recovery invoice received!\n⏳ Processing recovery payment...", 
+            "✅ Recovery invoice received!\n" +
+            "⏳ Processing recovery payout...", 
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         // Attempt to pay the invoice
         var paymentResult = await lightningBackend.PayInvoiceAsync(bolt11, cancellationToken).ConfigureAwait(false);
         if (paymentResult is not null)
         {
-            await recoveryService.ClearLostSatsAsync(user.Id).ConfigureAwait(false);
-            
-            await botClient.SendMessage(user.Id,
-                $"🎉 *Recovery completed!*\n\n" +
-                $"✅ Successfully claimed *{expectedSats.Format()}*\n" +
-                $"Your lost sats have been sent to your Lightning wallet! 🚀",
-                parseMode: ParseMode.Markdown,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (invoiceSats == expectedSats)
+            {
+                // Clear lost sats record
+                await recoveryService.ClearLostSatsAsync(user.Id).ConfigureAwait(false);
+                
+                await botClient.SendMessage(user.Id,
+                    $"🎉 *Recovery completed!*\n\n" +
+                    $"✅ Successfully claimed *{expectedSats.Format()}*\n" +
+                    $"Your lost sats have been sent to your Lightning wallet! 🚀",
+                    parseMode: ParseMode.Markdown,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            logger.LogInformation("Successfully processed recovery payment for user {User}: {SatsAmount} sats from {Timestamp}.", user, expectedSats.Format(), lostSats.Timestamp);
+                logger.LogInformation("Successfully processed recovery payout for user {User}: {SatsAmount} from {Timestamp}.", user, expectedSats.Format(), lostSats.Timestamp);
+            }
+            else
+            {
+                // Update lost sats for remaining amount
+                lostSats.SatsAmount = (expectedSats - invoiceSats);
+                lostSats.Reason = "Partial recovery payout";
+                await recoveryService.WriteLostSatsAsync(lostSats).ConfigureAwait(false);
+                
+                // Notify user about partial payout
+                await botClient.SendMessage(user.Id,
+                    $"✅ Partially recovered *{invoiceSats.Format()}*.\n" +
+                    $"⚡ Please send me a new invoice to claim the remaining amount of *{lostSats.SatsAmount.Format()}*.",
+                    parseMode: ParseMode.Markdown,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                
+                logger.LogInformation("Successfully processed partial recovery payout for user {User}: {SatsAmount} from {Timestamp}.", user, invoiceSats.Format(), lostSats.Timestamp);
+            }
         }
         else
         {
-            logger.LogError("Failed to process recovery payment for user {User}: {SatsAmount}.", user, expectedSats.Format());
+            logger.LogError("Failed to process recovery payout for user {User}: {SatsAmount}.", user, expectedSats.Format());
                 
-            throw new InvalidOperationException("Recovery payment failed!\n\n" +
+            throw new InvalidOperationException("Recovery payout failed!\n\n" +
                 "Unable to process your recovery invoice. Please try again later or contact support.")
                 .AddLogLevel(LogLevel.Error)
                 .AnswerUser();
@@ -540,12 +576,13 @@ public partial class UpdateHandler
     #region Helper
     private void ValidateInvoiceAmount(long expectedSats, long invoiceSats)
     {
-        if (invoiceSats != expectedSats)
-            throw new InvalidOperationException($"Invoice amount mismatch!\n\n" +
-                $"Expected: {expectedSats.Format()}\n" +
+        if (invoiceSats > expectedSats)
+            throw new InvalidOperationException($"No way! That's too much 😄\n\n" +
                 $"Your invoice: {invoiceSats.Format()}\n" +
-                "Please create a new invoice with the correct amount of sats.")
-                .AnswerUser();
+                $"Expected amount: {expectedSats.Format()}\n" +
+                "ℹ️ Please create a new invoice with the correct amount of sats.")
+                .AnswerUser()
+                .AddLogLevel(LogLevel.Warning);
     }
     private async Task<bool> IsRootUserAsync(ITelegramBotClient botClient, CommandMessage command, CancellationToken cancellationToken)
     {

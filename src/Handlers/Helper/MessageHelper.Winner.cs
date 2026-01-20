@@ -52,14 +52,14 @@ internal static class WinnerMessage
     }
     private static string Build(SessionState session, SessionWorkflowService workflowService, PaymentStatus status, IPaymentResponse? paymentResult = null)
     {
-        if (session.Winners.Count == 0)
+        if (session.WinnerPayouts.Count == 0)
             throw new InvalidOperationException("No winners available!");
 
         var message = new StringBuilder();
         switch (status)
         {
             case PaymentStatus.Pending:
-                if (session.Winners.Count == 1)
+                if (session.WinnerPayouts.Count == 1)
                 {
                     message.AppendLine("🎉🏆 *WINNER SELECTED!* 🏆🎉\n");
                 
@@ -70,8 +70,8 @@ internal static class WinnerMessage
                 {
                     message.AppendLine("🎉🏆 *WINNERS SELECTED!* 🏆🎉\n");
                 
-                    message.AppendLine($"🎰 We have *{session.Winners.Count} winners* to share the cost:\n");
-                    foreach (var winner in session.Winners)
+                    message.AppendLine($"🎰 We have *{session.WinnerPayouts.Count} winners* to share the cost:\n");
+                    foreach (var winner in session.WinnerPayouts)
                     {
                         var winnerUser = session.Participants[winner.Key];
                         message.AppendLine($"• {winnerUser.MarkdownDisplayName()}: *{winner.Value.FiatAmount.Format()}*");
@@ -84,7 +84,7 @@ internal static class WinnerMessage
                 Debug.Assert(paymentResult is not null);    
                 message.AppendLine("🎉🏆 *PAYOUT COMPLETED!* 🏆🎉\n");
                 
-                if (session.Winners.Count == 1)
+                if (session.WinnerPayouts.Count == 1)
                     message.AppendLine($"Congratulations {session.WinnerUser!.MarkdownDisplayName()}!\n");
                 else
                     message.AppendLine("All winners have been paid!\n");

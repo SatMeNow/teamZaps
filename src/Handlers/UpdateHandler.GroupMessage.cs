@@ -135,7 +135,7 @@ public partial class UpdateHandler
             await WinnerMessage.SendAsync(session, botClient, workflowService, cancellationToken).ConfigureAwait(false);
 
             logger.LogInformation("Winners selected for session {Session}: {Winners}.", session, 
-                string.Join(", ", session.Winners.Select(w => $"{w.Key} ({w.Value.FiatAmount.Format()})")));
+                string.Join(", ", session.WinnerPayouts.Select(w => $"{w.Key} ({w.Value.FiatAmount.Format()})")));
         }
         
         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
@@ -477,7 +477,7 @@ public partial class UpdateHandler
     #region Helper
     private int SelectWinners(SessionState session)
     {
-        Debug.Assert(session.Winners.IsEmpty());
+        Debug.Assert(session.WinnerPayouts.IsEmpty());
 
         var remainingAmount = ((ITipableAmount)session).TotalFiatAmount;
 
@@ -497,12 +497,12 @@ public partial class UpdateHandler
             var amountToPay = Math.Min(budget, remainingAmount);
             var satsAmount = CalculateWinnerSats(session, amountToPay);
             
-            session.Winners[userId] = new WinnerInfo(amountToPay, satsAmount);
+            session.WinnerPayouts[userId] = new PayableFiatAmount(amountToPay, satsAmount);
 
             remainingAmount -= amountToPay;
         }
 
-        return (session.Winners.Count);
+        return (session.WinnerPayouts.Count);
     }
 
     private bool CheckServerBudgetLimit(double requestedBudget)

@@ -87,7 +87,7 @@ public class PaymentMonitorService : BackgroundService
                         participant.Payments.Add(payment);
 
                         // Record lost sats for crash recovery:
-                        await recoveryService.RecordLostSatsAsync(participant, $"Payment in session *{session.ChatTitle}*").ConfigureAwait(false);
+                        await recoveryService.WriteLostSatsAsync(participant, $"Payment in session *{session.ChatTitle}*").ConfigureAwait(false);
 
                         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
                         

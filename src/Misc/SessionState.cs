@@ -18,7 +18,7 @@ public enum SessionPhase
     WaitingForLotteryParticipants,
     [Description("💰 Accepting payments")]
     AcceptingPayments,
-    [Description("⌛ Waiting for winner invoice")]
+    [Description("⌛ Waiting for winner invoice(s)")]
     WaitingForInvoice,
 
     [Description("❌ Canceled")]
@@ -61,10 +61,12 @@ public class SessionState : ITipableAmount
     public double Budget => LotteryParticipants.Values.Sum();
 
     public Dictionary<long, double> LotteryParticipants { get; } = new(); // UserId -> MaxBudget
-    public Dictionary<long, WinnerInfo> Winners { get; } = new(); // UserId -> Winner info
-    public IEnumerable<ParticipantState> WinnerUsers => Winners.Keys.Select(id => Participants[id]);
+    public Dictionary<long, PayableFiatAmount> WinnerPayouts { get; } = new(); // UserId -> Payout info
+    public long PayedAmount => WinnerPayouts.Values.Sum(p => p.PayedAmount);
+    public double PayedFiatAmount => WinnerPayouts.Values.Sum(p => p.PayedFiatAmount);
+    public bool PayoutCompleted => WinnerPayouts.Values.All(w => w.PaymentCompleted);
+    public IEnumerable<ParticipantState> WinnerUsers => WinnerPayouts.Keys.Select(id => Participants[id]);
     public ParticipantState? WinnerUser => WinnerUsers.FirstOrDefault();
-    public bool PayoutCompleted => WinnerUsers.All(u => u.SubmittedInvoice);
     public int? WinnerMessageId { get; set; }
 
     public SessionStatistics? Statistics { get; set; }
@@ -79,7 +81,6 @@ public class SessionState : ITipableAmount
     {
         Phase = (cancel ? SessionPhase.Canceled : SessionPhase.Completed);
     }
-    public ParticipantState? GetWinnerUser(long userId) => WinnerUsers.FirstOrDefault(u => u.UserId.Equals(userId));
     #endregion
 }
 
@@ -105,7 +106,6 @@ public class ParticipantState : IUser, ITipableAmount
     public double TipAmount => (HasPayments ? Payments.Sum(p => p.TipAmount) : 0.0);
     public double FiatAmount => (HasPayments ? Payments.Sum(p => p.FiatAmount) : 0.0F);
 
-    public bool SubmittedInvoice { get; set; }
     public int? StatusMessageId { get; set; }
     public int? PaymentHelpMessageId { get; set; }
     public int? BudgetSelectionMessageId { get; set; }
@@ -165,7 +165,37 @@ public class PendingPayment : IUser, ITipableAmount
     public override string ToString() => $"{User}: {(this as ITipableAmount).FormatAmount()}";
 }
 
-public record WinnerInfo(double FiatAmount, long SatsAmount);
+public class PayableAmount
+{
+    public PayableAmount(long satsAmount)
+    {
+        this.SatsAmount = satsAmount;
+    }
+
+    
+    public IReadOnlyCollection<long> Payments => payments;
+    private List<long> payments = new();
+    public long PayedAmount => Payments.Sum();
+    public long RemainingAmount => (SatsAmount - PayedAmount);
+    public bool PaymentCompleted => (PayedAmount >= SatsAmount);
+
+    public long SatsAmount { get; }
+
+
+    public void AddPayment(long amount) => payments.Add(amount);
+}
+public class PayableFiatAmount : PayableAmount, IFormattableAmount
+{
+    public PayableFiatAmount(double fiatAmount, long satsAmount) : base(satsAmount)
+    {
+        this.FiatAmount = fiatAmount;
+    }
+
+    
+    public double FiatAmount { get; }
+    public double PayedFiatAmount => ((double)PayedAmount / SatsAmount * FiatAmount);
+    public double RemainingFiatAmount => (FiatAmount - PayedFiatAmount);
+}
 
 
 internal static partial class Ext

@@ -17,7 +17,7 @@ internal static class SessionSummaryMessage
     {
         foreach (var winnerUser in session.WinnerUsers)
         {
-            var winnerInfo = session.Winners[winnerUser.UserId];
+            var winnerInfo = session.WinnerPayouts[winnerUser.UserId];
             try
             {
                 await botClient.SendMessage(
@@ -35,9 +35,9 @@ internal static class SessionSummaryMessage
         }
     }
 
-    private static string BuildSummary(SessionState session, WinnerInfo winnerInfo)
+    private static string BuildSummary(SessionState session, PayableFiatAmount winnerInfo)
     {
-        Debug.Assert(session.Winners.Count > 0);
+        Debug.Assert(session.WinnerPayouts.Count > 0);
         Debug.Assert(session.HasPayments);
 
         var summary = new StringBuilder();
@@ -45,9 +45,9 @@ internal static class SessionSummaryMessage
         summary.AppendLine($"Session: *{session.DisplayTitle}*\n");
 
         long winnerSats = winnerInfo.SatsAmount;
-        if (session.Winners.Count > 1)
+        if (session.WinnerPayouts.Count > 1)
         {
-            summary.AppendLine($"🎰 *Multiple winners selected!* You're one of {session.Winners.Count} winners.\n");
+            summary.AppendLine($"🎰 *Multiple winners selected!* You're one of {session.WinnerPayouts.Count} winners.\n");
             summary.AppendLine($"Your share: 💰 *{winnerInfo.FiatAmount.Format()}*");
         }
         else
@@ -66,8 +66,8 @@ internal static class SessionSummaryMessage
         
         summary.AppendLine($"Total: 💶 {session.FormatTotalFiatAmount()}");
         summary.AppendLine();
-        
         summary.AppendLine($"⚡ Please create a *lightning invoice* for *{winnerSats.Format()}* and send it to me now.");
+        summary.AppendLine($"ℹ️ Feel free to split the payout into multiple invoices if needed.");
         
         return (summary.ToString());
     }
