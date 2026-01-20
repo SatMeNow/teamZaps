@@ -119,19 +119,19 @@ internal static class SessionStatusMessage
             status.AppendLine("\n⚠️ *Payments are blocked* until someone enters the lottery first!");
         }
 
-        if (session.Winners.Count == 1)
+        if (session.WinnerPayouts.Count == 1)
         {
             var winner = session.WinnerUser!;
-            status.AppendLine($"\n🏆 Winner: {winner.MarkdownDisplayName()} ({session.Winners[winner.UserId].FiatAmount.Format()})");
+            status.AppendLine($"\n🏆 Winner: {winner.MarkdownDisplayName()} ({session.WinnerPayouts[winner.UserId].FiatAmount.Format()})");
         }
-        else if (session.Winners.Count > 1)
+        else if (session.WinnerPayouts.Count > 1)
         {
-            status.AppendLine($"\n🏆 {session.Winners.Count} winners:");
-            foreach (var winnerEntry in session.Winners)
+            status.AppendLine($"\n🏆 {session.WinnerPayouts.Count} winners:");
+            foreach (var winnerPayout in session.WinnerPayouts)
             {
-                var winner = session.Participants[winnerEntry.Key];
-                var invoiceState = (winner.SubmittedInvoice ? "✅" : "⏳");
-                status.AppendLine($"• {invoiceState} {winner.MarkdownDisplayName()} ({winnerEntry.Value.FiatAmount.Format()})");
+                var winner = session.Participants[winnerPayout.Key];
+                var invoiceState = (winnerPayout.Value.PaymentCompleted ? "✅" : "⏳");
+                status.AppendLine($"• {invoiceState} {winner.MarkdownDisplayName()} ({winnerPayout.Value.FiatAmount.Format()})");
             }
         }
 

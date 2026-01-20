@@ -14,7 +14,9 @@ internal static partial class Ext
         source.AppendLine($"📅 From: {lostSats.Timestamp:f}"); // Freitag, 31. Oktober 2008 17:04
         source.AppendLineIfNotNull("💬 Reason: {0}", lostSats.Reason);
         source.AppendLine();
-        source.Append("Just *send me a lightning invoice* if you want to *claim now*.");
+        source.AppendLine("Just *send me a lightning invoice* if you want to *claim now*.");
+        source.AppendLine();
+        source.Append($"ℹ️ Feel free to split the recovery payout into multiple invoices if needed.");
 
         return (source);
     }

@@ -188,7 +188,7 @@ public class StatisticService : IHostedService
         if (session.LotteryParticipants.ContainsKey(userId))
         {
             stats.TotalLotteries++;
-            if (session.Winners.TryGetValue(userId, out var winnerInfo))
+            if (session.WinnerPayouts.TryGetValue(userId, out var winnerInfo))
             {
                 stats.WonLotteries++;
                 stats.TotalWonSats += (ulong)winnerInfo.SatsAmount;

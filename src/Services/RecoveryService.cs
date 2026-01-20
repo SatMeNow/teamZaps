@@ -90,30 +90,43 @@ public class RecoveryService : BackgroundService
     }
     #endregion
     #region Management
+    /// <inheritdoc cref="WriteLostSatsAsync(ParticipantState, long, string)"/> 
+    public Task WriteLostSatsAsync(ParticipantState participant, string reason) => WriteLostSatsAsync(participant, participant.SatsAmount, reason);
+    /// <inheritdoc cref="WriteLostSatsAsync(LostSatsRecord)"/>
+    /// <param name="satsAmount">Absolute amount of sats lost.</param>
+    public Task WriteLostSatsAsync(ParticipantState participant, long satsAmount, string reason)
+    {
+        if (recoverySettings.Enable == false)
+            return (Task.CompletedTask);
+
+        return (WriteLostSatsAsync(new LostSatsRecord
+        {
+            UserId = participant.UserId,
+            UserName = participant.UserName(),
+            SatsAmount = satsAmount,
+            Timestamp = DateTimeOffset.Now,
+            Reason = reason
+        }));
+    }
     /// <summary>
-    /// Records lost sats for a user (creates/updates recovery file).
+    /// Records lost sats for a user.
     /// </summary>
-    public async Task RecordLostSatsAsync(ParticipantState participant, string reason)
+    /// <remarks>
+    /// This method creates or updates a lost sats record.
+    /// </remarks>
+    public async Task WriteLostSatsAsync(LostSatsRecord record)
     {
         if (recoverySettings.Enable == false)
             return;
 
         try
         {
-            var record = new LostSatsRecord
-            {
-                UserId = participant.UserId,
-                UserName = participant.UserName(),
-                SatsAmount = participant.SatsAmount,
-                Timestamp = DateTimeOffset.Now,
-                Reason = reason
-            };
             await lostSatsFile.WriteAsync(record.UserId, record).ConfigureAwait(false);
-            logger.LogDebug("Recorded lost sats for user {User}: {SatsAmount}", participant, record.SatsAmount.Format());
+            logger.LogDebug("Recorded lost sats for user {User}: {SatsAmount}", record.DisplayName(), record.SatsAmount.Format());
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to record lost sats for user {User}.", participant);
+            logger.LogError(ex, "Failed to record lost sats for user {User}.", record.DisplayName());
         }
     }
     public Task ClearLostSatsAsync(long userId)
