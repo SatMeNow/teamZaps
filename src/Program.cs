@@ -5,6 +5,7 @@ using TeamZaps.Backend;
 using TeamZaps.Session;
 using TeamZaps.Utils;
 using Serilog;
+using System.Diagnostics;
 using System.Globalization;
 using TeamZaps.Statistic;
 using TeamZaps.Logging;
@@ -17,7 +18,8 @@ public static class Program
     {
         try
         {
-            await CreateHostBuilder(args).Build().RunAsync().ConfigureAwait(false);
+            var host = CreateHostBuilder(args).Build();
+            await host.RunAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -44,6 +46,8 @@ public static class Program
                             path: Path.Combine(Common.LogPath, year.ToString(), "log-.txt"),
                             rollingInterval: RollingInterval.Day,
                             outputTemplate: LogTemplate));
+                            
+                Trace.Listeners.Add(new DebugTraceListener());
             })
             .ConfigureAppConfiguration((hostingContext, config) =>
             {
@@ -194,5 +198,22 @@ internal static partial class Ext
             source.AddSingleton<IHostedService>(sp => (IHostedService)sp.GetRequiredService(backendType));
 
         return (source);
+    }
+}
+
+/// <summary>
+/// TraceListener that forwards System.Diagnostics Debug/Trace output.
+/// </summary>
+internal sealed class DebugTraceListener : TraceListener
+{
+    public override void Write(string? message)
+    {
+        if (!string.IsNullOrEmpty(message))
+            Log.Debug(message);
+    }
+    public override void WriteLine(string? message)
+    {
+        if (!string.IsNullOrEmpty(message))
+            Log.Debug(message);
     }
 }
