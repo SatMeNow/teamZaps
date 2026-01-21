@@ -38,8 +38,8 @@ public class SessionState : ITipableAmount
 
     public required ParticipantState StartedByUser { get; init; }
     public int? Duration => (CompletedAtBlock?.Height - StartedAtBlock?.Height + 1);
-    public IBlockHeader? StartedAtBlock { get; set; }
-    public IBlockHeader? CompletedAtBlock { get; set; }
+    public BlockHeader? StartedAtBlock { get; set; }
+    public BlockHeader? CompletedAtBlock { get; set; }
 
     public BotAdminOptions AdminOptions { get; set; } = new();
     public bool BotCanPinMessages { get; set; }

@@ -6,7 +6,7 @@ public class ElectrumXSettings
     public const string SectionName = "ElectrumX";
     public static ElectrumXSettings Default => new()
     {
-        Host = "electrum.blockstream.info",
+        Hosts = [ "electrum.blockstream.info" ],
         Port = 50001,
         ValidateSslCertificate = true,
         Timeout = 10000
@@ -18,14 +18,10 @@ public class ElectrumXSettings
     /// <summary>
     /// Array of hosts in <c>HOST:PORT</c> notation.
     /// </summary>
-    public string[]? Hosts { get; set; }
-    /// <summary>
-    /// Hosts in <c>HOST:PORT</c> notation. Port is optional and defaults to <see cref="Port"/>.
-    /// </summary>
     /// <remarks>
     /// Port is optional and defaults to <see cref="Port"/>.
-    /// </remarks>
-    public string? Host { get; set; }
+    /// <remarks>
+    public string[]? Hosts { get; set; }
     /// <remarks>
     /// 50001 as TCP port, 50002 for SSL.
     /// </remarks>

@@ -6,40 +6,13 @@ using TeamZaps.Utils;
 namespace TeamZaps.Backends;
 
 
-/// <summary>
-/// Block header information.
-/// </summary>
-[JsonPolymorphic(
-    TypeDiscriminatorPropertyName = "$type",
-    UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FallBackToNearestAncestor)]
-[JsonDerivedType(typeof(BlockHeader), "block")]
-[JsonDerivedType(typeof(EstimatedBlockHeader), "estimated")]
-public interface IBlockHeader
-{
-    int Height { get; }
-    DateTimeOffset LocalTime { get; }
-}
-/// <summary>
-/// Standard block header implementation.
-/// </summary>
-public class BlockHeader : IBlockHeader
+public class BlockHeader
 {
     public int Height { get; set; }
     public string Hash { get; set; } = string.Empty;
     public DateTimeOffset BlockTime { get; set; }
     [JsonIgnore]
     public DateTimeOffset LocalTime => BlockTime.ToLocalTime();
-
-
-    public override string ToString() => this.Format();
-}
-/// <summary>
-/// Estimated block header implementation.
-/// </summary>
-public class EstimatedBlockHeader : IBlockHeader
-{
-    public int Height { get; set; }
-    public DateTimeOffset LocalTime { get; set; }
 
 
     public override string ToString() => this.Format();
@@ -92,11 +65,6 @@ public interface IBackendClient
 	long FailedRequests { get; }
 
     bool Connected { get; }
-
-    /// <summary>
-    /// Gets whether this host was recently used and should be skipped to allow other hosts to be used (load balancing).
-    /// </summary>
-    bool RecentlyUsed { get; }
     #endregion
     #region Properties
     string Hostname { get; }
@@ -110,9 +78,10 @@ public interface IBackendClient
 public interface IIndexerBackend : IBackend
 {
     BlockHeader? LastBlock { get; }
+    int ReceivedBlocks { get; }
 
 
-    Task<IBlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default);
+    Task<BlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default);
 }
 /// <summary>
 /// Interface for exchange-rate backend services.

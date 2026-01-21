@@ -19,7 +19,7 @@ namespace TeamZaps.Backends.Indexer;
     public const int TcpPort = 50001;
     public const int SslPort = 50002;
     
-    public static readonly TimeSpan ReuseDelay = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan PingInterval = TimeSpan.FromSeconds(60);
     #endregion
 
 
@@ -64,11 +64,6 @@ namespace TeamZaps.Backends.Indexer;
 	public long FailedRequests { get; private set; }
 
     public bool Connected => (Client?.Connected ?? false);
-    /// <summary>
-    /// Gets whether this host was recently used and should be skipped to allow other hosts to be used (load balancing).
-    /// </summary>
-    public bool RecentlyUsed => (lastRead is not null) && ((DateTime.UtcNow - lastRead!) < ReuseDelay);
-    private DateTime? lastRead = null;
     #endregion
     #region Properties
     public string Hostname { get; }
@@ -80,6 +75,14 @@ namespace TeamZaps.Backends.Indexer;
     /// </summary>
     public int Timeout { get; set; }
     #endregion
+    
+    
+    #region Delegates
+    /// <summary>
+    /// Event handler for subscription notifications
+    /// </summary>
+    public delegate void NotificationHandler(string method, JsonArray? parameters);
+    #endregion
 
 
     #region Connection
@@ -89,6 +92,30 @@ namespace TeamZaps.Backends.Indexer;
         logger.LogDebug("Disconnecting from {Host}.", this);
         try
         {
+            // Cancel keepalive task
+            keepaliveCts?.Cancel();
+            keepaliveTask?.Wait(TimeSpan.FromSeconds(2));
+            keepaliveCts?.Dispose();
+            keepaliveCts = null;
+            keepaliveTask = null;
+            
+            // Cancel background listener
+            listenerCts?.Cancel();
+            listenerTask?.Wait(TimeSpan.FromSeconds(2));
+            listenerCts?.Dispose();
+            listenerCts = null;
+            listenerTask = null;
+            
+            // Clear pending requests
+            lock (pendingRequests)
+            {
+                foreach (var pending in pendingRequests.Values)
+                    pending.TrySetCanceled();
+                pendingRequests.Clear();
+            }
+            
+            messageBuffer.Clear();
+            
             sslStream?.Dispose();
             sslStream = null;
 
@@ -145,16 +172,22 @@ namespace TeamZaps.Backends.Indexer;
                 );
                 var authOptions = new SslClientAuthenticationOptions { TargetHost = Hostname };
                 await sslStream.AuthenticateAsClientAsync(authOptions, linkedCts.Token).ConfigureAwait(false);
-                logger.LogDebug("SSL/TLS handshake completed for {Host}", this);
+                logger.LogDebug("SSL/TLS handshake completed for {Host}.", this);
             }
+            
+            // Start background listener for subscription notifications
+            StartBackgroundListener();
+            
+            // Start keepalive task
+            StartKeepaliveTask();
         }
         catch (Exception ex)
         {
             Disconnect();
-            throw new Exception($"Failed to connect to ElectrumX server", ex);
+            throw new Exception($"Failed to connect to ElectrumX server.", ex);
         }
         if (Stream is null)
-            throw new Exception("Not connected to ElectrumX server");
+            throw new Exception("Not connected to ElectrumX server.");
     }
     #endregion
     #region Communication
@@ -162,148 +195,109 @@ namespace TeamZaps.Backends.Indexer;
     {
         try
         {
-            this.lastRead = DateTime.UtcNow;
-
             // Connect if not connected:
             await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
             if (!Connected)
-                throw new IOException("Connection not established!");
+                throw new IOException("Connection not established.");
 
             // Create request:
+            var currentRequestId = requestId++;
             var request = new JsonObject
             {
                 ["jsonrpc"] = "2.0",
-                ["id"] = requestId++,
+                ["id"] = currentRequestId,
                 ["method"] = method,
                 ["params"] = (parameters ?? new JsonArray())
             };
             var requestJson = request.ToJsonString() + "\n";
             var requestBytes = Encoding.UTF8.GetBytes(requestJson);
 
-            // Send request:
-            logger.LogDebug(new EventId(90, nameof(SendRequestAsync)), "Sending '{Method}' request to {Host}.", method, this);
-            
-            const int maxSendAttempts = 2; // Original attempt + 1 retry
-            Exception? lastSendException = null;
-            for (int sendAttempt = 0; sendAttempt < maxSendAttempts; sendAttempt++)
+            // Create TaskCompletionSource for this request
+            var tcs = new TaskCompletionSource<JsonNode>();
+            lock (pendingRequests)
             {
-                try
+                pendingRequests[currentRequestId] = tcs;
+            }
+
+            try
+            {
+                // Send request:
+                logger.LogTrace(new EventId(90, nameof(SendRequestAsync)), "Sending `{Method}` request (id={Id}) to {Host}.", method, currentRequestId, this);
+                
+                const int maxSendAttempts = 2; // Original attempt + 1 retry
+                Exception? lastSendException = null;
+                for (int sendAttempt = 0; sendAttempt < maxSendAttempts; sendAttempt++)
                 {
-                    // For SSL connections, verify once more before writing
-                    if (UseSsl && sslStream != null)
+                    try
                     {
-                        if (!sslStream.CanWrite)
+                        // For SSL connections, verify once more before writing
+                        if (UseSsl && sslStream is not null)
                         {
-                            logger.LogDebug("SSL stream became unwritable for {Host}, reconnecting...", this);
-                            Disconnect();
-                            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+                            if (!sslStream.CanWrite)
+                            {
+                                logger.LogDebug("SSL stream became unwritable for {Host}, reconnecting...", this);
+                                Disconnect();
+                                await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+                                await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+                            }
+                        }
+                        
+                        await Stream.WriteAsync(requestBytes, cancellationToken).ConfigureAwait(false);
+                        await Stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                        
+                        // Success - break out of retry loop
+                        lastSendException = null;
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        // Check if this is a recoverable error
+                        var isRecoverable = (
+                            ex is IOException || 
+                            ex.InnerException is SocketException ||
+                            (ex is SocketException se && se.SocketErrorCode == SocketError.ConnectionAborted)
+                        );
+                        if (!isRecoverable)
+                        {
+                            logger.LogDebug(ex, "Non-recoverable error during send to {Host}.", this);
+                            throw new IOException($"Failed to send request to server.", ex);
+                        }
+                        
+                        lastSendException = ex;
+                        logger.LogDebug(ex, "Recoverable error during write to {Host} (attempt {Attempt}/{Max}).", this, (sendAttempt + 1), maxSendAttempts);
+                        
+                        Disconnect();
+                        
+                        // If this wasn't the last attempt, reconnect and retry
+                        if (sendAttempt < maxSendAttempts - 1)
+                        {
+                            logger.LogDebug("Attempting to reconnect to {Host} for retry...", this);
+                            await Task.Delay(200, cancellationToken).ConfigureAwait(false);
                             await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
                         }
                     }
-                    
-                    await Stream.WriteAsync(requestBytes, cancellationToken).ConfigureAwait(false);
-                    await Stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-                    logger.LogTrace("Request sent successfully to {Host}, waiting for response...", this);
-                    
-                    // Success - break out of retry loop
-                    lastSendException = null;
-                    break;
                 }
-                catch (Exception ex)
+                
+                // If we still have an exception after all retries, throw it
+                if (lastSendException is not null)
+                    throw new IOException($"Failed to send request to server after {maxSendAttempts} attempts (stale connection).", lastSendException);
+
+                // Wait for response from background listener
+                using var cts = new CancellationTokenSource(Timeout);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token);
+                await using (linkedCts.Token.Register(() => tcs.TrySetCanceled()))
                 {
-                    // Check if this is a recoverable error
-                    var isRecoverable = (
-                        ex is IOException || 
-                        ex.InnerException is SocketException ||
-                        (ex is SocketException se && se.SocketErrorCode == SocketError.ConnectionAborted)
-                    );
-                    if (!isRecoverable)
-                    {
-                        logger.LogDebug(ex, "Non-recoverable error during send to {Host}", this);
-                        throw new IOException($"Failed to send request to server", ex);
-                    }
-                    
-                    lastSendException = ex;
-                    logger.LogDebug(ex, "Recoverable error during write to {Host} (attempt {Attempt}/{Max})", 
-                        this, sendAttempt + 1, maxSendAttempts);
-                    
-                    Disconnect();
-                    
-                    // If this wasn't the last attempt, reconnect and retry
-                    if (sendAttempt < maxSendAttempts - 1)
-                    {
-                        logger.LogDebug("Attempting to reconnect to {Host} for retry...", this);
-                        await Task.Delay(200, cancellationToken).ConfigureAwait(false);
-                        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-                    }
+                    var result = await tcs.Task.ConfigureAwait(false);
+                    SentRequests++;
+                    return result;
                 }
             }
-            
-            // If we still have an exception after all retries, throw it
-            if (lastSendException is not null)
+            finally
             {
-                throw new IOException($"Failed to send request to server after {maxSendAttempts} attempts (stale connection)", lastSendException);
-            }
-
-            // Read response
-            using var cts = new CancellationTokenSource(Timeout);
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token);
-            {
-                var buffer = new byte[8192];
-                var responseBuilder = new StringBuilder();
-                while (true)
+                // Clean up pending request
+                lock (pendingRequests)
                 {
-                    var bytesRead = await Stream.ReadAsync(buffer, linkedCts.Token).ConfigureAwait(false);
-                    if (bytesRead == 0)
-                        throw new IOException("Connection closed by server!");
-
-                    var chunk = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                    responseBuilder.Append(chunk);
-
-                    // ElectrumX responses are newline-delimited
-                    var response = responseBuilder.ToString();
-                    var newlineIndex = response.IndexOf('\n');
-                    if (newlineIndex >= 0)
-                    {
-                        // Extract the first complete line (everything before the newline)
-                        var firstLine = response.Substring(0, newlineIndex).Trim();
-                        if (string.IsNullOrEmpty(firstLine))
-                        {
-                            // Empty line, remove it and keep reading
-                            responseBuilder.Clear();
-                            responseBuilder.Append(response.Substring(newlineIndex + 1));
-                            continue;
-                        }
-
-                        // Handle responses
-                        var rspJson = JsonNode.Parse(firstLine);
-                        if (rspJson?["error"] is JsonNode error)
-                            throw new Exception($"ElectrumX error: {error?["message"]?.GetValue<string>() ?? "Unknown error"}");
-                        if (rspJson?["result"] is JsonNode result)
-                        {
-                            SentRequests++;
-                            return (result);
-                        }
-                        
-                        // Log the unexpected response format with details
-                        logger.LogWarning(
-                            "Unknown ElectrumX response format from {Host}. " +
-                            "Keys: [{Keys}], HasId: {HasId}, HasResult: {HasResult}, HasError: {HasError}, HasMethod: {HasMethod}, HasJsonRpc: {HasJsonRpc}. " +
-                            "Response: {Response}", 
-                            this, 
-                            string.Join(", ", rspJson?.AsObject().Select(kv => kv.Key).ToArray() ?? Array.Empty<string>()), 
-                            rspJson?["id"] != null, 
-                            rspJson?["result"] != null, 
-                            rspJson?["error"] != null, 
-                            rspJson?["method"] != null, 
-                            rspJson?["jsonrpc"] != null, 
-                            firstLine);
-                        
-                        // Remove this response and keep reading for the actual response
-                        responseBuilder.Clear();
-                        responseBuilder.Append(response.Substring(newlineIndex + 1));
-                        continue;
-                    }
+                    pendingRequests.Remove(currentRequestId);
                 }
             }
         }
@@ -316,18 +310,234 @@ namespace TeamZaps.Backends.Indexer;
                 !Connected || 
                 ex.Message.Contains("closed", StringComparison.OrdinalIgnoreCase))
             {
-                logger.LogDebug(ex, "Disconnecting from {Host} due to error", this);
+                logger.LogDebug(ex, "Disconnecting from {Host} due to error.", this);
                 Disconnect();
             }
             
             // Re-throw with context
             throw ex switch
             {
-                TimeoutException => new TimeoutException($"Request '{method}' timed out with '{this}'!", ex),
-                IOException => new IOException($"IO error occurred during '{method}' with '{this}'!", ex),
-                _ => new Exception($"Error occurred during '{method}' with '{this}'!", ex)
+                TimeoutException => new TimeoutException($"Request `{method}` timed out with '{this}'!", ex),
+                IOException => new IOException($"IO error occurred during `{method}` with '{this}'!", ex),
+                _ => new Exception($"Error occurred during `{method}` with '{this}'!", ex)
             };
         }
+    }
+
+    /// <summary>
+    /// Subscribe to server notifications for a specific method
+    /// </summary>
+    public void Subscribe(string method, NotificationHandler handler)
+    {
+        lock (subscriptionHandlers)
+        {
+            if (!subscriptionHandlers.TryGetValue(method, out var handlers))
+            {
+                handlers = new List<NotificationHandler>();
+                subscriptionHandlers[method] = handlers;
+            }
+            handlers.Add(handler);
+        }
+        logger.LogDebug("Subscribed to `{Method}` notifications from {Host}.", method, this);
+    }
+    /// <summary>
+    /// Unsubscribe from server notifications
+    /// </summary>
+    public void Unsubscribe(string method, NotificationHandler handler)
+    {
+        lock (subscriptionHandlers)
+        {
+            if (subscriptionHandlers.TryGetValue(method, out var handlers))
+            {
+                handlers.Remove(handler);
+                if (handlers.Count == 0)
+                    subscriptionHandlers.Remove(method);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Background task that sends periodic pings to keep the connection alive
+    /// </summary>
+    private void StartKeepaliveTask()
+    {
+        if (keepaliveTask is not null && !keepaliveTask.IsCompleted)
+            return; // Already running
+            
+        keepaliveCts = new CancellationTokenSource();
+        keepaliveTask = Task.Run(async () => await KeepaliveLoop(keepaliveCts.Token).ConfigureAwait(false));
+        logger.LogDebug("Keepalive task started for {Host}.", this);
+    }
+    private async Task KeepaliveLoop(CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Send ping to keep connection alive
+            while (!cancellationToken.IsCancellationRequested && Connected)
+            {
+                await Task.Delay(PingInterval, cancellationToken).ConfigureAwait(false);
+                if (!Connected)
+                    break;
+                
+                try
+                {
+                    logger.LogTrace("Sending keepalive ping to {Host}.", this);
+                    await PingAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Keepalive ping failed for {Host}, connection may be dead.", this);
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            logger.LogDebug("Keepalive task stopped for {Host}.", this);
+        }
+    }
+    
+    /// <summary>
+    /// Background task that continuously reads messages from the server
+    /// </summary>
+    private void StartBackgroundListener()
+    {
+        if (listenerTask is not null && !listenerTask.IsCompleted)
+            return; // Already running
+            
+        listenerCts = new CancellationTokenSource();
+        listenerTask = Task.Run(async () => await BackgroundListenerLoop(listenerCts.Token).ConfigureAwait(false));
+        logger.LogDebug("Background listener started for {Host}.", this);
+    }
+    private async Task BackgroundListenerLoop(CancellationToken cancellationToken)
+    {
+        var buffer = new byte[8192];
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested && Connected)
+            {
+                try
+                {
+                    // Read data from stream
+                    var bytesRead = await Stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                    if (bytesRead == 0)
+                    {
+                        logger.LogDebug("Connection closed by server {Host}.", this);
+                        break;
+                    }
+                    var chunk = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                    messageBuffer.Append(chunk);
+
+                    // Process all complete messages (newline-delimited)
+                    while (true)
+                    {
+                        var content = messageBuffer.ToString();
+                        var newlineIndex = content.IndexOf('\n');
+                        if (newlineIndex < 0)
+                            break; // No complete message yet
+
+                        var line = content.Substring(0, newlineIndex).Trim();
+                        messageBuffer.Clear();
+                        messageBuffer.Append(content.Substring(newlineIndex + 1));
+                        if (string.IsNullOrEmpty(line))
+                            continue; // Empty line
+
+                        // Parse and handle message
+                        try
+                        {
+                            var message = JsonNode.Parse(line);
+                            if (message is null)
+                                continue;
+
+                            // Check if this is a response
+                            if (message["id"] is JsonNode idNode)
+                            {
+                                var id = idNode.GetValue<int>();
+                                
+                                TaskCompletionSource<JsonNode>? tcs = null;
+                                lock (pendingRequests)
+                                {
+                                    if (pendingRequests.TryGetValue(id, out tcs))
+                                        pendingRequests.Remove(id);
+                                }
+
+                                if (tcs is not null)
+                                {
+                                    if (message["error"] is JsonNode error)
+                                    {
+                                        var errorMsg = error["message"]?.GetValue<string>() ?? "Unknown error";
+                                        tcs.TrySetException(new Exception($"ElectrumX error: {errorMsg}"));
+                                    }
+                                    else if (message.AsObject().ContainsKey("result"))
+                                        // Result key exists (even if value is null)
+                                        tcs.TrySetResult(message["result"]!);
+                                    else
+                                        tcs.TrySetException(new Exception("Invalid response: no result or error."));
+                                }
+                                else
+                                    logger.LogTrace("Received response for unknown request id {Id} from {Host}.", id, this);
+                            }
+                            // Check if this is a subscription notification
+                            else if (message["method"] is JsonNode methodNode)
+                            {
+                                var method = methodNode.GetValue<string>();
+                                var parameters = message["params"]?.AsArray();
+                                
+                                logger.LogDebug("Received subscription notification: `{Method}` from {Host}.", method, this);
+                                
+                                // Dispatch to handlers
+                                List<NotificationHandler>? handlers = null;
+                                lock (subscriptionHandlers)
+                                {
+                                    if (subscriptionHandlers.TryGetValue(method, out var h))
+                                        handlers = new List<NotificationHandler>(h); // Copy to avoid lock issues
+                                }
+                                
+                                if (handlers is not null)
+                                {
+                                    foreach (var handler in handlers)
+                                    {
+                                        try
+                                        {
+                                            handler(method, parameters);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            logger.LogError(ex, "Error in notification handler for `{Method}` from {Host}.", method, this);
+                                        }
+                                    }
+                                }
+                                else
+                                    logger.LogDebug("No handlers registered for `{Method}` notification from {Host}.", method, this);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogWarning(ex, "Failed to parse message from {Host}: {Line}.", this, line);
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error in background listener for {Host}.", this);
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            logger.LogDebug("Background listener stopped for {Host}.", this);
+        }
+    }
+
+    public async Task Connect(CancellationToken cancellationToken = default)
+    {
+        var features = await GetServerFeaturesAsync(cancellationToken).ConfigureAwait(false);
+        logger.LogInformation("Connected to ElectrumX server '{Host}' ({Features}).", this, features);
     }
 
     public Task PingAsync(CancellationToken cancellationToken = default) => SendRequestAsync("server.ping", null, cancellationToken);
@@ -336,7 +546,7 @@ namespace TeamZaps.Backends.Indexer;
         var result = await SendRequestAsync("server.features", null, cancellationToken);
         var features = result.Deserialize<ServerFeatures>();
         if (features is null)
-            throw new Exception("Failed to deserialize server features");
+            throw new Exception("Failed to deserialize server features.");
         else
             return features;
     }
@@ -348,6 +558,23 @@ namespace TeamZaps.Backends.Indexer;
     
     private readonly ILogger logger;
     private int requestId = 0;
+    
+    private readonly Dictionary<string, List<NotificationHandler>> subscriptionHandlers = new();
+    /// <summary>
+    /// Dictionary of pending requests awaiting responses
+    /// </summary>
+    private readonly Dictionary<int, TaskCompletionSource<JsonNode>> pendingRequests = new();
+    
+    private Task? listenerTask = null;
+    private CancellationTokenSource? listenerCts = null;
+    
+    private Task? keepaliveTask = null;
+    private CancellationTokenSource? keepaliveCts = null;
+    
+    /// <summary>
+    /// Buffer for incomplete messages
+    /// </summary>
+    private readonly StringBuilder messageBuffer = new();
 }
 
 /// <summary>
@@ -357,9 +584,7 @@ namespace TeamZaps.Backends.Indexer;
 public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnectionBackend, IDisposable
 {
     #region Constants
-    private const int RecommendedConnections = 2;
-    private static readonly int RequestRetries = 1;
-    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan StaleBlockDataThreshold = TimeSpan.FromMinutes(60);
     #endregion
 
 
@@ -368,271 +593,324 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
     {
         this.logger = logger;
         this.settings = (settings?.Value ?? ElectrumXSettings.Default);
-        this.rotatingHosts = GetConfiguredHosts().ToList();
-        this.Hosts = rotatingHosts.AsReadOnly();
+        this.ConfiguredClients = GetConfiguredHosts(this.settings.Hosts)
+            .Select(h => new ElectrumXClient(logger, h, this.settings))
+            .ToArray();
 
-        if (Hosts.IsEmpty())
-            throw new InvalidOperationException("No ElectrumX hosts configured!");
-        else if (Hosts.Count == 1)
-            logger.LogInformation("ElectrumX initialized with '{Host}'.", Hosts.First());
+        if (ConfiguredClients.IsEmpty())
+            throw new InvalidOperationException("No ElectrumX hosts configured.");
+        else if (ConfiguredClients.Count == 1)
+            logger.LogInformation("ElectrumX initialized with 1 host (no failover available).");
         else
-            logger.LogInformation("ElectrumX initialized with {Count} hosts.", Hosts.Count);
+            logger.LogInformation("ElectrumX initialized with {Count} hosts.", ConfiguredClients.Count);
+
+        // Start with first configured client
+        this.ActiveClient = ConfiguredClients.First();
     }
 
 
     #region Properties.Management
-    IReadOnlyCollection<IBackendClient> IMultiConnectionBackend.Hosts => this.Hosts;
-    public IReadOnlyCollection<ElectrumXClient> Hosts { get; }
-    private List<ElectrumXClient> rotatingHosts;
+    IReadOnlyCollection<IBackendClient> IMultiConnectionBackend.Hosts => ConfiguredClients;
+    public IReadOnlyCollection<ElectrumXClient> ConfiguredClients { get; }
+    public ElectrumXClient ActiveClient { get; private set; }
     #endregion
     #region Properties
-	public long SentRequests => Hosts.Sum(h => h.SentRequests);
-	public long FailedRequests => Hosts.Sum(h => h.FailedRequests);
+	public long SentRequests => ActiveClient?.SentRequests ?? 0;
+	public long FailedRequests => ActiveClient?.FailedRequests ?? 0;
     public BlockHeader? LastBlock { get; private set; }
+    public int ReceivedBlocks { get; private set; }
     #endregion
 
 
     #region Initialization
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Test configured connections:
-        var requests = Hosts.Select(async host =>
+        // Test connection to active host:
+        try
         {
-            try
-            {
-                var features = await host.GetServerFeaturesAsync(stoppingToken).ConfigureAwait(false);
-                logger.LogDebug("Established connection to ElectrumX server '{Host}' ({Features}).", host, features);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to get features from ElectrumX server {Host}!", host);
-            }
-        });
-        await Task.WhenAll(requests).ConfigureAwait(false);
+            await ActiveClient.Connect(stoppingToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to connect to ElectrumX server {Host}!", this);
+
+            // Try to failover to next host
+            if (!await TryFailoverToNextHostAsync(stoppingToken).ConfigureAwait(false))
+                throw new InvalidOperationException("Failed to connect to any configured ElectrumX server! Unable to operate.");
+        }
         
-        // Review server configuration:
-        var succeededHosts = Hosts.Sum(h => h.SentRequests);
-        var failedHosts = Hosts.Sum(h => h.FailedRequests);
-        if (succeededHosts == 0)
-            throw new InvalidOperationException("Failed to connect to any ElectrumX server! Unable to operate.");
-        if (failedHosts == 0)
-            logger.LogInformation("Successfully established connection to all ElectrumX servers.");
-        else
-            logger.LogWarning("Connection established to {Succeeded} of {Total} ElectrumX servers.", succeededHosts, Hosts.Count);
-        if (succeededHosts < RecommendedConnections)
-            logger.LogWarning("Count of {Succeeded} successful connections is below the recommended minimum of {RecommendedConnections}.", succeededHosts, RecommendedConnections);
+        // Setup subscriptions for block headers
+        await SetupSubscriptionsAsync(stoppingToken).ConfigureAwait(false);
+        
+        // Start reconnection monitor
+        StartReconnectionMonitor(stoppingToken);
     }
-    public override Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    
+    private async Task SetupSubscriptionsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            lock (clientLock)
+            {
+                // Register notification handler
+                ActiveClient.Subscribe("blockchain.headers.subscribe", (method, parameters) =>
+                {
+                    try
+                    {
+                        if (parameters is not null && parameters.Count > 0)
+                        {
+                            var blockData = parameters[0];
+                            if (blockData is not null)
+                                OnBlockHeaderNotification(blockData);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Error handling block header notification from {Host}.", ActiveClient);
+                    }
+                });
+            }
+            
+            // Send initial subscription request
+            var initialBlock = await ActiveClient.SendRequestAsync("blockchain.headers.subscribe", null, cancellationToken).ConfigureAwait(false);
+            OnBlockHeaderNotification(initialBlock);
+            
+            logger.LogInformation("Successfully subscribed to block headers from {Host}.", ActiveClient);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to subscribe to block headers from {Host}.", ActiveClient);
+        }
+    }
+    
+    private void StartReconnectionMonitor(CancellationToken stoppingToken)
+    {
+        reconnectionCts = new CancellationTokenSource();
+        var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, reconnectionCts.Token);
+        
+        reconnectionTask = Task.Run(async () =>
+        {
+            while (!linkedCts.Token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(30), linkedCts.Token).ConfigureAwait(false);
+                    
+                    // Check if active client is still connected
+                    ElectrumXClient client;
+                    lock (clientLock)
+                    {
+                        client = ActiveClient;
+                    }
+                    
+                    if (!client.Connected)
+                    {
+                        logger.LogWarning("Detected disconnection from {Host}, attempting failover...", client);
+                        
+                        // Connection is dead, go directly to next host:
+                        await TryFailoverToNextHostAsync(linkedCts.Token).ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error in reconnection monitoring.");
+                }
+            }
+            logger.LogDebug("Reconnection monitoring stopped.");
+        }, linkedCts.Token);
+        
+        logger.LogDebug("Reconnection monitoring started.");
+    }
+    
+    private void OnBlockHeaderNotification(JsonNode blockData)
+    {
+        try
+        {
+            var currentBlock = ParseBlockHeader(blockData);
+            if (LastBlock?.Height != currentBlock.Height)
+            {
+                var logLevel = (ReceivedBlocks % 10 == 0) ? LogLevel.Information : LogLevel.Debug;
+                logger.Log(logLevel, "Received 📦 block {Height} from subscription.", currentBlock.Height);
+
+                LastBlock = currentBlock;
+                ReceivedBlocks++;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error processing block header notification.");
+        }
+    }
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        reconnectionCts?.Cancel();
+        if (reconnectionTask is not null)
+        {
+            await reconnectionTask.ConfigureAwait(false);
+        }
+        reconnectionCts?.Dispose();
+    }
     public new void Dispose()
     {
-        Hosts.ForEach(h => h.Dispose());
+        lock (clientLock)
+        {
+            ActiveClient?.Dispose();
+        }
         base.Dispose();
     }
     #endregion
     #region Communication
-    private Task<T> SendRequestAsync<T>(string method, JsonArray? parameters, CancellationToken cancellationToken, string propertyName) => SendRequestAsync<T>("blockchain.headers.subscribe", null, cancellationToken, (res) => GetValue<T>(res, propertyName));
     /// <summary>
-    /// Sends a request to the configured ElectrumX hosts. Recently used hosts are also considered.
+    /// Sends a request to the active ElectrumX server with automatic failover on connection errors.
     /// </summary>
-    private async Task<T> SendRequestAsync<T>(string method, JsonArray? parameters, CancellationToken cancellationToken, Func<JsonNode, T> valueFactory)
+    private async Task<JsonNode> SendRequestAsync(string method, JsonArray? parameters, CancellationToken cancellationToken)
     {
-        var result = await TrySendRequestAsync(true, method, parameters, cancellationToken).ConfigureAwait(false);
-        if (result is null)
-            // This should never happen, as recently used hosts are enabled
-            throw new NotImplementedException("Internal error on sending request to ElectrumX hosts.");
-        else
-            // Create value from response:
-            return (valueFactory(result));
-    }
-    /// <summary>
-    /// Sends a request to the configured ElectrumX hosts. Recently used hosts are only considered if no default value could be provided.
-    /// </summary>
-    private async Task<T> SendRequestAsync<T>(string method, JsonArray? parameters, CancellationToken cancellationToken, T? defaultValue, Func<JsonNode, T> valueFactory)
-    {
-        // Send block request:
-        var enStale = (defaultValue is null);
-        var result = await TrySendRequestAsync(enStale, method, parameters, cancellationToken).ConfigureAwait(false);
-        if (result is null)
+        ElectrumXClient client;
+        lock (clientLock)
         {
-            // All hosts are stale, return default value:
-            Debug.Assert(defaultValue is not null);
-            return (defaultValue!);
+            client = ActiveClient;
         }
-        else
-            // Create value from response:
-            return (valueFactory(result));
-    }
-    /// <summary>
-    /// Tries to send a request to the configured ElectrumX hosts, rotating through them until one succeeds or all fail.
-    /// </summary>
-    /// <param name="enableStale">If <c>true</c>, recently used hosts will also be considered.</param>
-    /// <returns>Returns the received response as a <see cref="JsonNode"/>, or <c>null</c> if all hosts were recently used.</returns>
-    /// <exception cref="AggregateException"></exception>
-    private async Task<JsonNode?> TrySendRequestAsync(bool enableStale, string method, JsonArray? parameters = null, CancellationToken cancellationToken = default)
-    {
-        List<Exception>? exceptions = null;
-
-        var timeout = Stopwatch.StartNew();
-        var maxRequests = (Hosts.Count * (RequestRetries + 1));
-        for (int i = 0; i < maxRequests; i++)
+        
+        try
         {
-            if ((!TryGetRotatedHost(out var host)) && (!enableStale))
+            return await client.SendRequestAsync(method, parameters, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Request `{Method}` failed on {Host}, attempting failover.", method, client);
+            
+            // Try to failover to next host
+            if (await TryFailoverToNextHostAsync(cancellationToken).ConfigureAwait(false))
             {
-                logger.LogDebug("Abort sending request since all hosts were recently used.");
-                break;
-            }
-            if ((exceptions?.IsEmpty() == false) && (timeout.Elapsed > RequestTimeout))
-                throw new AggregateException($"Request '{method}' timed out after {exceptions!.Count} failure(s)! Refer to debug log for details.", exceptions);
-
-            try
-            {
-                var result = await host.SendRequestAsync(method, parameters, cancellationToken).ConfigureAwait(false);
-                if (result is null)
-                    throw new Exception("No response from ElectrumX server");
-                else
+                lock (clientLock)
                 {
-                    if (exceptions is not null)
-                    {
-                        var messages = string.Join("\n", exceptions.Select(ex => $"- {ex.Message}"));
-                        logger.LogDebug($"Failed requests:\n{messages}", method, exceptions.Count);
-                        logger.LogWarning("Request '{Method}' succeeded after {Count} previous failure(s).", method, exceptions.Count);
-                    }
-
-                    return (result);
+                    client = ActiveClient;
                 }
+                return await client.SendRequestAsync(method, parameters, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            else
             {
-                if (exceptions is null)
-                    exceptions = new();
-                exceptions.Add(ex);
+                throw new Exception($"Request `{method}` failed and no fallback hosts available", ex);
             }
         }
-
-        if (exceptions is null)
-            return (null); // All hosts were recently used.
-        else
-            throw new AggregateException($"Request '{method}' aborted after {exceptions.Count} failure(s)! Refer to debug log for details.", exceptions);
     }
     #endregion
     #region Operation
     /// <summary>
-    /// Gets the current blockchain header information including block height and time.
+    /// Gets the current blockchain header information from active subscription.
+    /// Returns null if no block data available yet or subscriptions not active.
     /// </summary>
-    public async Task<IBlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default)
+    public async Task<BlockHeader> GetCurrentBlockAsync(CancellationToken cancellationToken = default)
     {
-        try
+        if (LastBlock is not null)
         {
-            return (await SendRequestAsync("blockchain.headers.subscribe", null, cancellationToken, LastBlock, (result) =>
-            {
-                BlockHeader currentBlock;
-                if (result.TryDeserialize<BlockResponse.Layout1>(out var layout1))
-                {
-                    var headerBytes = Convert.FromHexString(layout1.Hex);
-                    currentBlock = new BlockHeader {
-                        Height = layout1.Height,
-                        Hash = ComputeBlockHash(headerBytes),
-                        BlockTime = ParseBlockTime(headerBytes)
-                    };
-                }
-                else if (result.TryDeserialize<BlockResponse.Layout2>(out var layout2))
-                {
-                    var hexHeader = ConstructHexHeader(layout2);
-                    var headerBytes = Convert.FromHexString(hexHeader);
-                    currentBlock = new BlockHeader {
-                        Height = layout2.BlockHeight,
-                        Hash = ComputeBlockHash(headerBytes),
-                        BlockTime = DateTimeOffset.FromUnixTimeSeconds(layout2.Timestamp)
-                    };
-                }
-                else
-                    throw new NotImplementedException("Unknown block response layout! Please remove host from server configuration.")
-                        .AddLogLevel(LogLevel.Critical);
-
-                if (LastBlock?.Height == currentBlock.Height)
-                    logger.LogInformation("Keep using last block {Height}.", currentBlock.Height);
-                else
-                    logger.LogInformation("Received new block {Height}.", currentBlock.Height);
-
-                return (this.LastBlock = currentBlock);
-            }).ConfigureAwait(false));
+            // Optionally warn if data is stale
+            var age = (DateTimeOffset.UtcNow - LastBlock.BlockTime);
+            if (age > StaleBlockDataThreshold)
+                logger.LogWarning("Cached block {Height} is {Age} old, subscriptions may be inactive.", LastBlock.Height, age);
+            
+            return (LastBlock);
         }
-        catch (Exception ex)
-        {
-            ex = new Exception("Failed to get current block!", ex);
-
-            // If we have a recent block, estimate the current height
-            if (LastBlock is not null)
-            {
-                var timeSinceLastBlock = (DateTimeOffset.UtcNow - LastBlock.BlockTime);
-                var estimatedBlocksSince = (int)(timeSinceLastBlock.TotalMinutes / 10.0);
-                var estimatedHeight = (LastBlock.Height + estimatedBlocksSince);
-                
-                logger.LogError(ex, 
-                    "Failed to get current block! Using estimated height {EstimatedHeight} based on last known block {LastHeight} as fallback.", 
-                    estimatedHeight, LastBlock.Height);
-                
-                return (new EstimatedBlockHeader 
-                { 
-                    Height = estimatedHeight,
-                    LocalTime = DateTimeOffset.UtcNow
-                });
-            }
-            else
-                throw ex.AddHelp("Please try again in a few seconds.");
-        }
-    }
-    public async Task<string> GetBlockAsync(int height, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            return (await SendRequestAsync<string>("blockchain.headers.subscribe", null, cancellationToken, "hex").ConfigureAwait(false));
-        }
-        catch (Exception ex)
-        {
-            throw new Exception($"Failed to get current block {height}!", ex);
-        }
+        
+        throw new InvalidOperationException("No blockchain data available yet.")
+            .AddHelp("Please try again later.");
     }
     #endregion
 
 
     #region Helpers
-    private IEnumerable<ElectrumXClient> GetConfiguredHosts()
+    private IEnumerable<string> GetConfiguredHosts(string[]? hosts)
     {
-        if (!string.IsNullOrWhiteSpace(settings.Host))
-            yield return new ElectrumXClient(logger, settings.Host, settings);
-        if (settings.Hosts is not null)
+        if (hosts is not null)
         {
-            foreach (var hostEntry in settings.Hosts)
+            foreach (var hostEntry in hosts)
             {
                 if (!string.IsNullOrWhiteSpace(hostEntry))
-                    yield return new ElectrumXClient(logger, hostEntry, settings);
+                    yield return hostEntry.Trim();
+            }
+        }
+        yield break;
+    }
+    
+    /// <summary>
+    /// Attempts to failover to the next configured host.
+    /// </summary>
+    /// <returns>True if successfully connected to a new host, false if all hosts failed.</returns>
+    private async Task<bool> TryFailoverToNextHostAsync(CancellationToken cancellationToken)
+    {
+        var currentHostIndex = ConfiguredClients.IndexOf(ActiveClient);
+        var startIndex = currentHostIndex;
+        
+        while (true)
+        {
+            // Move to next host
+            currentHostIndex = (currentHostIndex + 1) % ConfiguredClients.Count;
+            // If we've tried all hosts, give up
+            if (currentHostIndex == startIndex)
+            {
+                logger.LogError("Failed to connect to any configured ElectrumX host.");
+                return false;
+            }
+            var newClient = ConfiguredClients.ElementAt(currentHostIndex);
+
+            // Connect to fallback client:
+            try
+            {
+                await newClient.Connect(cancellationToken).ConfigureAwait(false);
+                
+                // Dispose old client
+                ElectrumXClient oldClient;
+                lock (clientLock)
+                {
+                    oldClient = ActiveClient;
+                    ActiveClient = newClient;
+                }
+                oldClient?.Dispose();
+                                
+                // Setup subscriptions on new connection
+                await SetupSubscriptionsAsync(cancellationToken).ConfigureAwait(false);
+                
+                return true;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to connect to {Host}, trying next.", newClient);
             }
         }
     }
+    
+    
     /// <summary>
-    /// Tries to return the next host that hasn't been recently used.
+    /// Parses a block header from ElectrumX response in either Layout1 or Layout2 format.
     /// </summary>
-    /// <returns>Returns <c>true</c> if a host that's not on cooldown was found; otherwise <c>false</c>.</returns>
-    private bool TryGetRotatedHost(out ElectrumXClient host)
+    private static BlockHeader ParseBlockHeader(JsonNode blockData)
     {
-        if (rotatingHosts.IsEmpty())
-            throw new InvalidOperationException("No hosts configured!");
-
-        // Get next rotated host that hasn't been recently used:
-        lock (rotatingHosts)
+        if (blockData.TryDeserialize<BlockResponse.Layout1>(out var layout1))
         {
-            for (int i = 0; i < rotatingHosts.Count; i++)
-            {
-                host = rotatingHosts.First();
-                if (host.RecentlyUsed)
-                    rotatingHosts.Rotate();
-                else
-                    return (true);
-            }
+            var headerBytes = Convert.FromHexString(layout1.Hex);
+            return new BlockHeader {
+                Height = layout1.Height,
+                Hash = ComputeBlockHash(headerBytes),
+                BlockTime = ParseBlockTime(headerBytes)
+            };
         }
-        host = rotatingHosts.First();
-        return (false);
+        else if (blockData.TryDeserialize<BlockResponse.Layout2>(out var layout2))
+        {
+            var hexHeader = ConstructHexHeader(layout2);
+            var headerBytes = Convert.FromHexString(hexHeader);
+            return new BlockHeader {
+                Height = layout2.BlockHeight,
+                Hash = ComputeBlockHash(headerBytes),
+                BlockTime = DateTimeOffset.FromUnixTimeSeconds(layout2.Timestamp)
+            };
+        }
+        else
+            throw new NotImplementedException("Unknown block response layout! Please remove host from server configuration.")
+                .AddLogLevel(LogLevel.Critical);
     }
 
     /// <summary>
@@ -719,27 +997,17 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
         return (Convert.ToHexString(second).ToLowerInvariant());
     }
 
-    /// <param name="propertyName">Name of the property to retrieve. Specify more than one if alternatives are possible.</param>
-    private static T GetValue<T>(JsonNode node, params string[] propertyName)
-    {
-        foreach (var prop in propertyName)
-        {
-            var value = node[prop];
-            if (value is not null)
-            {
-                Debug.WriteLine($"PROP={prop}");
-                return (value.GetValue<T>());
-            }
-        }
-        throw new Exception($"Missing '{propertyName.First()}' in response!");
-    }
     #endregion
 
 
-    #region Fields
     private readonly ILogger<ElectrumXService> logger;
     private readonly ElectrumXSettings settings;
-    #endregion
+    
+    private readonly object clientLock = new object();
+    private readonly SemaphoreSlim subscriptionSemaphore = new(1, 1);
+    
+    private Task? reconnectionTask = null;
+    private CancellationTokenSource? reconnectionCts = null;
 }
 
 public class ServerFeatures

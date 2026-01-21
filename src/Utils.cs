@@ -209,6 +209,20 @@ namespace TeamZaps.Utils
             foreach (T item in source)
                 action(item);
         }
+
+        public static int IndexOf<T>(this IEnumerable<T> source, T value)
+        {
+            int index = 0;
+            var comparer = EqualityComparer<T>.Default;
+            foreach (T item in source)
+            {
+                if (comparer.Equals(item, value))
+                    return index;
+                else
+                    index++;
+            }
+            return (-1);
+        }
         
         public static bool Contains<T>(this IEnumerable<T> source, Predicate<T> predicate)
         {

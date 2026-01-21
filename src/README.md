@@ -231,41 +231,22 @@ These backends now require paid API keys:
 
 #### ElectrumX Backend (Blockchain Data)
 
-ElectrumX provides real-time Bitcoin blockchain data including current block height and timestamps. This is useful for monitoring network health and verifying transaction confirmations.
+ElectrumX provides real-time Bitcoin blockchain data including current block height and timestamps through persistent connections with automatic subscription to new blocks.
+
+**Connection Strategy:**
+- Uses a **single active connection** with automatic failover to backup hosts
+- Maintains persistent connection with keepalive pings
+- Subscribes to real-time block notifications for instant updates
+- Automatically fails over to next configured host on connection issues
+- Recommended to configure **3-5 hosts** for optimal reliability
 
 **Configuration:**
-- `Host` - Single ElectrumX server. Supports `HOST:PORT` or `HOST` notation
-- `Hosts` - Array of ElectrumX servers. Supports `HOST:PORT` or `HOST` notation per entry
-- `Port` - Default server port (50001 for TCP, 50002 for SSL). Used as fallback when port is omitted from host notation. **SSL is automatically used for port 50002**
+- `Hosts` - Array of ElectrumX servers. Supports `HOST:PORT` or `HOST` notation per entry (required)
+- `Port` - Default server port (50001 for TCP, 50002 for SSL). Used when port is omitted from host notation. **SSL is automatically used for port 50002**
 - `ValidateSslCertificate` - Whether to validate SSL/TLS certificates. Set to `false` to accept self-signed certificates (required for many public servers)
 - `Timeout` - Connection and request timeout in milliseconds
 
-**Host Notation:**
-- Both `Host` and `Hosts` support flexible notation: `HOST:PORT` or `HOST`
-- When port is omitted, the `Port` field value is used as the default
-- All specified hosts are considered equally - the bot will try each in sequence until a connection succeeds
-- Both single `Host` and multiple `Hosts` can be specified simultaneously, and all entries will be used
-
-**Single Host Configuration**
-
-```json
-{
-  "Backends": {
-    "ElectrumX": {
-      "Host": "electrum.blockstream.info",
-      "Port": 50001,
-      "ValidateSslCertificate": true,
-      "Timeout": 10000
-    }
-  }
-}
-```
-
-**Multiple Hosts Configuration (Recommended)**
-
-You can configure multiple ElectrumX servers. The bot will automatically try each server in sequence ensuring continuous blockchain data access. This helps avoid service disruptions when a single server becomes unavailable due to rate limiting, spam protection, maintenance, or network issues, etc.
-
-> For improved reliability, it is recommended to configure 2 ElectrumX servers (primary + fallback)!
+**Host Configuration Example**
 
 ```json
 {
@@ -273,15 +254,20 @@ You can configure multiple ElectrumX servers. The bot will automatically try eac
     "ElectrumX": {
       "Hosts": [
         "electrum.blockstream.info",
-        "fulcrum.sethforprivacy.com"
+        "fulcrum.sethforprivacy.com",
+        "electrum.emzy.de",
+        "bitcoin.lu.ke",
+        "bitcoin.grey.pw"
       ],
       "Port": 50002,
-      "ValidateSslCertificate": true,
+      "ValidateSslCertificate": false,
       "Timeout": 10000
     }
   }
 }
 ```
+
+The bot will connect to the first host and maintain that connection. If it fails, the bot automatically switches to the next configured host and continues operation seamlessly.
 
 **Public ElectrumX Servers:**
 
