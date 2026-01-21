@@ -363,6 +363,13 @@ namespace TeamZaps.Utils
             }
             yield break;
         }
+        public static bool TryGetData<T>(this Exception source, string key, [NotNullWhen(true)] out T? value)
+        {
+            value = default;
+            if (source.Data.Contains(key))
+                value = (T)source.Data[key]!;
+            return (value is not null);
+        }
         public static T AddData<T>(this T source, object key, object? value)
             where T : Exception
         {
@@ -383,6 +390,11 @@ namespace TeamZaps.Utils
             where T : Exception
         {
             return (source.AddData<T>(nameof(LogLevel), level));
+        }
+        public static T AddTitle<T>(this T source, string title)
+            where T : Exception
+        {
+            return (source.AddData<T>(nameof(title), title));
         }
     }
     #endregion

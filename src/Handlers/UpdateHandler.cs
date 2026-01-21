@@ -6,6 +6,7 @@ using TeamZaps.Session;
 using TeamZaps.Utils;
 using TeamZaps.Logging;
 using Microsoft.VisualBasic;
+using System.Diagnostics;
 
 namespace TeamZaps.Handlers;
 
@@ -43,17 +44,20 @@ public partial class UpdateHandler : IUpdateHandler
 
     public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
     {
-        long? chatId = null;
+        Message? message = null;
+        User? from = null;
         try
         {
             switch (update.Type)
             {
                 case UpdateType.Message:
-                    chatId = update.Message!.Chat.Id;
+                    message = update.Message!;
+                    from = update.Message!.From!;
                     await HandleMessageAsync(botClient, update.Message!, cancellationToken).ConfigureAwait(false);
                     break;
                 case UpdateType.CallbackQuery:
-                    chatId = update.CallbackQuery!.Message!.Chat.Id;
+                    message = update.CallbackQuery!.Message!;
+                    from = update.CallbackQuery!.From!;
                     await HandleCallbackQueryAsync(botClient, update.CallbackQuery!, cancellationToken).ConfigureAwait(false);
                     break;
 
@@ -68,20 +72,26 @@ public partial class UpdateHandler : IUpdateHandler
             var logEx = ex;
             if (isAnswer)
             {
+                Debug.Assert(from is not null);
+
                 // Prevent logging the whole call-stack if we just answer the user:
                 logEx = null;
                 logMessage += "\n" + string.Join("\n", ex
                     .Enumerate()
                     .Select(ex => $"> {ex.Message}"));
+
+                // Prepend message recipient:
+                if (message?.Chat.Type.IsGroup() == true)
+                    ex.AddTitle($"Hey {from.MarkdownDisplayName()},");
             }
             logger.LogError(logEx, logMessage);
 
-            if (chatId is not null)
+            if (message is not null)
             {
                 if (!isAnswer)
                     // Add help since this response will be caused by an unexpected error:
                     ex.AddHelp($"Use {BotPmCommand.Help} to see available commands.");
-                await botClient.SendException(chatId!.Value, ex, cancellationToken).ConfigureAwait(false);
+                await botClient.SendException(message.Chat.Id, ex, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -288,8 +298,13 @@ internal static partial class Ext
     public static Task SendException(this ITelegramBotClient source, long userId, Exception exception, CancellationToken cancellationToken)
     {
         var message = exception.Message;
-        if (exception.Data.Contains("help"))
-            message += $" {exception.Data["help"]}";
+        // Prepend title:
+        if (exception.TryGetData<string>("title", out var title))
+            message = (title + "\n" + message);
+        // Append help:
+        if (exception.TryGetData<string>("help", out var help))
+            message += $" {help}";
+
         if (exception.InnerException is not null)
             message += "\n\n" + string.Join("\n\n", exception.InnerException
                 .Enumerate()
