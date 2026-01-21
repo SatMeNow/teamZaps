@@ -158,6 +158,7 @@ internal static partial class Ext
 
         return (command is not null);
     }
+    public static bool IsGroup(this ChatType source) => source is ChatType.Group or ChatType.Supergroup;
     public static async Task<User> GetBotUser(this ITelegramBotClient botClient, CancellationToken cancellationToken = default)
     {
         if (botUser is null)
