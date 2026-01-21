@@ -24,10 +24,15 @@ services:
       
       # Backend: ElectrumX (Blockchain Data)
       # Note: SSL is automatically used for port 50002, TCP for 50001
-      # - Backends__ElectrumX__Host=${ELECTRUMX_HOST}
-      # - Backends__ElectrumX__Port=${ELECTRUMX_PORT}
-      # - Backends__ElectrumX__ValidateSslCertificate=${ELECTRUMX_VALIDATE_CERT}
-      # - Backends__ElectrumX__Timeout=${ELECTRUMX_TIMEOUT}
+      # Configure multiple hosts for automatic failover (recommended: 3-5 hosts)
+      - Backends__ElectrumX__Hosts__0=${ELECTRUMX_HOST_1:-electrum.blockstream.info}
+      - Backends__ElectrumX__Hosts__1=${ELECTRUMX_HOST_2:-fulcrum.sethforprivacy.com}
+      - Backends__ElectrumX__Hosts__2=${ELECTRUMX_HOST_3:-electrum.emzy.de}
+      - Backends__ElectrumX__Hosts__3=${ELECTRUMX_HOST_4}
+      - Backends__ElectrumX__Hosts__4=${ELECTRUMX_HOST_5}
+      - Backends__ElectrumX__Port=${ELECTRUMX_PORT:-50002}
+      - Backends__ElectrumX__ValidateSslCertificate=${ELECTRUMX_VALIDATE_CERT:-false}
+      - Backends__ElectrumX__Timeout=${ELECTRUMX_TIMEOUT:-10000}
       
       # Backend: AlbyHub (NWC)
       - Backends__AlbyHub__ConnectionString=${ALBYHUB_CONNECTION_STRING}

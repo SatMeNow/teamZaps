@@ -4,7 +4,7 @@ using TeamZaps.Backends.Indexer;
 namespace TeamZaps.Examples;
 
 /// <summary>
-/// Example usage of the ElectrumX service to get current block time.
+/// Example usage of the ElectrumX service with subscription-based real-time updates.
 /// </summary>
 public class Sample_ElectrumX
 {
@@ -12,37 +12,61 @@ public class Sample_ElectrumX
     {
         try
         {
-            #region Common backend tasks
+            #region Get current block (uses subscription cache)
             // Get current block header (includes height and time)
+            // This will use cached data from subscription notifications if available
             Console.WriteLine("Getting current Bitcoin block header...");
             var header = await electrumX.GetCurrentBlockAsync();
             
             Console.WriteLine($"Current Block Height: {header.Height}");
-            if (header is BlockHeader blockHeader)
-            {
-                Console.WriteLine($"Current Block Time: {blockHeader.BlockTime}");
-                Console.WriteLine($"Block Time (UTC): {blockHeader.BlockTime:yyyy-MM-dd HH:mm:ss}");
+            Console.WriteLine($"Current Block Hash: {header.Hash}");
+            Console.WriteLine($"Current Block Time: {header.BlockTime}");
+            Console.WriteLine($"Block Time (UTC): {header.BlockTime:yyyy-MM-dd HH:mm:ss}");
 
-                // Calculate how long ago the block was mined
-                var timeSinceBlock = DateTimeOffset.UtcNow - blockHeader.BlockTime;
-                Console.WriteLine($"Time since last block: {timeSinceBlock.TotalMinutes:F1} minutes");
-            }
-
-            // Get a specific block header (e.g., block 100,000)
-            Console.WriteLine("\nGetting block 100,000...");
-            var historicHeader = await electrumX.GetBlockAsync(100_000);
-            Console.WriteLine($"Block 100,000 header: {historicHeader[..40]}...");
+            // Calculate how long ago the block was mined
+            var timeSinceBlock = DateTimeOffset.UtcNow - header.BlockTime;
+            Console.WriteLine($"Time since last block: {timeSinceBlock.TotalMinutes:F1} minutes");
+            Console.WriteLine();
             #endregion
-
-            #region Specific host tasks
-            var someHost = electrumX.Hosts.First();
             
-            // Get server features
-            Console.WriteLine("\nGetting server features...");
-            var features = await someHost.GetServerFeaturesAsync();
-            Console.WriteLine($"Server version: {features.ServerVersion}");
-            Console.WriteLine($"Protocol version: {features.ProtocolMin} - {features.ProtocolMax}");
-            Console.WriteLine($"Genesis hash: {features.GenesisHash}");
+            #region Service statistics
+            Console.WriteLine($"ElectrumX service stats:");
+            Console.WriteLine($"- Sent requests: {electrumX.SentRequests}");
+            Console.WriteLine($"- Failed requests: {electrumX.FailedRequests}");
+            Console.WriteLine($"- Active host: {electrumX.ActiveClient.Hostname}:{electrumX.ActiveClient.Port}");
+            Console.WriteLine($"- Configured hosts: {electrumX.ConfiguredClients.Count}");
+            Console.WriteLine();
+            #endregion
+            
+            #region Real-time monitoring
+            Console.WriteLine("Monitoring for new blocks (10 seconds)...");
+            Console.WriteLine("Note: Block times average ~10 minutes, so you may not see a new block.");
+            
+            var startHeight = header.Height;
+            var startTime = DateTime.UtcNow;
+            
+            while ((DateTime.UtcNow - startTime).TotalSeconds < 10)
+            {
+                await Task.Delay(2000);
+                var currentHeader = await electrumX.GetCurrentBlockAsync();
+                
+                if (currentHeader.Height > startHeight)
+                {
+                    Console.WriteLine($"\n🎉 NEW BLOCK DETECTED! Height: {currentHeader.Height}");
+                    if (currentHeader is BlockHeader newBlock)
+                    {
+                        Console.WriteLine($"   Hash: {newBlock.Hash}");
+                        Console.WriteLine($"   Time: {newBlock.BlockTime:yyyy-MM-dd HH:mm:ss}");
+                    }
+                    startHeight = currentHeader.Height;
+                }
+                else
+                {
+                    Console.Write(".");
+                }
+            }
+            
+            Console.WriteLine($"\n\nMonitoring complete. Final height: {startHeight}");
             #endregion
         }
         catch (Exception ex)

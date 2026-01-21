@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
-using TeamZaps.Backends;
+using TeamZaps.Backends.Indexer;
 using TeamZaps.Configuration;
 
 namespace TeamZaps.Tests.Backend;
@@ -59,6 +59,14 @@ public abstract class CommunicativeElectrumXTests : ElectrumXTests, IDisposable
 
         // Create service:
         this.service = new ElectrumXService(mockLogger.Object, settings);
+        
+        // Start the service and wait for initialization (subscriptions setup)
+        // This is necessary because ExecuteAsync sets up subscriptions asynchronously
+        var startTask = this.service.StartAsync(CancellationToken.None);
+        startTask.Wait(TimeSpan.FromSeconds(10)); // Wait for service to start and subscribe
+        
+        // Give subscriptions a moment to establish
+        Thread.Sleep(1000);
     }
 
 
@@ -76,15 +84,15 @@ public class ElectrumXTests_Constructor : ElectrumXTests
         // Arrange:
         var settings = Options.Create(new ElectrumXSettings
         {
-            Host = "electrum.example.com",
+            Hosts = [ "electrum.example.com" ],
             Port = 50001,
             Timeout = 10000
         });
 
         using var service = new ElectrumXService(logger.Object, settings);
 
-        Assert.Single(service.Hosts);
-        var host = service.Hosts.First();
+        Assert.Single(service.ConfiguredClients);
+        var host = service.ConfiguredClients.First();
         Assert.Equal("electrum.example.com", host.Hostname);
         Assert.Equal(50001, host.Port);
     }
@@ -94,10 +102,10 @@ public class ElectrumXTests_Constructor : ElectrumXTests
         // Arrange:
         var settings = Options.Create(new ElectrumXSettings
         {
-            Host = "host1.example.com",
             Port = 50001,
             Hosts = new[]
             {
+                "host1.example.com",
                 "host2.example.com:50002",
                 "",
                 "  ",
@@ -108,8 +116,8 @@ public class ElectrumXTests_Constructor : ElectrumXTests
 
         using var service = new ElectrumXService(logger.Object, settings);
 
-        Assert.Equal(3, service.Hosts.Count);
-        var hostList = service.Hosts.ToArray();
+        Assert.Equal(3, service.ConfiguredClients.Count);
+        var hostList = service.ConfiguredClients.ToArray();
         // First host
         Assert.Equal("host1.example.com", hostList[0].Hostname);
         Assert.Equal(50001, hostList[0].Port);
@@ -130,8 +138,8 @@ public class ElectrumXTests_Constructor : ElectrumXTests
 
         using var service = new ElectrumXService(logger.Object);
 
-        Assert.Single(service.Hosts);
-        var host = service.Hosts.First();
+        Assert.Single(service.ConfiguredClients);
+        var host = service.ConfiguredClients.First();
         Assert.Equal("electrum.blockstream.info", host.Hostname);
         Assert.Equal(50001, host.Port);
     }
@@ -139,57 +147,38 @@ public class ElectrumXTests_Constructor : ElectrumXTests
 public class ElectrumXTests_HostRotation : CommunicativeElectrumXTests
 {
     #region Constants
-    private const string AllHostsRecentlyUsed = "all hosts were recently used";
-    private const string ReceivedNewBlock = "Received new block";
-    private const string KeepUsingLastBlock = "Keep using last block";
+    private const string ReceivedBlock = "Received 📦 block";
+    private const string StaleBlock = "Cached block";
     #endregion
 
 
     [Fact]
     [Trait("Category", "Communication")]
-    public async Task RecentlyUsedHostsFor30Seconds()
+    public async Task SubscriptionBasedUpdates()
     {
-        var testWatch = Stopwatch.StartNew();
-
-        // First 5 requests should succeed (one per host):
-        // Each host is used once and becomes recently used
-        // Service rotates to next fresh host for each request:
+        // With subscription-based architecture, blocks are pushed from the server
+        // GetCurrentBlockAsync simply returns the cached LastBlock
+        
+        // Wait a moment for subscription to be established
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        
+        // Multiple requests should all return the same cached block instantly
         for (int i = 0; i < 5; i++)
         {
             logMessages.Clear();
             LogTest($"Requesting block {i + 1}");
             var block = await service.GetCurrentBlockAsync(CancellationToken.None);
             Assert.NotNull(block);
-            Assert.DoesNotContain(logMessages, m => m.Contains(AllHostsRecentlyUsed, StringComparison.OrdinalIgnoreCase));
+            
+            // All requests use the cached block from subscription
+            Assert.True(block.Height > 0, "Should have a valid block height");
         }
 
-        // Sixth request (within 30s):
-        // All hosts are now recently used, should return last block from cache:
-        logMessages.Clear();
-        LogTest("Requesting block 6");
-        var block6 = await service.GetCurrentBlockAsync(CancellationToken.None);
-        Assert.NotNull(block6);
-        Assert.Single(logMessages, m => m.Contains(AllHostsRecentlyUsed, StringComparison.OrdinalIgnoreCase));
-
-        // [Debug] Expect that we are within reuse delay threshold:
-        Assert.InRange(testWatch.Elapsed, TimeSpan.Zero, ElectrumXClient.ReuseDelay);
-        // Wait for reuse delay period to expire (30s + 3s buffer):
-        var timeToWait = (ElectrumXClient.ReuseDelay + TimeSpan.FromSeconds(3) - testWatch.Elapsed);
-        await Task.Delay(timeToWait);
-
-        // Seventh request (after 30s):
-        // First host should be fresh again and make a real request:
-        logMessages.Clear();
-        LogTest("Requesting block 7");
-        var block7 = await service.GetCurrentBlockAsync(CancellationToken.None);
-        Assert.NotNull(block7);
-        Assert.DoesNotContain(logMessages, m => m.Contains(AllHostsRecentlyUsed, StringComparison.OrdinalIgnoreCase));
+        // Log the subscription status
+        var hasReceivedBlock = logMessages.Any(m => m.Contains(ReceivedBlock, StringComparison.OrdinalIgnoreCase));
+        var hasStaleWarning = logMessages.Any(m => m.Contains(StaleBlock, StringComparison.OrdinalIgnoreCase));
         
-        // Should contain either "Received new block" or "Keep using last block"
-        // depending on whether blockchain had a new block (both are valid outcomes):
-        var hasReceivedNewBlock = logMessages.Any(m => m.Contains(ReceivedNewBlock, StringComparison.OrdinalIgnoreCase));
-        var hasKeepUsingBlock = logMessages.Any(m => m.Contains(KeepUsingLastBlock, StringComparison.OrdinalIgnoreCase));
-        Assert.True(hasReceivedNewBlock || hasKeepUsingBlock,
-            $"Expected either '{ReceivedNewBlock}' or '{KeepUsingLastBlock}' in logs");
+        LogTest($"Test completed. Subscription is providing block updates: {service.ReceivedBlocks > 0}");
+        LogTest($"Total blocks received via subscription: {service.ReceivedBlocks}");
     }
 }

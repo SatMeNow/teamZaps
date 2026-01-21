@@ -233,7 +233,7 @@ Want to run your own Team Zaps bot? Check the [developer documentation](src/READ
   - LNbits instance, OR
   - AlbyHub with NWC connection
 - Bitcoin backend:
-  - ElectrumX server connection for blockchain data
+  - ElectrumX servers (recommended: 3-5 hosts for automatic failover)
 - Exchange services:
   - CoinGecko for exchange rates
 

@@ -451,7 +451,8 @@ public partial class UpdateHandler
         // Indexer backend Information
         diag.AppendLine("\n🗂️ *Indexer backend status:*");
         appendBackendInfo(indexerBackend);
-        diag.AppendLineIfNotNull("• Last block: {0}", indexerBackend.LastBlock?.Format());
+        diag.AppendLine($"• Received blocks: *{indexerBackend.ReceivedBlocks}*");
+        diag.AppendLineIfNotNull("• Latest block: {0}", indexerBackend.LastBlock?.Format());
 
         // Lightning backend Information
         diag.AppendLine("\n⚡ *Lightning backend status:*");
