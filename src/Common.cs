@@ -203,12 +203,22 @@ internal static partial class Ext
     /// <remarks>
     /// No need to append callstack as it is intended to be shown to the user.
     /// </remarks>
-    public static T AnswerUser<T>(this T source)
+    public static T AnswerUser<T>(this T source, long? chatId = null)
         where T : Exception
     {
-        return (source.AddData<T>(nameof(AnswerUser), null));
+        return (source.AddData<T>(nameof(AnswerUser), chatId));
     }
-    public static bool IsUserAnswer(this Exception source) => source
-        .Enumerate()
-        .Any(ex => ex.Data.Contains(nameof(AnswerUser)));
+    public static bool IsUserAnswer(this Exception source, out long? chatId)
+    {
+        foreach (var ex in source.Enumerate())
+        {
+            if (ex.Data.Contains(nameof(AnswerUser)))
+            {
+                chatId = (long?)ex.Data[nameof(AnswerUser)];
+                return (true);
+            }
+        }
+        chatId = null;
+        return (false);
+    }
 }
