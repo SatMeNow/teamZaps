@@ -205,7 +205,7 @@ public partial class UpdateHandler
                 .ToString();
             throw new Exception(message)
                 .AddLogLevel(LogLevel.None)
-                .AnswerUser();
+                .AnswerUser(user.Id);
         }
 
         // Send private status message

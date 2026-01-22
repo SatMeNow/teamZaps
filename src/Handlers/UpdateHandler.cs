@@ -67,9 +67,10 @@ public partial class UpdateHandler : IUpdateHandler
         }
         catch (Exception ex)
         {
-            var isAnswer = ex.IsUserAnswer();
+            var isAnswer = ex.IsUserAnswer(out var recipientId);
             var logMessage = $"Failed to handle update of type '{update.Type}':";
             var logEx = ex;
+            var chatId = message?.Chat.Id;
             if (isAnswer)
             {
                 Debug.Assert(from is not null);
@@ -80,8 +81,10 @@ public partial class UpdateHandler : IUpdateHandler
                     .Enumerate()
                     .Select(ex => $"> {ex.Message}"));
 
-                // Prepend message recipient:
-                if (message?.Chat.Type.IsGroup() == true)
+                // Redirect to specific recipient if specified:
+                chatId = (recipientId ?? chatId);
+                // Prepend message recipient in group chats:
+                if ((chatId < 0) && (message?.Chat.Type.IsGroup() == true))
                     ex.AddTitle($"Hey {from.MarkdownDisplayName()},");
             }
             logger.LogError(logEx, logMessage);
@@ -91,7 +94,7 @@ public partial class UpdateHandler : IUpdateHandler
                 if (!isAnswer)
                     // Add help since this response will be caused by an unexpected error:
                     ex.AddHelp($"Use {BotPmCommand.Help} to see available commands.");
-                await botClient.SendException(message.Chat.Id, ex, cancellationToken).ConfigureAwait(false);
+                await botClient.SendException(chatId!.Value, ex, cancellationToken).ConfigureAwait(false);
             }
         }
     }
