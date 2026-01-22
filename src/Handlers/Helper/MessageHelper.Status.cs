@@ -101,14 +101,14 @@ internal static class SessionStatusMessage
         if (!session.Participants.IsEmpty)
         {
             status.AppendLine($"\n*{session.Participants.Count}* Participant(s):");
-            foreach (var participant in session.Participants)
+            foreach (var participant in session.Participants.Values)
             {
                 var joinedLottery = "";
-                if (session.LotteryParticipants.ContainsKey(participant.Key))
+                if (session.LotteryParticipants.ContainsKey(participant))
                     joinedLottery = "🎫 ";
-                var p = $"• {joinedLottery}{participant.Value.MarkdownDisplayName()}";
-                if (participant.Value.HasPayments)
-                    p += $": {participant.Value.FormatAmount()}";
+                var p = $"• {joinedLottery}{participant.MarkdownDisplayName()}";
+                if (participant.HasPayments)
+                    p += $": {participant.FormatAmount()}";
                 status.AppendLine(p);
             }
         }
@@ -121,8 +121,8 @@ internal static class SessionStatusMessage
 
         if (session.WinnerPayouts.Count == 1)
         {
-            var winner = session.WinnerUser!;
-            status.AppendLine($"\n🏆 Winner: {winner.MarkdownDisplayName()} ({session.WinnerPayouts[winner.UserId].FiatAmount.Format()})");
+            var winner = session.Winner!;
+            status.AppendLine($"\n🏆 Winner: {winner.MarkdownDisplayName()} ({session.WinnerPayouts[winner].FiatAmount.Format()})");
         }
         else if (session.WinnerPayouts.Count > 1)
         {
@@ -240,7 +240,7 @@ internal static class UserStatusMessage
         status.AppendSessionState(session);
         if (participant is not null)
         {
-            if (session.LotteryParticipants.TryGetValue(participant.UserId, out var budget))
+            if (session.LotteryParticipants.TryGetValue(participant, out var budget))
                 status.AppendLine($"• Lottery: 🎫 *Joined* (budget: {budget.Format()})");
             else
                 status.AppendLine("• Lottery: 🎟️ *Not joined*");

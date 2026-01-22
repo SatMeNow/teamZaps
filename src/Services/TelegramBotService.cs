@@ -159,27 +159,43 @@ internal static partial class Ext
         return (command is not null);
     }
     public static bool IsGroup(this ChatType source) => source is ChatType.Group or ChatType.Supergroup;
-    public static async Task<User> GetBotUser(this ITelegramBotClient botClient, CancellationToken cancellationToken = default)
+    public static async Task<User> GetBotUser(this ITelegramBotClient source, CancellationToken cancellationToken = default)
     {
         if (botUser is null)
-            botUser = await botClient.GetMe(cancellationToken).ConfigureAwait(false);
+            botUser = await source.GetMe(cancellationToken).ConfigureAwait(false);
         return (botUser);
     }
     private static User? botUser = null;
     /// <summary>
     /// Get the bot's <see cref="ChatMember">role</see> in the specified chat.
     /// </summary>
-    public static async Task<ChatMember?> GetBotRoleAsync(this ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken = default)
+    public static async Task<ChatMember?> GetBotRoleAsync(this ITelegramBotClient source, long chatId, CancellationToken cancellationToken = default)
     {
         try
         {
-            var bot = await GetBotUser(botClient, cancellationToken).ConfigureAwait(false);
-            return (await botClient.GetChatMember(chatId, bot.Id, cancellationToken).ConfigureAwait(false));
+            var bot = await GetBotUser(source, cancellationToken).ConfigureAwait(false);
+            return (await source.GetChatMember(chatId, bot.Id, cancellationToken).ConfigureAwait(false));
         }
         catch (ApiRequestException ex) when (ex.ErrorCode == 400 || ex.ErrorCode == 403)
         {
             // Chat not found OR bot was kicked/forbidden
         }
         return (null);
+    }
+    
+    public static async Task<bool> DeleteMessageAsync(this ITelegramBotClient source, long chatId, int? messageId, CancellationToken cancellationToken)
+    {
+        if (messageId is not null)
+        {
+            try
+            {
+                await source.DeleteMessage(chatId, messageId.Value, cancellationToken).ConfigureAwait(false);
+                return (true);
+            }
+            catch
+            {
+            }
+        }
+        return (false);
     }
 }

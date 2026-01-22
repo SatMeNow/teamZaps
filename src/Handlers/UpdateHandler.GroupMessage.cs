@@ -29,7 +29,7 @@ public partial class UpdateHandler
                 break;
             case BotGroupCommand.Statistics:
                 var chatId = command.ChatId;
-                var session = workflowService.GetSessionByChat(chatId);
+                var session = workflowService.TryGetSessionByChat(chatId);
                 var adminOptions = await GetAdminOptions(session, chatId).ConfigureAwait(false);
 
                 // Check permissions
@@ -100,7 +100,7 @@ public partial class UpdateHandler
     }
     private async Task HandleCloseSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
-        var session = workflowService.GetSessionByChat(chatId);
+        var session = workflowService.TryGetSessionByChat(chatId);
         if (session is null)
             throw new InvalidOperationException("No active session in this group.")
                 .AddLogLevel(LogLevel.Warning)
@@ -117,51 +117,35 @@ public partial class UpdateHandler
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser();
 
-        if (!session.HasPayments)
-        {
-            await HandleCancelSessionAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        // Check if anyone entered the lottery
-        if (session.LotteryParticipants.Count == 0)
-        {
-            await botClient.SendMessage(chatId, "❌ No one entered the lottery. Session cancelled.", cancellationToken: cancellationToken).ConfigureAwait(false);
-
-            workflowService.TryCloseSession(chatId, true);
-        }
-        else
+        if (session.HasPayments)
         {
             // Draw winners based on budget limits
             SelectWinners(session);
             session.Phase = SessionPhase.WaitingForInvoice;
 
-            await SessionSummaryMessage.SendAsync(botClient, logger, session, cancellationToken).ConfigureAwait(false);
+            var winners = string.Join(", ", session.WinnerPayouts.Select(w => $"{w.Key} ({w.Value.FiatAmount.Format()})"));
+            logger.LogInformation("Winner(s) selected for session {Session}: {Winners}.", session, winners);
             
+            // Update session status messages
+            await SessionSummaryMessage.SendAsync(botClient, logger, session, cancellationToken).ConfigureAwait(false);
             await WinnerMessage.SendAsync(session, botClient, workflowService, cancellationToken).ConfigureAwait(false);
-
-            logger.LogInformation("Winners selected for session {Session}: {Winners}.", session, 
-                string.Join(", ", session.WinnerPayouts.Select(w => $"{w.Key} ({w.Value.FiatAmount.Format()})")));
+            await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+            
+            // Update user status messages for all participants
+            foreach (var participant in session.Participants.Values)
+                await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
         }
-        
-        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
-        
-        // Update user status messages for all participants
-        foreach (var participant in session.Participants.Values)
-            await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+        else
+            await HandleCancelSessionAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false);
     }
     private async Task HandleCancelSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
-        var session = workflowService.GetSessionByChat(chatId);
+        var session = workflowService.TryGetSessionByChat(chatId);
         if (session is null)
             return;
 
         // Check permissions
-        if (session.HasPayments == false)
-        {
-            // Skip permission check for empty sessions
-        }
-        else if ((!session.AdminOptions.AllowNonAdminSessionCancel) && (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false)))
+        if ((!session.AdminOptions.AllowNonAdminSessionCancel) && (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false)))
             throw new InvalidOperationException("Only group administrators can cancel a session.")
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser();
@@ -184,7 +168,7 @@ public partial class UpdateHandler
     }
     private async Task HandleJoinSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
-        var session = workflowService.GetSessionByChat(chatId);
+        var session = workflowService.TryGetSessionByChat(chatId);
         // Check if session exists
         if (session is null)
             throw new InvalidOperationException("No active session in this group.")
@@ -201,7 +185,7 @@ public partial class UpdateHandler
                 .AddLogLevel(LogLevel.Information)
                 .AnswerUser();
         // Check if user is already participating in another session
-        var existingSession = workflowService.GetSessionByUser(user.Id);
+        var existingSession = workflowService.TryGetSessionByUser(user.Id);
         if ((existingSession is not null) && (existingSession.ChatId != chatId))
         {
             var existingChat = await botClient.GetChat(existingSession.ChatId, cancellationToken).ConfigureAwait(false);
@@ -255,155 +239,6 @@ public partial class UpdateHandler
         logger.LogInformation("User {User} joined session in chat {ChatId}.", user, chatId);
     }
 
-    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, User user, double budget, CancellationToken cancellationToken)
-    {
-        var session = workflowService.GetSessionByUser(user.Id);
-        if (session is null)
-            throw new InvalidOperationException("No active session found.")
-                .AddLogLevel(LogLevel.Warning)
-                .AnswerUser();
-        var participant = session.Participants[user.Id];
-
-        // Check if user already joined
-        if (session.LotteryParticipants.ContainsKey(user.Id))
-            throw new InvalidOperationException("You've already entered the lottery.")
-                .AnswerUser();
-
-        // Check server-wide budget limit
-        if (!CheckServerBudgetLimit(budget))
-        {
-            var availBudget = sessionManager.AvailableServerBudget!.Value;
-            var minBudget = botBehaviour.BudgetChoices.Min();
-            var message = $"💸 Sorry, your budget of {budget.Format()} would exceed the server-wide limit!\n\n" +
-                $"Available at this time: {availBudget.Format()}\n\n";
-            if (minBudget <= availBudget)
-                message += $"Please choose a lower budget and try again.";
-            else
-                message += $"Currently, no budgets are available to join the lottery. Please try again later.";
-            throw new IndexOutOfRangeException(message)
-                .AddLogLevel(LogLevel.Warning)
-                .AnswerUser();
-        }
-
-        // Add user to lottery with budget
-        session.LotteryParticipants[user.Id] = budget;
-
-        // Handle first lottery participant - unlock payments
-        if (session.Phase == SessionPhase.WaitingForLotteryParticipants)
-        {
-            session.Phase = SessionPhase.AcceptingPayments;
-            logger.LogInformation("First lottery participant {User} in chat {ChatId}, payments unlocked.", user, chatId);
-        }
-        else
-            logger.LogInformation("User {User} joined lottery in chat {ChatId} with {Budget} budget.", user, chatId, budget.Format());
-        
-        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
-        
-        // Update user status messages for all participants
-        foreach (var p in session.Participants.Values)
-            await UserStatusMessage.UpdateAsync(session, p, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
-    }
-    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
-    {
-        var session = workflowService.GetSessionByUser(user.Id);
-        if (session is null)
-            throw new InvalidOperationException("No active session found.")
-                .AddLogLevel(LogLevel.Warning)
-                .AnswerUser();
-        var participant = session.Participants[user.Id];
-        if (session.LotteryParticipants.ContainsKey(user.Id))
-            throw new InvalidOperationException("You've already entered the lottery!")
-                .AnswerUser();
-
-        if (await DeleteMessageAsync(botClient, chatId, participant.BudgetSelectionMessageId, cancellationToken).ConfigureAwait(false))
-            participant.BudgetSelectionMessageId = null;
-
-        var availBudget = sessionManager.AvailableServerBudget;
-        var keyboard = botBehaviour.BudgetChoices
-            .Where(c => (availBudget is null) || (c <= availBudget!))
-            .Select(c => InlineKeyboardButton.WithCallbackData($"{c}{BotBehaviorOptions.AcceptedFiatCurrency.ToSymbol()}", $"{CallbackActions.SelectBudget}_{c}"))
-            .Chunk(4)
-            .ToArray();
-
-        var budgetMessage = await botClient.SendMessage(chatId, 
-            "🎰 *Enter lottery* 🎰\n\n" +
-            "How much are you willing to pay in fiat at maximum?\n\n" +
-            "💡 *Multiple winners possible!* If total payments exceed your budget, " +
-            "we'll select multiple winners to share the cost.", 
-            parseMode: ParseMode.Markdown,
-            replyMarkup: keyboard,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        participant.BudgetSelectionMessageId = budgetMessage.MessageId;
-    }
-    private async Task HandleJoinLotteryWithBudgetAsync(ITelegramBotClient botClient, long chatId, User user, double budget, CancellationToken cancellationToken)
-    {
-        var userId = user.Id;
-        if (workflowService.TryGetSessionByUser(userId, out var session))
-        {
-            var participant = session.Participants[userId];
-
-            if (await DeleteMessageAsync(botClient, chatId, participant.BudgetSelectionMessageId, cancellationToken).ConfigureAwait(false))
-                participant.BudgetSelectionMessageId = null;
-                
-            // Now process the lottery join
-            await HandleJoinLotteryAsync(botClient, chatId, user, budget, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
-    private async Task HandleTipSelectionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
-    {
-        var userId = user.Id;
-        var session = workflowService.GetSessionByUser(userId);
-        if (session is null)
-            throw new InvalidOperationException("No active session found.")
-                .AddLogLevel(LogLevel.Warning)
-                .AnswerUser();
-        if ((!session.AdminOptions.AllowNonAdminSessionClose) && (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false)))
-            throw new InvalidOperationException("Only group administrators can close a session.")
-                .AddLogLevel(LogLevel.Warning)
-                .AnswerUser();        
-        var keyboard = new InlineKeyboardMarkup(botBehaviour.TipChoices
-            .Prepend((byte)0)
-            .Select(t => InlineKeyboardButton.WithCallbackData(t.FormatTip(), $"{CallbackActions.SelectTip}_{t}"))
-            .Chunk(4)
-            .ToArray());
-
-        var tipMessage = await botClient.SendMessage(chatId, 
-            "🎩 *Setup tip*\n\n" +
-            "Choose your *tip percentage* to be added to each payment:\n\n",
-            //"💭 Tips help support Lightning Network infrastructure and development!"
-            parseMode: ParseMode.Markdown,
-            replyMarkup: keyboard,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        // Store the tip selection message ID for cleanup
-        if (session.Participants.TryGetValue(userId, out var participant))
-            participant.TipSelectionMessageId = tipMessage.MessageId;
-    }
-
-    private async Task HandleSetTipAsync(ITelegramBotClient botClient, long chatId, User user, int tip, CancellationToken cancellationToken)
-    {
-        var session = workflowService.GetSessionByUser(user.Id);
-        if (session is null)
-            throw new InvalidOperationException($"No active session found.")
-                .AddLogLevel(LogLevel.Warning)
-                .AnswerUser();
-        var participant = session.Participants[user.Id];
-        
-        // Delete the tip selection message
-        if (await DeleteMessageAsync(botClient, chatId, participant.TipSelectionMessageId, cancellationToken).ConfigureAwait(false))
-            participant.TipSelectionMessageId = null;
-
-        // Set the user's tip:
-        participant.Options.Tip = (tip == 0) ? null : (byte)tip;
-        // Save user options:
-        await userOptionsService.WriteAsync(user.Id, participant.Options).ConfigureAwait(false);
-        
-        // Update the user's status message to reflect the new tip:
-        await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
-    }
-
     /// <summary>
     /// Views the current session status.
     /// </summary>
@@ -412,7 +247,7 @@ public partial class UpdateHandler
     /// </remarks>
     private async Task HandleStatusAsync(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken)
     {
-        var session = workflowService.GetSessionByChat(chatId);
+        var session = workflowService.TryGetSessionByChat(chatId);
         if (session is null)
             throw new InvalidOperationException($"No active session in this group.\n\nUse {BotGroupCommand.StartSession} to start one!")
                 .AnswerUser();
@@ -436,7 +271,7 @@ public partial class UpdateHandler
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser();
 
-        var session = workflowService.GetSessionByChat(chatId);
+        var session = workflowService.TryGetSessionByChat(chatId);
         var options = await GetAdminOptions(session, chatId).ConfigureAwait(false);
 
         // Respond to user's private bot chat
@@ -457,7 +292,7 @@ public partial class UpdateHandler
         var chatId = query.Message!.Chat.Id;
         var chatTitle = query.Message!.Chat.Title!;
 
-        var session = workflowService.GetSessionByChat(groupChatId);
+        var session = workflowService.TryGetSessionByChat(groupChatId);
         var options = await GetAdminOptions(session, groupChatId).ConfigureAwait(false);
 
         // Toggle the selected option
@@ -508,7 +343,7 @@ public partial class UpdateHandler
             var amountToPay = Math.Min(budget, remainingAmount);
             var satsAmount = CalculateWinnerSats(session, amountToPay);
             
-            session.WinnerPayouts[userId] = new PayableFiatAmount(amountToPay, satsAmount);
+            session.WinnerPayouts[participant.Key] = new PayableFiatAmount(amountToPay, satsAmount);
 
             remainingAmount -= amountToPay;
         }
