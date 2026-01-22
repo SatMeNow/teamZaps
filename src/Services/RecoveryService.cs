@@ -149,32 +149,34 @@ public class RecoveryService : BackgroundService
     {
         if (recoverySettings.Enable == false)
             return (Task.FromResult<LostSatsRecord?>(null));
+        if (sessionManager.ActiveParticipants.Contains(p => p.UserId == userId))
+            return (Task.FromResult<LostSatsRecord?>(null));
 
         return (lostSatsFile.ReadAsync(userId));
     }
     /// <summary>
     /// Gets all lost sats records.
     /// </summary>
-    public Task<ICollection<LostSatsRecord>> GetAllLostSatsAsync()
+    public async Task<ICollection<LostSatsRecord>> GetAllLostSatsAsync()
     {
         if (recoverySettings.Enable == false)
-            return (Task.FromResult<ICollection<LostSatsRecord>>(Array.Empty<LostSatsRecord>()));
+            return (Array.Empty<LostSatsRecord>());
 
-        return (lostSatsFile.ReadAllAsync());
+        return ((await lostSatsFile.ReadAllAsync())
+            .Where(r => !sessionManager.ActiveParticipants.Contains(p => p.UserId == r.UserId))
+            .ToArray());
     }
 
-    public async Task ScanForLostSatsAsync()
+    private async Task ScanForLostSatsAsync()
     {
         // Get lost sats of inactive(!) sessions/users:
         logger.LogDebug("Starting scan for lost sats.");
-        var lostSatsRecords = (await GetAllLostSatsAsync().ConfigureAwait(false))
-            .Where(r => !sessionManager.ActiveParticipants.Contains(p => p.UserId == r.UserId))
-            .ToArray();
+        var lostSatsRecords = await GetAllLostSatsAsync().ConfigureAwait(false);
         if (lostSatsRecords.IsEmpty())
             return;
 
         var totalLostSats = lostSatsRecords.Sum(r => r.SatsAmount);
-        logger.LogWarning("⚠️ LOST SATS DETECTED! Found {Count} user(s) with {TotalSats} of lost funds.", lostSatsRecords.Length, totalLostSats.Format());
+        logger.LogWarning("⚠️ LOST SATS DETECTED! Found {Count} user(s) with {TotalSats} of lost funds.", lostSatsRecords.Count, totalLostSats.Format());
         var exceededRecords = lostSatsRecords
             .Where(r => r.NotificationReminderLimitExceeded)
             .ToArray();

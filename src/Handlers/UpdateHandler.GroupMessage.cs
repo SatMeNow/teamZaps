@@ -179,29 +179,21 @@ public partial class UpdateHandler
     private async Task HandleJoinSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
         var session = workflowService.GetSessionByChat(chatId);
-        if (session is null || session.Phase > SessionPhase.AcceptingPayments)
-            throw new InvalidOperationException("Session is not currently accepting new participants.")
+        // Check if session exists
+        if (session is null)
+            throw new InvalidOperationException("No active session in this group.")
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser();
-
         // Check if user is already a participant in this session
         if (session.Participants.ContainsKey(user.Id))
-            throw new InvalidOperationException("You're already part of this session!")
+            throw new InvalidOperationException("You're already part of this session.")
+                .AddLogLevel(LogLevel.Information)
                 .AnswerUser();
-
-        // Check for lost sats of this user
-        var lostSats = await recoveryService.TryGetLostSatsAsync(user.Id).ConfigureAwait(false);
-        if (lostSats is not null)
-        {
-            var message = new StringBuilder()
-                .AppendRecoveryMessage(lostSats)
-                .AppendLine("\nℹ️ You need to *recover your lost sats before joining* a new session.")
-                .ToString();
-            throw new Exception(message)
-                .AddLogLevel(LogLevel.None)
+        // Check if session is accepting new participants
+        if (session.Phase > SessionPhase.AcceptingPayments)
+            throw new InvalidOperationException("Session is not currently accepting new participants.")
+                .AddLogLevel(LogLevel.Information)
                 .AnswerUser();
-        }
-
         // Check if user is already participating in another session
         var existingSession = workflowService.GetSessionByUser(user.Id);
         if ((existingSession is not null) && (existingSession.ChatId != chatId))
@@ -209,7 +201,20 @@ public partial class UpdateHandler
             var existingChat = await botClient.GetChat(existingSession.ChatId, cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException($"You're already participating in a session in *{existingChat.Title}*!\n\n" +
                 "You can only join one session at a time. Please complete your current session first.")
-                .AddLogLevel(LogLevel.Warning)
+                .AddLogLevel(LogLevel.Information)
+                .AnswerUser();
+        }
+
+        // Check for lost sats of this user
+        var lostSats = await recoveryService.TryGetLostSatsAsync(user.Id).ConfigureAwait(false);
+        if (lostSats is not null)
+        {
+            var message = new StringBuilder()
+                .AppendRecoveryMessage(lostSats)
+                .AppendLine("\n⚠️ You need to *recover your lost sats* before joining a new session.")
+                .ToString();
+            throw new Exception(message)
+                .AddLogLevel(LogLevel.None)
                 .AnswerUser();
         }
 
