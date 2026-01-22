@@ -166,21 +166,20 @@ internal static partial class Ext
         return (botUser);
     }
     private static User? botUser = null;
-    public static async Task<bool> BotCanPinMessagesAsync(this ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Get the bot's <see cref="ChatMember">role</see> in the specified chat.
+    /// </summary>
+    public static async Task<ChatMember?> GetBotRoleAsync(this ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken = default)
     {
         try
         {
             var bot = await GetBotUser(botClient, cancellationToken).ConfigureAwait(false);
-            var member = await botClient.GetChatMember(chatId, bot.Id, cancellationToken).ConfigureAwait(false);
-            if (member is ChatMemberOwner)
-                return (true);
-            if (member is ChatMemberAdministrator admin)
-                return (admin.CanPinMessages);
+            return (await botClient.GetChatMember(chatId, bot.Id, cancellationToken).ConfigureAwait(false));
         }
         catch (ApiRequestException ex) when (ex.ErrorCode == 400 || ex.ErrorCode == 403)
         {
             // Chat not found OR bot was kicked/forbidden
         }
-        return (false);
+        return (null);
     }
 }

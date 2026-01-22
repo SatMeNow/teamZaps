@@ -56,15 +56,19 @@ public partial class UpdateHandler
             throw new InvalidOperationException("Sessions can only be started in group chats!")
                 .AnswerUser();
 
-        // Obtain block header at session start
-        var currentBlock = await indexerBackend.GetCurrentBlockAsync(cancellationToken).ConfigureAwait(false);
+        // Check bot's permissions in this chat
+        var botRole = await botClient.GetBotRoleAsync(command.ChatId, cancellationToken).ConfigureAwait(false);
+        if (botRole is not ChatMemberAdministrator adminRole)
+            throw new InvalidOperationException("I need to be an *administrator* in this group to start a session!")
+                .AddHelp("Please *promote me to admin* and try again.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
 
-        // Load admin options for this chat
-        var adminOptions = await adminOptionsService.ReadAsync(command.ChatId).ConfigureAwait(false);
+        // Obtain admin options for this chat
+        var adminOptions = await GetAdminOptions(null, command.ChatId).ConfigureAwait(false);
 
         // Check permissions - use saved options or default
-        var allowNonAdminSessionStart = adminOptions?.AllowNonAdminSessionStart ?? false;
-        if ((!allowNonAdminSessionStart) && (!await IsUserAdminAsync(botClient, command.ChatId, command.From, cancellationToken).ConfigureAwait(false)))
+        if ((!adminOptions.AllowNonAdminSessionStart) && (!await IsUserAdminAsync(botClient, command.ChatId, command.From, cancellationToken).ConfigureAwait(false)))
             throw new InvalidOperationException("Only group administrators can start a session.")
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser();
@@ -77,13 +81,15 @@ public partial class UpdateHandler
                 .AddLogLevel(LogLevel.Information)
                 .AnswerUser();
 
+        // Obtain block header at session start
+        var currentBlock = await indexerBackend.GetCurrentBlockAsync(cancellationToken).ConfigureAwait(false);
+
         var session = await workflowService.TryStartSessionAsync(chat, command).ConfigureAwait(false);
         if (session is not null)
         {
-            if (adminOptions is not null)
-                session.AdminOptions = adminOptions;
+            session.AdminOptions = adminOptions;
             session.StartedAtBlock = currentBlock;
-            session.BotCanPinMessages = await botClient.BotCanPinMessagesAsync(chat.Id, cancellationToken).ConfigureAwait(false);
+            session.BotCanPinMessages = adminRole.CanPinMessages;
             
             await SessionStatusMessage.SendAsync(session, botClient, workflowService, cancellationToken).ConfigureAwait(false);
         }
