@@ -60,13 +60,13 @@ public class SessionState : ITipableAmount
     /// </summary>
     public double Budget => LotteryParticipants.Values.Sum();
 
-    public Dictionary<long, double> LotteryParticipants { get; } = new(); // UserId -> MaxBudget
-    public Dictionary<long, PayableFiatAmount> WinnerPayouts { get; } = new(); // UserId -> Payout info
+    public Dictionary<ParticipantState, double> LotteryParticipants { get; } = new(); // User -> MaxBudget
+    public Dictionary<ParticipantState, PayableFiatAmount> WinnerPayouts { get; } = new(); // User -> Payout info
+    public ICollection<ParticipantState> Winners => WinnerPayouts.Keys;
+    public ParticipantState? Winner => WinnerPayouts.Keys.FirstOrDefault();
     public long PayedAmount => WinnerPayouts.Values.Sum(p => p.PayedAmount);
     public double PayedFiatAmount => WinnerPayouts.Values.Sum(p => p.PayedFiatAmount);
     public bool PayoutCompleted => WinnerPayouts.Values.All(w => w.PaymentCompleted);
-    public IEnumerable<ParticipantState> WinnerUsers => WinnerPayouts.Keys.Select(id => Participants[id]);
-    public ParticipantState? WinnerUser => WinnerUsers.FirstOrDefault();
     public int? WinnerMessageId { get; set; }
 
     public SessionStatistics? Statistics { get; set; }
@@ -117,7 +117,7 @@ public class ParticipantState : IUser, ITipableAmount
     public static implicit operator User(ParticipantState user) => user.User;
 
 
-    public bool JoinedLottery(SessionState session) => session.LotteryParticipants.ContainsKey(UserId);
+    public bool JoinedLottery(SessionState session) => session.LotteryParticipants.ContainsKey(this);
 }
 
 public record PaymentRecord() : IUser, ITipableAmount

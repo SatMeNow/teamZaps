@@ -16,16 +16,29 @@ public class SessionWorkflowService
     }
 
 
-    public SessionState? GetSessionByChat(long chatId) => sessionManager.GetSessionByChat(chatId);
-    public SessionState? GetSessionByUser(long userId) => sessionManager.GetSessionByUser(userId);
+    public SessionState? TryGetSessionByChat(long chatId) => sessionManager.TryGetSessionByChat(chatId);
+    public SessionState? TryGetSessionByUser(long userId) => sessionManager.TryGetSessionByUser(userId);
+    /// <summary>
+    /// Get the active session and participant for the specified user.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No active session found for the user.</exception>
+    public void GetSessionParticipant(long userId, out SessionState session, out ParticipantState participant)
+    {
+        session = TryGetSessionByUser(userId)!;
+        if (session is null)
+            throw new InvalidOperationException("There was no active session found.")
+                .AddLogLevel(LogLevel.Error)
+                .AnswerUser();
+        participant = session.Participants[userId];
+    }
     public bool TryGetSession(long chatId, [NotNullWhen(true)] out SessionState? session)
     {
-        session = sessionManager.GetSessionByChat(chatId);
+        session = sessionManager.TryGetSessionByChat(chatId);
         return (session is not null);
     }
     public bool TryGetSessionByUser(long userId, [NotNullWhen(true)] out SessionState? session)
     {
-        session = sessionManager.GetSessionByUser(userId);
+        session = sessionManager.TryGetSessionByUser(userId);
         return (session is not null);
     }
     public Task<SessionState?> TryStartSessionAsync(ChatFullInfo chat, CommandMessage command) => sessionManager.TryCreateSessionAsync(chat, command);
@@ -115,8 +128,8 @@ public class SessionManager : IFormattableAmount
             return (null);
     }
 
-    public SessionState? GetSessionByChat(long chatId) => sessions.TryGetValue(chatId, out var session) ? session : null;
-    public SessionState? GetSessionByUser(long userId) => ActiveSessions
+    public SessionState? TryGetSessionByChat(long chatId) => sessions.TryGetValue(chatId, out var session) ? session : null;
+    public SessionState? TryGetSessionByUser(long userId) => ActiveSessions
         .FirstOrDefault(s => s.Participants.ContainsKey(userId));
 
     public bool RemoveSession(long chatId, bool cancel)

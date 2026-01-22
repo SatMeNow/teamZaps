@@ -60,86 +60,6 @@ src/
 └── Program.cs                   # Application entry point
 ```
 
-## 🚀 Getting Started
-
-### Prerequisites
-
-```bash
-# Required
-.NET 9.0 SDK
-Telegram Bot Token (from @BotFather)
-LNbits instance (for Lightning payments)
-
-# Optional but recommended
-VS Code or Visual Studio
-Git
-```
-
-### BotFather Configuration
-
-Configure your bot commands in @BotFather using the `/setcommands` command:
-
-```
-stat - Show personal statistics
-recover - Recover lost sats from interrupted sessions
-help - Show help and available commands
-about - About this bot
-```
-
-### Setup Steps
-
-1. **Clone and Build**
-```bash
-git clone <repository-url>
-cd TeamZaps/src
-dotnet restore
-dotnet build
-```
-
-2. **Configure Services**
-
-Create `appsettings.Development.json`:
-```json
-{
-  "Telegram": {
-    "BotToken": "YOUR_BOT_TOKEN_FROM_BOTFATHER",
-    "RootUsers": [ 123456789 ]
-  },
-  "Lightning": {
-    "LNBits": {
-      "LndhubUrl": "YOUR_LNDHUB_URL_HERE",
-      "ApiKey": "YOUR_API_KEY_HERE"
-    },
-    "AlbyHub": {
-      "ConnectionString": "YOUR_NWC_CONNECTION_STRING_HERE",
-      "RelayUrls": [ "YOUR_RELAY_URLS_HERE" ]
-    }
-  },
-  "BotBehaviorOptions": {
-    "AllowNonAdminSessionStart": false,
-    "AllowNonAdminSessionClose": false, 
-    "AllowNonAdminSessionCancel": false,
-    "BudgetChoices": [50, 100, 150, 200, 250, 300],
-    "MaxBudget": 10000.0
-  },
-  "Debug": {
-    "FixBudget": 5.0
-  }
-}
-```
-
-3. **Run Development Server**
-```bash
-# Standard run
-dotnet run
-
-# Watch mode (auto-reload)
-dotnet watch run
-
-# With specific environment
-ASPNETCORE_ENVIRONMENT=Development dotnet run
-```
-
 ## 🔧 Configuration
 
 ### Lightning Backend
@@ -663,6 +583,90 @@ if (PaymentParser.TryParse("5.99 beer + 2.50 pizza", out var tokens, out var err
     // tokens contain structured PaymentToken objects
     // Supports: amounts, currencies, memos, multiple formats
 }
+```
+
+## 🛠️ Self-Hosting
+
+Self-hosting is the recommended way to set up your development environment. By running the bot locally, you have full control over configuration, can test changes instantly, and debug issues in real-time.
+
+### Prerequisites
+
+Required:
+
+- .NET 9.0 SDK
+- Telegram Bot Token (from [@BotFather](https://t.me/botfather))
+- Lightning Backend:
+  - LNbits instance, OR
+  - AlbyHub with NWC connection
+
+Optional but recommended
+
+- VS Code or Visual Studio
+- Git
+
+### BotFather Configuration
+
+Configure your bot commands in @BotFather using the `/setcommands` command:
+
+```
+stat - Show personal statistics
+recover - Recover lost sats from interrupted sessions
+help - Show help and available commands
+about - About this bot
+```
+
+### Setup Steps
+
+1. **Clone and Build**
+```bash
+git clone <repository-url>
+cd TeamZaps/src
+dotnet restore
+dotnet build
+```
+
+2. **Configure Services**
+
+Create `appsettings.Development.json`:
+```json
+{
+  "Telegram": {
+    "BotToken": "YOUR_BOT_TOKEN_FROM_BOTFATHER",
+    "RootUsers": [ 123456789 ]
+  },
+  "Lightning": {
+    "LNBits": {
+      "LndhubUrl": "YOUR_LNDHUB_URL_HERE",
+      "ApiKey": "YOUR_API_KEY_HERE"
+    },
+    "AlbyHub": {
+      "ConnectionString": "YOUR_NWC_CONNECTION_STRING_HERE",
+      "RelayUrls": [ "YOUR_RELAY_URLS_HERE" ]
+    }
+  },
+  "BotBehaviorOptions": {
+    "AllowNonAdminSessionStart": false,
+    "AllowNonAdminSessionClose": false, 
+    "AllowNonAdminSessionCancel": false,
+    "BudgetChoices": [50, 100, 150, 200, 250, 300],
+    "MaxBudget": 10000.0
+  },
+  "Debug": {
+    "FixBudget": 5.0
+  }
+}
+```
+
+3. **Run Development Server**
+```bash
+# Standard run
+dotnet run
+
+# Watch mode (auto-reload)
+dotnet watch run
+
+# With specific environment
+ASPNETCORE_ENVIRONMENT=Development dotnet run
 ```
 
 ## 🧪 Development Workflow

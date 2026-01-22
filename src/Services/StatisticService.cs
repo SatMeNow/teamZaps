@@ -185,10 +185,10 @@ public class StatisticService : IHostedService
         stats.TotalSats += (ulong)session.SatsAmount;
         stats.TotalTippedSats += (ulong)participant.Payments.Sum(p => p.TipAmount);
         // Update lottery metrics:
-        if (session.LotteryParticipants.ContainsKey(userId))
+        if (session.LotteryParticipants.ContainsKey(participant))
         {
             stats.TotalLotteries++;
-            if (session.WinnerPayouts.TryGetValue(userId, out var winnerInfo))
+            if (session.WinnerPayouts.TryGetValue(participant, out var winnerInfo))
             {
                 stats.WonLotteries++;
                 stats.TotalWonSats += (ulong)winnerInfo.SatsAmount;

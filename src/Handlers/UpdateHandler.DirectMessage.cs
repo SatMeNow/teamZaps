@@ -7,6 +7,7 @@ using TeamZaps.Payment;
 using TeamZaps.Services;
 using TeamZaps.Session;
 using TeamZaps.Utils;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace TeamZaps.Handlers;
 
@@ -22,26 +23,33 @@ public partial class UpdateHandler
 
                 // Send welcome message
                 var welcomeMessage = new StringBuilder()
-                    .AppendLine("Welcome to Team Zaps! 🎯\n")
-                    .AppendLine("I help groups split bills using Bitcoin Lightning!\n")
+                    .AppendLine("*Welcome to TeamZaps!* 🎯")
+                    .AppendLine()
+                    .AppendLine("I help groups split bills using Bitcoin Lightning!")
+                    .AppendLine()
                     .AppendLine("*How it works:*")
-                    .AppendLine("1️⃣ Someone starts a session in your group")
-                    .AppendLine("2️⃣ Join the session using the _Join_ button")
-                    .AppendLine("3️⃣ Send me payments as direct message")
-                    .AppendLine("4️⃣ One random participant wins the pot!\n")
-                    .Append($"Use `{BotPmCommand.Help}` for detailed instructions.");
+                    .AppendLine("1️⃣ Someone *starts a session* in your group")
+                    .AppendLine("2️⃣ *Join the session*")
+                    .AppendLine("3️⃣ *Send me your payments*")
+                    .AppendLine("4️⃣ One *random participant wins the pot*!")
+                    .AppendLine()
+                    .AppendLine("*Nice to know:*")
+                    .AppendLine("💡 *Your sats are safe* with me! Your can [recover lost sats](https://github.com/SatMeNow/teamZaps/blob/master/README.MD#-lost-and-found-recovery) in case of any problems!")
+                    .AppendLine()
+                    .Append($"Use {BotPmCommand.Help} for detailed instructions.");
                 if (pendingJoin is not null)
                     welcomeMessage.AppendLine("\n\n💡 Okay, let's continue and join the session 🏃‍➡️");
                 await botClient.SendMessage(command.ChatId, 
                     welcomeMessage.ToString(),
                     parseMode: ParseMode.Markdown,
+                    linkPreviewOptions: true,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 // Send private status message if pending
                 if (pendingJoin is not null)
                 {
                     await HandleJoinSessionAsync(botClient, pendingJoin.ChatId, command.Source.From!, cancellationToken).ConfigureAwait(false);
-                    await DeleteMessageAsync(botClient, pendingJoin.ChatId, pendingJoin.WelcomeMessageId, cancellationToken).ConfigureAwait(false);
+                    await botClient.DeleteMessageAsync(pendingJoin.ChatId, pendingJoin.WelcomeMessageId, cancellationToken).ConfigureAwait(false);
                 }
                 break;
 
@@ -60,8 +68,6 @@ public partial class UpdateHandler
                     "🎯 *Team Zaps help*\n\n" +
                     "*Group commands* (use in a group chat):\n" +
                     $"{BotGroupCommand.StartSession} - Start a new payment session (maybe for admins only)\n" +
-                    $"{BotGroupCommand.CloseSession} - Close payments and start lottery (maybe for admins only)\n" +
-                    $"{BotGroupCommand.CancelSession} - Cancel session (maybe for admins only)\n\n" +
                     $"{BotGroupCommand.Statistics} - Show group statistics (may be restricted to admins)\n\n" +
                     $"{BotGroupCommand.Config} - Configure group settings and bot behavior (admins only)\n\n" +
                     "*Private commands* (use in direct message with the bot):\n" +
@@ -75,8 +81,9 @@ public partial class UpdateHandler
                     "3️⃣ Pay the Lightning invoices I send you\n" +
                     "4️⃣ If you opted into the lottery, wait for the draw when the admin closes payments\n\n" +
                     "💡 *Payments and invoices are handled in private messages for privacy.*\n\n" +
-                    "ℹ️ For *detailed info*, check out the [GitHub Repository](https://github.com/SatMeNow/teamZaps).",
+                    "ℹ️ For *detailed info*, check out the [user documents](https://github.com/SatMeNow/teamZaps/blob/master/README.MD).",
                     parseMode: ParseMode.Markdown,
+                    linkPreviewOptions: true,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
                 break;
 
@@ -90,17 +97,24 @@ public partial class UpdateHandler
                     .AppendLine()
                     .AppendLine("🚀 *Application:*")
                     .AppendLine($"• Version: *v{UtilAssembly.GetVersion()}*")
-                    .AppendLine($"• .NET: *{Environment.Version}*")
+                    .AppendLine()
+                    .AppendLine("📞 *Support:*")
+                    .AppendLine("• Refer to the [support documents](https://github.com/SatMeNow/teamZaps/blob/master/README.MD#-support) for further instructions.")
+                    .AppendLine("• Consider also to create an [issue](https://github.com/SatMeNow/teamZaps/issues) for bugs or feature requests")
                     .AppendLine()
                     .AppendLine("🧑‍💻 *Open Source:*")
-                    .AppendLine("• [GitHub repository](https://github.com/SatMeNow/teamZaps)")
+                    .AppendLine("• [TeamZaps repository](https://github.com/SatMeNow/teamZaps) on GitHub")
+                    .AppendLine("• [User documents](https://github.com/SatMeNow/teamZaps/blob/master/README.MD)")
+                    .AppendLine("• [Developer documents](https://github.com/SatMeNow/teamZaps/blob/master/src/README.md)")
                     .AppendLine()
-                    .Append($"Use `{BotPmCommand.Help}` for commands and instructions.");
+                    .AppendLine("💜 *Support the Project:*")
+                    .AppendLine("• [Value for value](https://github.com/SatMeNow/teamZaps/blob/master/README.MD#-support-the-project)")
+                    .AppendLine()
+                    .Append($"Use {BotPmCommand.Help} for commands and instructions.");
                 
                 await botClient.SendMessage(command.ChatId,
                     aboutMessage.ToString(),
                     parseMode: ParseMode.Markdown,
-                    linkPreviewOptions: true,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
                 break;
 
@@ -120,7 +134,7 @@ public partial class UpdateHandler
         if (string.IsNullOrEmpty(text))
             return (true);
 
-        var session = sessionManager.GetSessionByUser(user.Id);
+        var session = sessionManager.TryGetSessionByUser(user.Id);
         if (session is null)
         {
             // Check if this is a recovery invoice
@@ -183,6 +197,135 @@ public partial class UpdateHandler
                     .AnswerUser();
         }
     }
+    
+    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
+    {
+        workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
+
+        // Check if user already joined the lottery
+        if (session.LotteryParticipants.ContainsKey(participant))
+            throw new InvalidOperationException("You've already entered the lottery!")
+                .AnswerUser();
+
+        if (await botClient.DeleteMessageAsync(chatId, participant.BudgetSelectionMessageId, cancellationToken).ConfigureAwait(false))
+            participant.BudgetSelectionMessageId = null;
+
+        var availBudget = sessionManager.AvailableServerBudget;
+        var keyboard = botBehaviour.BudgetChoices
+            .Where(c => (availBudget is null) || (c <= availBudget!))
+            .Select(c => InlineKeyboardButton.WithCallbackData($"{c}{BotBehaviorOptions.AcceptedFiatCurrency.ToSymbol()}", $"{CallbackActions.SelectBudget}_{c}"))
+            .Chunk(4)
+            .ToArray();
+
+        var budgetMessage = await botClient.SendMessage(chatId, 
+            "🎰 *Enter lottery* 🎰\n\n" +
+            "How much are you willing to pay in fiat at maximum?\n\n" +
+            "💡 *Multiple winners possible!* If total payments exceed your budget, " +
+            "we'll select multiple winners to share the cost.", 
+            parseMode: ParseMode.Markdown,
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        participant.BudgetSelectionMessageId = budgetMessage.MessageId;
+    }
+    private async Task HandleJoinLotteryAsync(ITelegramBotClient botClient, long chatId, User user, double budget, CancellationToken cancellationToken)
+    {
+        workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
+
+        // Check if user already joined
+        if (session.LotteryParticipants.ContainsKey(participant))
+            throw new InvalidOperationException("You've already entered the lottery.")
+                .AddLogLevel(LogLevel.Information)
+                .AnswerUser();
+
+        // Check server-wide budget limit
+        if (!CheckServerBudgetLimit(budget))
+        {
+            var availBudget = sessionManager.AvailableServerBudget!.Value;
+            var minBudget = botBehaviour.BudgetChoices.Min();
+            var message = $"💸 Sorry, your budget of {budget.Format()} would exceed the server-wide limit!\n\n" +
+                $"Available at this time: {availBudget.Format()}\n\n";
+            if (minBudget <= availBudget)
+                message += $"Please choose a lower budget and try again.";
+            else
+                message += $"Currently, no budgets are available to join the lottery. Please try again later.";
+            throw new IndexOutOfRangeException(message)
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
+        }
+
+        // Add user to lottery with budget
+        session.LotteryParticipants[participant] = budget;
+
+        // Handle first lottery participant - unlock payments
+        if (session.Phase == SessionPhase.WaitingForLotteryParticipants)
+        {
+            session.Phase = SessionPhase.AcceptingPayments;
+            logger.LogInformation("First lottery participant {User} in chat {ChatId}, payments unlocked.", user, chatId);
+        }
+        else
+            logger.LogInformation("User {User} joined lottery in chat {ChatId} with {Budget} budget.", user, chatId, budget.Format());
+        
+        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+        
+        // Update user status messages for all participants
+        foreach (var p in session.Participants.Values)
+            await UserStatusMessage.UpdateAsync(session, p, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+    }
+    private async Task HandleJoinLotteryWithBudgetAsync(ITelegramBotClient botClient, long chatId, User user, double budget, CancellationToken cancellationToken)
+    {
+        var userId = user.Id;
+        if (workflowService.TryGetSessionByUser(userId, out var session))
+        {
+            var participant = session.Participants[userId];
+
+            if (await botClient.DeleteMessageAsync(chatId, participant.BudgetSelectionMessageId, cancellationToken).ConfigureAwait(false))
+                participant.BudgetSelectionMessageId = null;
+                
+            // Now process the lottery join
+            await HandleJoinLotteryAsync(botClient, chatId, user, budget, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task HandleTipSelectionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
+    {
+        workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
+             
+        var keyboard = new InlineKeyboardMarkup(botBehaviour.TipChoices
+            .Prepend((byte)0)
+            .Select(t => InlineKeyboardButton.WithCallbackData(t.FormatTip(), $"{CallbackActions.SelectTip}_{t}"))
+            .Chunk(4)
+            .ToArray());
+        var tipMessage = await botClient.SendMessage(chatId, 
+            "🎩 *Setup tip*\n\n" +
+            "Choose your *tip percentage* to be added to each payment:\n\n",
+            //"💭 Tips help support Lightning Network infrastructure and development!"
+            parseMode: ParseMode.Markdown,
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        // Store the tip selection message ID for cleanup
+        participant.TipSelectionMessageId = tipMessage.MessageId;
+    }
+
+    private async Task HandleSetTipAsync(ITelegramBotClient botClient, long chatId, User user, int tip, CancellationToken cancellationToken)
+    {
+        workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
+        
+        // Delete the tip selection message
+        if (await botClient.DeleteMessageAsync(chatId, participant.TipSelectionMessageId, cancellationToken).ConfigureAwait(false))
+            participant.TipSelectionMessageId = null;
+
+        // Set the user's tip:
+        participant.Options.Tip = (tip == 0) ? null : (byte)tip;
+        // Save user options:
+        await userOptionsService.WriteAsync(user.Id, participant.Options).ConfigureAwait(false);
+        
+        // Update the user's status message to reflect the new tip:
+        await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+    }
+
+
     private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, User user, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
     {
         try
@@ -258,8 +401,10 @@ public partial class UpdateHandler
     }
     private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, User user, string bolt11, CancellationToken cancellationToken)
     {
+        var participant = session.Participants[user.Id];
+
         // Check if this user is a winner waiting to submit an invoice
-        if (!session.WinnerPayouts.TryGetValue(user.Id, out var winnerPayout))
+        if (!session.WinnerPayouts.TryGetValue(participant, out var winnerPayout))
             throw new InvalidOperationException($"Nice try! Sorry, *you are not a winner* in the current session 😉")
                 .AddLogLevel(LogLevel.Information)
                 .AnswerUser();
@@ -268,7 +413,6 @@ public partial class UpdateHandler
                 .AddLogLevel(LogLevel.Information)
                 .AnswerUser();
 
-        var participant = session.Participants[user.Id];
         logger.LogInformation("Winner invoice submitted by {Participant} for session {Session}.", participant, session);
 
         // Obtain block header at session end
@@ -278,10 +422,9 @@ public partial class UpdateHandler
         var invoiceSats = lightningBackend.GetInvoiceAmount(bolt11);
         ValidateInvoiceAmount(winnerPayout.RemainingAmount, invoiceSats);
 
-        await botClient.SendMessage(participant.UserId,
-            "✅ Invoice received!\n" +
-            "⏳ Processing payout...",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        var statusText = "✅ Invoice received!\n" +
+            "⏳ Processing payout...";
+        var statusMessage = await botClient.SendMessage(participant.UserId, statusText, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -303,9 +446,12 @@ public partial class UpdateHandler
                     await WinnerMessage.UpdateAsync(session, PaymentStatus.Paid, paymentResult, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
                     
                     // Notify winner about successful payout
-                    await botClient.SendMessage(user.Id,
+                    statusText += "\n\n" +
                         $"✅ Successfully paid out *{invoiceSats.Format()}*.\n" +
-                        $"🎉 *Session completed!*",
+                        "🎉 *Session completed!*";
+                    await botClient.EditMessageText(user.Id,
+                        statusMessage.MessageId,
+                        statusText,
                         parseMode: ParseMode.Markdown,
                         cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
@@ -322,9 +468,12 @@ public partial class UpdateHandler
                 await recoveryService.WriteLostSatsAsync(participant, winnerPayout.RemainingAmount, $"Partial payout in session *{session.ChatTitle}*").ConfigureAwait(false);
 
                 // Notify winner about partial payout
-                await botClient.SendMessage(participant.UserId,
+                statusText += "\n\n" +
                     $"✅ Partially paid out *{invoiceSats.Format()}*.\n" +
-                    $"⚡ Please send me a new invoice for the remaining amount of *{winnerPayout.RemainingAmount.Format()}*.",
+                    $"⚡ Please send me a new invoice for the remaining amount of *{winnerPayout.RemainingAmount.Format()}*.";
+                await botClient.EditMessageText(user.Id,
+                    statusMessage.MessageId,
+                    statusText,
                     parseMode: ParseMode.Markdown,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
             }
@@ -436,7 +585,8 @@ public partial class UpdateHandler
                 {
                     string? succeeded = (host.SentRequests > 0) ? $"*{host.SentRequests}*x✅ " : null;
                     string? failed = (host.FailedRequests > 0) ? $"*{host.FailedRequests}*x⛔ " : null;
-                    diag.AppendLine($"   • {succeeded}{failed}{host.Hostname}");
+                    string? idle = (succeeded is null) && (failed is null) ? "💤 " : null;
+                    diag.AppendLine($"   • {succeeded}{failed}{idle}{host.Hostname}");
                 }
             }
             else

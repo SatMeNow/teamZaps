@@ -63,7 +63,7 @@ internal static class WinnerMessage
                 {
                     message.AppendLine("🎉🏆 *WINNER SELECTED!* 🏆🎉\n");
                 
-                    message.AppendLine($"Congratulations {session.WinnerUser!.MarkdownDisplayName()}!\n");
+                    message.AppendLine($"Congratulations {session.Winner!.MarkdownDisplayName()}!\n");
                     message.Append("I sent you a message with the *payment summary* and a *lightning invoice*.");
                 }
                 else
@@ -85,7 +85,7 @@ internal static class WinnerMessage
                 message.AppendLine("🎉🏆 *PAYOUT COMPLETED!* 🏆🎉\n");
                 
                 if (session.WinnerPayouts.Count == 1)
-                    message.AppendLine($"Congratulations {session.WinnerUser!.MarkdownDisplayName()}!\n");
+                    message.AppendLine($"Congratulations {session.Winner!.MarkdownDisplayName()}!\n");
                 else
                     message.AppendLine("All winners have been paid!\n");
                 

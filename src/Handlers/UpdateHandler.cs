@@ -200,16 +200,16 @@ public partial class UpdateHandler : IUpdateHandler
                 break;
 
             case CallbackActions.MakePayment:
-                var session = workflowService.GetSessionByUser(userId);
+                var session = workflowService.TryGetSessionByUser(userId);
                 if (session is not null && session.Participants.TryGetValue(userId, out var participant))
                 {
                     var message = await botClient.SendMessage(chatId, 
                         "💰 To make payments, simply send me *euro denominated* amounts like:\n" +
                         "`3,99` or `5,50eur` or `5€`\n\n" +
-                        "Add a *note* to improve your overview:\n" +
-                        "`3,99 Beer`\n\n" +
-                        "*Combine payments* with `+` or `newline`:\n" +
-                        "`4,50 Pizza + 2,50 Water`\n\n" +
+                        "• Add a *note* to improve your overview:\n" +
+                        "  `3,99 Beer`\n" +
+                        "• *Combine payments* with `+` or `newline`:\n" +
+                        "  `4,50 Pizza + 2,50 Water`\n\n" +
                         "⚡ I'll create Lightning invoices for you to pay!\n" +
                         "ℹ️ You can also send amounts without using the `payment` button.", 
                         parseMode: ParseMode.Markdown,
@@ -234,21 +234,6 @@ public partial class UpdateHandler : IUpdateHandler
     
 
     #region Helper
-    private async Task<bool> DeleteMessageAsync(ITelegramBotClient botClient, long chatId, int? messageId, CancellationToken cancellationToken)
-    {
-        if (messageId is null)
-            return (false);
-            
-        try
-        {
-            await botClient.DeleteMessage(chatId, messageId.Value, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to delete message {MessageId}.", messageId);
-        }
-        return (true);
-    }
     private Task<bool> IsUserAdminAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken) => IsUserAdminAsync(botClient, chatId, user.Id, cancellationToken);
     private async Task<bool> IsUserAdminAsync(ITelegramBotClient botClient, long chatId, long userId, CancellationToken cancellationToken)
     {
@@ -303,7 +288,7 @@ internal static partial class Ext
             message = (title + "\n" + message);
         // Append help:
         if (exception.TryGetData<string>("help", out var help))
-            message += $" {help}";
+            message += $"\n{help}";
 
         if (exception.InnerException is not null)
             message += "\n\n" + string.Join("\n\n", exception.InnerException

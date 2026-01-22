@@ -15,22 +15,21 @@ internal static class SessionSummaryMessage
 {
     public static async Task SendAsync(ITelegramBotClient botClient, ILogger logger, SessionState session, CancellationToken cancellationToken)
     {
-        foreach (var winnerUser in session.WinnerUsers)
+        foreach (var payout in session.WinnerPayouts)
         {
-            var winnerInfo = session.WinnerPayouts[winnerUser.UserId];
             try
             {
                 await botClient.SendMessage(
-                    winnerUser.UserId,
-                    text: BuildSummary(session, winnerInfo),
+                    payout.Key.UserId,
+                    text: BuildSummary(session, payout.Value),
                     parseMode: ParseMode.Markdown,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
                     
-                logger.LogDebug("Summary message sent to winner {Winner} for session {Session}.", winnerUser, session);
+                logger.LogDebug("Summary message sent to winner {Winner} for session {Session}.", payout.Key, session);
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed to send summary message to winner {Winner} for session {Session}.", winnerUser, session);
+                logger.LogWarning(ex, "Failed to send summary message to winner {Winner} for session {Session}.", payout.Key, session);
             }
         }
     }

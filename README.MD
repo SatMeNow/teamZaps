@@ -124,14 +124,24 @@ The bot accepts various payment formats:
 
 **What happens if a session fails?**
 
-Team Zaps includes a **Lost and Found** system to protect your payments. If something goes wrong (session cancelled, network or lightning issues, unexpected errors), your sats are automatically tracked for recovery.
+Team Zaps includes a **Lost and Found** system to protect your payments. If a session should get interrupted, your sats are automatically tracked for recovery.
 
-### How Recovery Works
+Possible session interrupts may take place when:
 
-1. **Automatic Detection** - Bot automatically detects when your payments are lost
-2. **Notification** - You'll receive a direct message about recoverable sats
-3. **Simple Recovery** - Use `/recover` command to get your sats back
-4. **Instant Payout** - Submit a Lightning invoice and receive your recovery
+- Winner fails to submit payout invoice
+- Network errors interrupt payment processing
+- Lightning issues interrupt payment processing
+- Unexpected session failures occur
+
+**How your recovery is protected:**
+
+The bot stores your recoverable sats by mapping the amount to your Telegram user ID. These mappings updated instantly with every sent or received sat!
+
+This means:
+- 🔄 **Bot Downtime Safe** - Even if the bot goes offline, your recovery data is preserved and will be available once the bot becomes operational again
+- 🔒 **Privacy Protected** - Only your numeric Telegram ID is stored, no names, usernames, or personal information
+- 💾 **Persistent Storage** - Your recovery remains available until you claim it, regardless of downtimes, server restarts or maintenance
+- 🔔 **Reminder System** - You'll receive 3 reminders (one per day) about outstanding recoveries
 
 ### Using the Recovery Command
 
@@ -158,20 +168,6 @@ How to split invoices:
 
 Tips:
 - If you encounter routing failures, try smaller invoices (for example, 50–90% of the problematic route size) and send multiple invoices.
-
-### When Does Recovery Happen?
-
-Lost sats are automatically recorded when:
-- Winner fails to submit payout invoice
-- Network errors interrupt payment processing
-- Lightning issues interrupt payment processing
-- Unexpected session failures occur
-
-### Important Notes
-
-- ⏰ Recovery is available immediately after detection
-- 🔔 You'll receive weekly reminders about outstanding recoveries
-- 💬 Recovery only works in **private chat** with the bot
 
 ## 📊 Statistics & Insights
 
@@ -222,21 +218,6 @@ Group statistics help:
 - **Open Source** - Full source code available for audit
 - **Group Privacy** - Only final totals are shown in group chat
 
-## 🛠️ Self-Hosting
-
-Want to run your own Team Zaps bot? Check the [developer documentation](src/README.md) for setup instructions.
-
-### Requirements
-- .NET 9.0 SDK
-- Telegram Bot Token (from [@BotFather](https://t.me/botfather))
-- Lightning Backend:
-  - LNbits instance, OR
-  - AlbyHub with NWC connection
-- Bitcoin backend:
-  - ElectrumX servers (recommended: 3-5 hosts for automatic failover)
-- Exchange services:
-  - CoinGecko for exchange rates
-
 ## 🤝 Contributing
 
 Contributions are welcome
@@ -250,11 +231,11 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 📞 Support
 
-- 🐛 **Bug Reports**: Open an [issue](https://github.com/SatMeNow/teamZaps/issues) on GitHub
-- 💡 **Feature Requests**: Open an [issue](https://github.com/SatMeNow/teamZaps/issues) with the `enhancement` label
-- 📖 **Documentation**: Check the [developer documents](src/README.md)
+- 🐛 **Bug Reports**: Create an [issue](https://github.com/SatMeNow/teamZaps/issues) on GitHub
+- 💡 **Feature Requests**: Create an [issue](https://github.com/SatMeNow/teamZaps/issues) on GitHub
+- 📖 **Documentation**: Check the [developer documents](src/README.md) or the [user documents](README.md)
 
-## Docs
+## Related documents
 
 - [Telegram Bot API](https://core.telegram.org/bots/api)
   - [Markdown samples](https://core.telegram.org/bots/api#markdownv2-style)
