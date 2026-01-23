@@ -1,3 +1,4 @@
+using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using NBitcoin;
@@ -43,6 +44,9 @@ public class NostrWalletConnector : IDisposable
 	}
 
 
+    #region Properties.Management
+	public bool Operational => (nostrClient.State == WebSocketState.Open);
+	#endregion
     #region Properties
 	public Uri[] Relays { get; }
 	public string Pubkey => walletPubkey;
@@ -57,6 +61,7 @@ public class NostrWalletConnector : IDisposable
     {
         nostrClient.Dispose();
     }
+    public Task ConnectAsync(CancellationToken cancellationToken = default) => nostrClient.ConnectAndWaitUntilConnected(cancellationToken);
     #endregion
     #region Operation
 	public async Task<TResult?> SendNwcRequestAsync<TResult>(object request, CancellationToken cancellationToken)

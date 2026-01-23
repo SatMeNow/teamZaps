@@ -45,7 +45,7 @@ public class RecoveryService : BackgroundService
             return;
 
         // Start daily scan loop:
-        logger.LogInformation("Recovery service scheduled daily can at {DailyScanTime}.", DailyScanTime);
+        logger.LogInformation("Recovery service scheduled daily at {DailyScanTime}.", DailyScanTime);
 
         var nextScanTime = GetNextScanTime(DateTimeOffset.Now);
         while (!stoppingToken.IsCancellationRequested)

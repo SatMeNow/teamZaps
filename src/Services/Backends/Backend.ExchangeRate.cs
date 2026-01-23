@@ -9,7 +9,7 @@ namespace TeamZaps.Backends.ExchangeRate;
 /// <summary>
 /// Base class for exchange rate backend services.
 /// </summary>
-public abstract class ExchangeRateService : BackgroundService, IDisposable, IExchangeRateBackend
+public abstract class ExchangeRateService : BackgroundService, IExchangeRateBackend, ISanitizableBackend, IDisposable
 {
     #region Constants.Settings
     protected static readonly IReadOnlyCollection<PaymentCurrency> SupportedCurrencies = new PaymentCurrency[]
@@ -36,6 +36,9 @@ public abstract class ExchangeRateService : BackgroundService, IDisposable, IExc
     }
 
 
+    #region Properties.Management
+	bool ISanitizableBackend.Ready => true;
+	#endregion
     #region Properties
     public long SentRequests { get; private set; }
     public long FailedRequests { get; private set; }
@@ -71,12 +74,13 @@ public abstract class ExchangeRateService : BackgroundService, IDisposable, IExc
             }
         }
     }
-
     public override void Dispose()
     {
         sessionManager.OnFirstSessionCreated -= OnFirstSessionCreated;
         base.Dispose();
     }
+    
+    public Task SanityCheckAsync(CancellationToken cancellationToken) => RefreshRatesAsync(cancellationToken);
     #endregion
     #region Operation
     public void InvokeRefreshRates()

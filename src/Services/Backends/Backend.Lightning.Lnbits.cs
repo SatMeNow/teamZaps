@@ -7,7 +7,7 @@ using TeamZaps.Session;
 namespace TeamZaps.Backends.Lightning;
 
 [BackendDescription("LNBits")]
-public class LnbitsService : ILightningBackend
+public class LnbitsService : ILightningBackend, ISanitizableBackend
 {
     #region Constants
     private static readonly IReadOnlyDictionary<PaymentCurrency, string> SupportedCurrencies = new Dictionary<PaymentCurrency, string>
@@ -31,12 +31,19 @@ public class LnbitsService : ILightningBackend
     }
 
 
+    #region Properties.Management
+	bool ISanitizableBackend.Ready => true;
+	#endregion
     #region Properties
     public long SentRequests { get; private set; }
     public long FailedRequests { get; private set; }
     #endregion
 
 
+    #region Initialization
+    public Task SanityCheckAsync(CancellationToken cancellationToken) => GetWalletDetailsAsync(cancellationToken);
+    #endregion
+    #region Operation
     public async Task<LnbitsWalletDetails?> GetWalletDetailsAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -117,6 +124,7 @@ public class LnbitsService : ILightningBackend
             return (null);
         }
     }
+    #endregion
 
 
     #region Helper
@@ -155,7 +163,6 @@ public class LnbitsService : ILightningBackend
             FailedRequests++;
             throw;
         }
-
     }
     #endregion
 

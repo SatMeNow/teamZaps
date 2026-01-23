@@ -581,7 +581,7 @@ namespace TeamZaps.Backends.Indexer;
 /// Backend service for connecting to ElectrumX servers to get blockchain information.
 /// </summary>
 [BackendDescription("ElectrumX")]
-public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnectionBackend, IDisposable
+public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnectionBackend, ISanitizableBackend, IDisposable
 {
     #region Constants
     private static readonly TimeSpan StaleBlockDataThreshold = TimeSpan.FromMinutes(60);
@@ -613,6 +613,7 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
     IReadOnlyCollection<IBackendClient> IMultiConnectionBackend.Hosts => ConfiguredClients;
     public IReadOnlyCollection<ElectrumXClient> ConfiguredClients { get; }
     public ElectrumXClient ActiveClient { get; private set; }
+    public bool Ready => ActiveClient.Connected;
     #endregion
     #region Properties
 	public long SentRequests => ActiveClient?.SentRequests ?? 0;
@@ -726,25 +727,8 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
         logger.LogDebug("Reconnection monitoring started.");
     }
     
-    private void OnBlockHeaderNotification(JsonNode blockData)
-    {
-        try
-        {
-            var currentBlock = ParseBlockHeader(blockData);
-            if (LastBlock?.Height != currentBlock.Height)
-            {
-                var logLevel = (ReceivedBlocks % 10 == 0) ? LogLevel.Information : LogLevel.Debug;
-                logger.Log(logLevel, "Received 📦 block {Height} from subscription.", currentBlock.Height);
+    public Task SanityCheckAsync(CancellationToken cancellationToken) => ActiveClient.GetServerFeaturesAsync(cancellationToken);
 
-                LastBlock = currentBlock;
-                ReceivedBlocks++;
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error processing block header notification.");
-        }
-    }
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         reconnectionCts?.Cancel();
@@ -754,7 +738,7 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
         }
         reconnectionCts?.Dispose();
     }
-    public new void Dispose()
+    public override void Dispose()
     {
         lock (clientLock)
         {
@@ -818,6 +802,25 @@ public class ElectrumXService : BackgroundService, IIndexerBackend, IMultiConnec
         
         throw new InvalidOperationException("No blockchain data available yet.")
             .AddHelp("Please try again later.");
+    }
+    private void OnBlockHeaderNotification(JsonNode blockData)
+    {
+        try
+        {
+            var currentBlock = ParseBlockHeader(blockData);
+            if (LastBlock?.Height != currentBlock.Height)
+            {
+                var logLevel = (ReceivedBlocks % 10 == 0) ? LogLevel.Information : LogLevel.Debug;
+                logger.Log(logLevel, "Received 📦 block {Height} from subscription.", currentBlock.Height);
+
+                LastBlock = currentBlock;
+                ReceivedBlocks++;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error processing block header notification.");
+        }
     }
     #endregion
 

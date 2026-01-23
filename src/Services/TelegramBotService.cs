@@ -1,5 +1,9 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using TeamZaps.Backends;
+using TeamZaps.Configuration;
 using TeamZaps.Handlers;
+using TeamZaps.Utils;
 
 namespace TeamZaps.Services;
 
@@ -74,30 +78,48 @@ public static class CallbackActions
 
 public class TelegramBotService : BackgroundService
 {
-    public TelegramBotService(ILogger<TelegramBotService> logger, ITelegramBotClient botClient, UpdateHandler updateHandler)
+    public TelegramBotService(ILogger<TelegramBotService> logger, IOptions<BotBehaviorOptions> botBehavior, IOptions<TelegramSettings> telegramSettings, ITelegramBotClient botClient, UpdateHandler updateHandler, IEnumerable<IBackend> backends)
     {
         this.logger = logger;
         this.botClient = botClient;
         this.updateHandler = updateHandler;
+        this.sanitizableBackends = backends.OfType<ISanitizableBackend>().ToArray();
+        this.botBehaviour = botBehavior.Value;
+        this.telegramSettings = telegramSettings.Value;
     }
 
 
-    #region Properties
-    public bool Ready { get; private set; }
-    #endregion
-
-
+    #region Initialization
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
+            // Wait for backends to become operational:
+            if (!sanitizableBackends.IsEmpty())
+            {
+                logger.LogDebug("Waiting for backends to become operational...");
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, timeoutCts.Token);
+                try
+                {
+                    while (!sanitizableBackends.All(b => b.Ready))
+                        await Task.Delay(TimeSpan.FromSeconds(1), linkedCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+                {
+                    throw new TimeoutException("Timeout waiting for backends to become ready.");
+                }
+                
+                // Schedule sanity checks:
+                _ = Task.Run(() => RunScheduledSanityChecksAsync(stoppingToken));
+            }
+
             // Initialize telegram bot:
             var me = await botClient.GetMe(stoppingToken).ConfigureAwait(false);
 
             var receiverOptions = new ReceiverOptions { AllowedUpdates = Array.Empty<UpdateType>() };
             _ = Task.Run(() => botClient.ReceiveAsync(updateHandler, receiverOptions, stoppingToken));
 
-            this.Ready = true;
             logger.LogInformation("Bot {BotUsername} initialized successfully.", me);
         }
         catch (Exception ex)
@@ -108,16 +130,82 @@ public class TelegramBotService : BackgroundService
     }
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        this.Ready = false;
-
         logger.LogInformation("Stopping Team Zaps Telegram Bot...");
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
     }
 
 
+    private async Task RunScheduledSanityChecksAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                // Calculate next sanity check time:
+                var now = DateTime.Now;
+                var nextCheck = now.Date.Add(botBehaviour.SanityCheckTime);
+                if (nextCheck <= now)
+                    nextCheck = nextCheck.AddDays(1);
+                var delay = (nextCheck - now);
+
+                logger.LogInformation("Next backend sanity check scheduled for {NextCheck}.", nextCheck);
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+
+                // Run sanity checks:
+                logger.LogInformation("Running scheduled backend sanity checks.");
+                var failedChecks = new Dictionary<ISanitizableBackend, Exception>();
+                foreach (var backend in sanitizableBackends)
+                {
+                    try
+                    {
+                        await backend.SanityCheckAsync(cancellationToken).ConfigureAwait(false);
+                        logger.LogDebug("Sanity check passed for {Backend}.", backend.BackendType);
+                    }
+                    catch (Exception ex)
+                    {
+                        failedChecks.Add(backend, ex);
+                        logger.LogError(ex, "Sanity check failed for {Backend}.", backend.BackendType);
+                    }
+                }
+
+                // Notify root members about failed checks:
+                if (!failedChecks.IsEmpty())
+                {
+                    var message = $"❌ Backend *sanity check failed* for the following backends:\n" +
+                                  string.Join('\n', failedChecks.Select(b => $"- *{b.Key.BackendType}*\n  {b.Value.Message}"));
+                    foreach (var rootUser in telegramSettings.RootUsers)
+                    {
+                        try
+                        {
+                            await botClient.SendMessage(rootUser, message, parseMode: ParseMode.Markdown, cancellationToken: cancellationToken).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogWarning(ex, "Failed to notify root user {RootUser} about sanity check failures.", rootUser);
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in scheduled sanity check loop.");
+                await Task.Delay(TimeSpan.FromMinutes(1), cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+    #endregion
+
+
     private readonly ILogger<TelegramBotService> logger;
+    private readonly BotBehaviorOptions botBehaviour;
+    private readonly TelegramSettings telegramSettings;
     private readonly ITelegramBotClient botClient;
     private readonly UpdateHandler updateHandler;
+    private readonly ISanitizableBackend[] sanitizableBackends;
 }
 
 internal static partial class Ext
