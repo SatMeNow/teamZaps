@@ -10,7 +10,7 @@ namespace TeamZaps.Backends.Lightning;
 /// AlbyHub Lightning backend implementation.
 /// </summary>
 [BackendDescription("AlbyHub")]
-public class AlbyHubService : ILightningBackend, IDisposable
+public class AlbyHubService : BackgroundService, ILightningBackend, ISanitizableBackend, IDisposable
 {
     public AlbyHubService(ILoggerFactory loggerFactory, IOptions<AlbyHubSettings> settings, IExchangeRateBackend exchangeRateBackend)
     {
@@ -23,6 +23,9 @@ public class AlbyHubService : ILightningBackend, IDisposable
     }
 
 
+    #region Properties.Management
+	public bool Ready => nostr.Operational;
+	#endregion
     #region Properties
     public long SentRequests => nostr.SentRequests;
     public long FailedRequests => nostr.FailedRequests;
@@ -30,10 +33,19 @@ public class AlbyHubService : ILightningBackend, IDisposable
 
 
     #region Initialization
-    public void Dispose()
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await nostr.ConnectAsync(stoppingToken).ConfigureAwait(false);
+        logger.LogInformation("Connected to AlbyHub Nostr wallet.");
+    }
+    public override void Dispose()
     {
         nostr.Dispose();
+
+        base.Dispose();
     }
+    
+    public Task SanityCheckAsync(CancellationToken cancellationToken) => GetBalanceAsync(cancellationToken);
     #endregion
     #region Operation.Invoice
     public async Task<long?> GetBalanceAsync(CancellationToken cancellationToken = default)

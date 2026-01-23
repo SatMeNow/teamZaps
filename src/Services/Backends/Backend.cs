@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Reflection;
 using NLightning.Bolt11.Models;
 using TeamZaps.Configuration;
 using TeamZaps.Utils;
@@ -35,7 +36,7 @@ public interface IBackend
     /// <summary>
     /// Typename of the backend service.
     /// </summary>
-    string BackendType => Common.BackendTypes.GetKeyOf(t => (t.Type == this.GetType()));
+    string BackendType => this.GetType().GetCustomAttribute<BackendDescriptionAttribute>()!.BackendType;
 
     /// <summary>
     /// Total number of requests sent to the backend.
@@ -70,6 +71,22 @@ public interface IBackendClient
     string Hostname { get; }
     int Port { get; }
     #endregion
+}
+/// <summary>
+/// Backend that supports sanity checks.
+/// </summary>
+public interface ISanitizableBackend : IBackend
+{
+    #region Properties
+    bool Ready { get; }
+    #endregion
+
+
+    /// <summary>
+    /// Performs a sanity check on the backend service.
+    /// </summary>
+    /// <exception cref="Exception">If the sanity check fails.</exception>
+    Task SanityCheckAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>

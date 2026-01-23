@@ -53,12 +53,16 @@ public class BotBehaviorOptions
     /// Accepted fiat currency used for payments.
     /// </summary>
     public const PaymentCurrency AcceptedFiatCurrency = PaymentCurrency.Euro;
-    
     /// <summary>
     /// Current locale/culture used system-wide for formatting and localization (e.g., "en-US", "de-DE", "it-IT").
     /// Defaults to invariant culture if not specified.
     /// </summary>
     public string? Locale { get; set; }
+
+    /// <summary>
+    /// Time of day (HH:mm:ss) to run backend sanity checks. Defaults to 03:00:00 if not specified.
+    /// </summary>
+    public TimeSpan SanityCheckTime { get; set; } = TimeSpan.FromHours(3);
     
     /// <summary>
     /// Tip (in [%]) choices, if the user wants to give a tip.

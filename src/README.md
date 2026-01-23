@@ -255,6 +255,20 @@ This setting controls:
 
 **Supported Locales:** `en-US`, `de-DE`, `it-IT`, `fr-FR`, `es-ES`, `pt-BR`, `ja-JP`, `ko-KR`, `zh-CN`, `zh-TW`, etc.
 
+#### SanityCheckTime
+Controls the time of day when backend sanity checks are performed.
+- **Default**: `03:00:00` (3:00 AM)
+
+Sanity checks verify backend connectivity and operational status. The bot will attempt to reconnect to backends if checks fail.
+
+```json
+{
+  "BotBehavior": {
+    "SanityCheckTime": "03:00:00"
+  }
+}
+```
+
 ### Recovery Settings
 
 Configure the lost sats recovery system for interrupted sessions.
