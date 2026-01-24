@@ -208,17 +208,25 @@ internal static partial class Ext
     {
         return (source.AddData<T>(nameof(AnswerUser), chatId));
     }
-    public static bool IsUserAnswer(this Exception source, out long? chatId)
+    public static bool IsUserAnswer(this Exception source, out long? chatId) => source.TryGetData(nameof(AnswerUser), out chatId);
+    
+    /// <inheritdoc cref="ExpireMessage{T}(T, TimeSpan?)"/>
+    public static T ExpireMessage<T>(this T source, int expireAfter)
+        where T : Exception
     {
-        foreach (var ex in source.Enumerate())
-        {
-            if (ex.Data.Contains(nameof(AnswerUser)))
-            {
-                chatId = (long?)ex.Data[nameof(AnswerUser)];
-                return (true);
-            }
-        }
-        chatId = null;
-        return (false);
+        return (ExpireMessage<T>(source, TimeSpan.FromSeconds(expireAfter)));
     }
+    /// <summary>
+    /// Tags an exception to expire after a certain time.
+    /// </summary>
+    /// <remarks>
+    /// Default is to expire after a short time.
+    /// </remarks>
+    /// <param name="expireAfter"></param>
+    public static T ExpireMessage<T>(this T source, TimeSpan? expireAfter = null)
+        where T : Exception
+    {
+        return (source.AddData<T>(nameof(ExpireMessage), expireAfter));
+    }
+    public static bool IsMessageExpiring(this Exception source, out TimeSpan? expireAfter) => source.TryGetData(nameof(ExpireMessage), out expireAfter);
 }

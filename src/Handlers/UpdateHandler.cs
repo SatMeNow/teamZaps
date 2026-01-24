@@ -93,8 +93,22 @@ public partial class UpdateHandler : IUpdateHandler
             {
                 if (!isAnswer)
                     // Add help since this response will be caused by an unexpected error:
-                    ex.AddHelp($"Use {BotPmCommand.Help} to see available commands.");
-                await botClient.SendException(chatId!.Value, ex, cancellationToken).ConfigureAwait(false);
+                    ex.AddHelp($"Use `{BotPmCommand.Help}` to see available commands.");
+                var response = await botClient.SendException(chatId!.Value, ex, cancellationToken).ConfigureAwait(false);
+                
+                // Delete expired messages:
+                if (ex.IsMessageExpiring(out var expireAfter))
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        if (expireAfter is null)
+                            expireAfter = TimeSpan.FromSeconds(15);
+                        await Task.Delay(expireAfter!.Value, cancellationToken).ConfigureAwait(false);
+
+                        await botClient.DeleteMessageAsync(message, cancellationToken).ConfigureAwait(false);
+                        await botClient.DeleteMessageAsync(response, cancellationToken).ConfigureAwait(false);
+                    });
+                }
             }
         }
     }
@@ -282,15 +296,15 @@ public partial class UpdateHandler : IUpdateHandler
 
 internal static partial class Ext
 {
-    public static Task SendException(this ITelegramBotClient source, User user, Exception exception, CancellationToken cancellationToken) => SendException(source, user.Id, exception, cancellationToken);
-    public static Task SendException(this ITelegramBotClient source, long userId, Exception exception, CancellationToken cancellationToken)
+    public static Task<Message> SendException(this ITelegramBotClient source, User user, Exception exception, CancellationToken cancellationToken) => SendException(source, user.Id, exception, cancellationToken);
+    public static Task<Message> SendException(this ITelegramBotClient source, long userId, Exception exception, CancellationToken cancellationToken)
     {
         var message = exception.Message;
         // Prepend title:
-        if (exception.TryGetData<string>("title", out var title))
+        if (exception.TryGetValue<string>("title", out var title))
             message = (title + "\n" + message);
         // Append help:
-        if (exception.TryGetData<string>("help", out var help))
+        if (exception.TryGetValue<string>("help", out var help))
             message += $"\n{help}";
 
         if (exception.InnerException is not null)
@@ -318,10 +332,10 @@ internal static partial class Ext
         }
         return (SendError(source, userId, message, cancellationToken));
     }
-    public static Task SendInfo(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "ℹ️", message, cancellationToken);
-    public static Task SendWarning(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "⚠️", message, cancellationToken);
-    public static Task SendError(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "❌", message, cancellationToken);
-    private static Task Send(this ITelegramBotClient source, long userId, string? icon, string message, CancellationToken cancellationToken)
+    public static Task<Message> SendInfo(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "ℹ️", message, cancellationToken);
+    public static Task<Message> SendWarning(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "⚠️", message, cancellationToken);
+    public static Task<Message> SendError(this ITelegramBotClient source, long userId, string message, CancellationToken cancellationToken) => Send(source, userId, "❌", message, cancellationToken);
+    private static Task<Message> Send(this ITelegramBotClient source, long userId, string? icon, string message, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrEmpty(icon))
             message = $"{icon} {message}";
