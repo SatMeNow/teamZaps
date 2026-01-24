@@ -136,13 +136,13 @@ public class RecoveryService : BackgroundService
 
         return (lostSatsFile.DeleteAsync(userId));
     }
-    public void ClearLostSats(SessionState session)
+    public void ClearLostSats(SessionState session) => ClearLostSats(session.Participants.Values);
+    public void ClearLostSats(IEnumerable<ParticipantState> participants)
     {
         if (recoverySettings.Enable == false)
             return;
 
-        lostSatsFile.Delete(session.Participants.Values
-            .Select(p => p.UserId));
+        lostSatsFile.Delete(participants.Select(p => p.UserId));
     }
 
     public Task<LostSatsRecord?> TryGetLostSatsAsync(long userId)

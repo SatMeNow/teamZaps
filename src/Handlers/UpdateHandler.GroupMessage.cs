@@ -125,6 +125,12 @@ public partial class UpdateHandler
 
             var winners = string.Join(", ", session.WinnerPayouts.Select(w => $"{w.Key} ({w.Value.FiatAmount.Format()})"));
             logger.LogInformation("Winner(s) selected for session {Session}: {Winners}.", session, winners);
+
+            // Update recovery files(remove losers, add winner payouts):
+            var losers = session.Participants.Values.Except(session.Winners);
+            recoveryService.ClearLostSats(losers);
+            foreach (var winner in session.WinnerPayouts)
+                await recoveryService.WriteLostSatsAsync(winner.Key, winner.Value.SatsAmount, $"Winner payout for session *{session.ChatTitle}*").ConfigureAwait(false);
             
             // Update session status messages
             await SessionSummaryMessage.SendAsync(botClient, logger, session, cancellationToken).ConfigureAwait(false);
