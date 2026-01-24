@@ -377,7 +377,26 @@ namespace TeamZaps.Utils
             }
             yield break;
         }
-        public static bool TryGetData<T>(this Exception source, string key, [NotNullWhen(true)] out T? value)
+        /// <summary>
+        /// Tries to get data from the exception data dictionary.
+        /// </summary>
+        /// <returns>Returns <c>true</c> if the data was found; otherwise, <c>false</c>.</returns>
+        public static bool TryGetData<T>(this Exception source, string key, out T? value)
+        {
+            value = default;
+            if (source.Data.Contains(key))
+            {
+                value = (T)source.Data[key]!;
+                return (true);
+            }
+            else
+                return (false);
+        }
+        /// <summary>
+        /// Tries to get the dataset's value from the exception data dictionary.
+        /// </summary>
+        /// <returns>Returns <c>true</c> if the data and a value was found; otherwise, <c>false</c>.</returns>
+        public static bool TryGetValue<T>(this Exception source, string key, [NotNullWhen(true)] out T? value)
         {
             value = default;
             if (source.Data.Contains(key))

@@ -271,6 +271,7 @@ internal static partial class Ext
         return (null);
     }
     
+    public static Task<bool> DeleteMessageAsync(this ITelegramBotClient source, Message message, CancellationToken cancellationToken) => DeleteMessageAsync(source, message.Chat.Id, message.MessageId, cancellationToken);
     public static async Task<bool> DeleteMessageAsync(this ITelegramBotClient source, long chatId, int? messageId, CancellationToken cancellationToken)
     {
         if (messageId is not null)
