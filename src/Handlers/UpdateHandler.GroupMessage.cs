@@ -356,7 +356,8 @@ public partial class UpdateHandler
         var remainingAmount = ((ITipableAmount)session).TotalFiatAmount;
 
         // Shuffle participants for fair random selection
-        var random = new Random();
+        var seed = HashCode.Combine(Environment.TickCount, session.ChatTitle, session.StartedAtBlock?.Height, session.Participants.Count, remainingAmount);
+        var random = new Random(seed);
         var lotteryParticipants = session.LotteryParticipants
             .OrderBy(_ => random.Next())
             .ToArray();
