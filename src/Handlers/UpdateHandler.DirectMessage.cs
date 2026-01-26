@@ -193,7 +193,7 @@ public partial class UpdateHandler
             }
             // Unknown input:
             else
-                throw new NotImplementedException($"Sorry, push the `payment` button for instructions or use `{BotPmCommand.Help}` for commands.")
+                throw new NotImplementedException($"Sorry, push the `payment` button for instructions or use {BotPmCommand.Help} for commands.")
                     .AnswerUser();
         }
     }
@@ -328,75 +328,65 @@ public partial class UpdateHandler
 
     private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, User user, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
     {
-        try
+        var participant = session.Participants[user.Id];
+        // Process each token and create invoices
+        foreach (var tokenGrp in tokens.GroupBy(t => t.Currency))
         {
-            var participant = session.Participants[user.Id];
-            // Process each token and create invoices
-            foreach (var tokenGrp in tokens.GroupBy(t => t.Currency))
+            var grpCurrency = tokenGrp.Key;
+            var memo = $"{session.ChatTitle}'{user} zapped";
+
+            // Ensure invoice to be payed in Euro only
+            if (grpCurrency != BotBehaviorOptions.AcceptedFiatCurrency)
+                throw new NotSupportedException($"Only {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()} payments are supported.")
+                    .AnswerUser();
+
+            var grpAmount = (double)tokenGrp.Sum(tGrp => tGrp.Amount);
+            var tipAmount = 0.0;
+            if (participant.Options.Tip > 0)
+                tipAmount = ((grpAmount * participant.Options.Tip!.Value) / 100.0);
+            var invoiceAmount = (grpAmount + tipAmount);
+
+            // Check if this payment would exceed the sessions's remaining budget
+            var totalFiatAmount = (session.FiatAmount + session.PendingPayments.Values
+                .Cast<ITipableAmount>()
+                .Sum(p => p.TotalFiatAmount));
+            var remainingFiatAmount = (session.Budget - totalFiatAmount);
+            if (invoiceAmount > remainingFiatAmount)
+                throw new InvalidOperationException($"💸 Payment rejected!\n\n" +
+                    $"Your payment of {invoiceAmount.Format()} would exceed the session's total budget.\n\n" +
+                    $"Available budget: {remainingFiatAmount.Format()}")
+                    .AddLogLevel(LogLevel.Warning)
+                    .AnswerUser();
+
+            try
             {
-                var grpCurrency = tokenGrp.Key;
-                var memo = $"{session.ChatTitle}'{user} zapped";
+                var invoice = await lightningBackend.CreateInvoiceAsync(invoiceAmount, grpCurrency, memo, cancellationToken).ConfigureAwait(false);
 
-                // Ensure invoice to be payed in Euro only
-                if (grpCurrency != BotBehaviorOptions.AcceptedFiatCurrency)
-                    throw new NotSupportedException($"Only {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()} payments are supported.")
-                        .AnswerUser();
-
-                var grpAmount = (double)tokenGrp.Sum(tGrp => tGrp.Amount);
-                var tipAmount = 0.0;
-                if (participant.Options.Tip > 0)
-                    tipAmount = ((grpAmount * participant.Options.Tip!.Value) / 100.0);
-                var invoiceAmount = (grpAmount + tipAmount);
-
-                // Check if this payment would exceed the sessions's remaining budget
-                var totalFiatAmount = (session.FiatAmount + session.PendingPayments.Values
-                    .Cast<ITipableAmount>()
-                    .Sum(p => p.TotalFiatAmount));
-                var remainingFiatAmount = (session.Budget - totalFiatAmount);
-                if (invoiceAmount > remainingFiatAmount)
-                    throw new InvalidOperationException($"💸 Payment rejected!\n\n" +
-                        $"Your payment of {invoiceAmount.Format()} would exceed the session's total budget.\n\n" +
-                        $"Available budget: {remainingFiatAmount.Format()}")
-                        .AddLogLevel(LogLevel.Warning)
-                        .AnswerUser();
-
-                try
+                // Store as pending payment
+                var pending = new PendingPayment
                 {
-                    var invoice = await lightningBackend.CreateInvoiceAsync(invoiceAmount, grpCurrency, memo, cancellationToken).ConfigureAwait(false);
-                    if (invoice is null)
-                        throw new InvalidOperationException("Failed with internal error when creating invoice!");
+                    User = user,
+                    PaymentHash = invoice!.PaymentHash,
+                    PaymentRequest = invoice.PaymentRequest,
+                    Tokens = tokenGrp.ToArray(),
+                    SatsAmount = invoice.SatsAmount,
+                    TipAmount = tipAmount,
+                    FiatAmount = grpAmount,
+                    Currency = grpCurrency,
+                    CreatedAt = DateTimeOffset.Now
+                };
 
-                    // Store as pending payment
-                    var pending = new PendingPayment
-                    {
-                        User = user,
-                        PaymentHash = invoice!.PaymentHash,
-                        PaymentRequest = invoice.PaymentRequest,
-                        Tokens = tokenGrp.ToArray(),
-                        SatsAmount = invoice.SatsAmount,
-                        TipAmount = tipAmount,
-                        FiatAmount = grpAmount,
-                        Currency = grpCurrency,
-                        CreatedAt = DateTimeOffset.Now
-                    };
+                session.PendingPayments.TryAdd(invoice.PaymentHash, pending);
 
-                    session.PendingPayments.TryAdd(invoice.PaymentHash, pending);
+                var message = await PaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
+                pending.MessageId = message.MessageId;
 
-                    var message = await PaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
-                    pending.MessageId = message.MessageId;
-
-                    logger.LogInformation("Created invoice for user {User} in session {Session}: {InvoiceAmount}.", user, session, invoiceAmount.Format(grpCurrency));
-                }
-                catch (Exception ex)
-                {
-                    throw new Exception($"Failed to create invoice for {invoiceAmount.Format(grpCurrency)}!", ex);
-                }
+                logger.LogInformation("Created invoice for user {User} in session {Session}: {InvoiceAmount}.", user, session, invoiceAmount.Format(grpCurrency));
             }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error creating invoice for private payment.");
-            await botClient.SendException(user, ex, cancellationToken).ConfigureAwait(false);
+            catch (Exception ex)
+            {
+                throw new Exception($"Failed to create invoice for {invoiceAmount.Format(grpCurrency)}!", ex);
+            }
         }
     }
     private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, User user, string bolt11, CancellationToken cancellationToken)

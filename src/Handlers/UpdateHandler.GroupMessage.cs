@@ -313,7 +313,7 @@ public partial class UpdateHandler
     private async Task HandleSetOptionsAsync(ITelegramBotClient botClient, CallbackQuery query, CancellationToken cancellationToken)
     {
         if (!configMessageMap.TryGetValue(query.Message!.MessageId, out var groupChatId))
-            throw new InvalidOperationException($"Sorry, can't associate config message with group. Please run `{BotGroupCommand.Config}` again.")
+            throw new InvalidOperationException($"Sorry, can't associate config message with group. Please run {BotGroupCommand.Config} again.")
                 .AnswerUser()
                 .ExpireMessage();
             

@@ -93,7 +93,7 @@ public partial class UpdateHandler : IUpdateHandler
             {
                 if (!isAnswer)
                     // Add help since this response will be caused by an unexpected error:
-                    ex.AddHelp($"Use `{BotPmCommand.Help}` to see available commands.");
+                    ex.AddHelp($"Use {BotPmCommand.Help} to see available commands.");
                 var response = await botClient.SendException(chatId!.Value, ex, cancellationToken).ConfigureAwait(false);
                 
                 // Delete expired messages:
