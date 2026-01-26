@@ -162,15 +162,15 @@ public interface ILightningBackend : IBackend
     /// <summary>
     /// Create a Lightning invoice.
     /// </summary>
-    Task<ILightningInvoice?> CreateInvoiceAsync(double amount, PaymentCurrency currency, string? memo = null, CancellationToken cancellationToken = default);
+    Task<ILightningInvoice> CreateInvoiceAsync(double amount, PaymentCurrency currency, string? memo = null, CancellationToken cancellationToken = default);
     /// <summary>
     /// Pay a BOLT11 Lightning invoice.
     /// </summary>
-    Task<IPaymentResponse?> PayInvoiceAsync(string bolt11, CancellationToken cancellationToken = default);
+    Task<IPaymentResponse> PayInvoiceAsync(string bolt11, CancellationToken cancellationToken = default);
     /// <summary>
     /// Check the payment status of an invoice by payment hash.
     /// </summary>
-    Task<IPaymentStatus?> CheckPaymentStatusAsync(string paymentHash, CancellationToken cancellationToken = default);
+    Task<IPaymentStatus> CheckPaymentStatusAsync(string paymentHash, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Decodes a lightning invoice to get the amount in sats.

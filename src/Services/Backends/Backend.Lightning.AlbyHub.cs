@@ -48,7 +48,7 @@ public class AlbyHubService : BackgroundService, ILightningBackend, ISanitizable
     public Task SanityCheckAsync(CancellationToken cancellationToken) => GetBalanceAsync(cancellationToken);
     #endregion
     #region Operation.Invoice
-    public async Task<long?> GetBalanceAsync(CancellationToken cancellationToken = default)
+    public async Task<long> GetBalanceAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -59,16 +59,14 @@ public class AlbyHubService : BackgroundService, ILightningBackend, ISanitizable
             };
 
             var response = await nostr.SendNwcRequestAsync<GetBalanceResult>(request, cancellationToken).ConfigureAwait(false);
-            if (response is not null)
-                return (response.Balance / 1000);
+            return (response.Balance / 1000);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting wallet balance.");
+            throw new RequestException("Error getting wallet balance.", ex);
         }
-        return (null);
     }
-    public async Task<ILightningInvoice?> CreateInvoiceAsync(double amount, PaymentCurrency currency, string? memo = null, CancellationToken cancellationToken = default)
+    public async Task<ILightningInvoice> CreateInvoiceAsync(double amount, PaymentCurrency currency, string? memo = null, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -89,20 +87,18 @@ public class AlbyHubService : BackgroundService, ILightningBackend, ISanitizable
             };
 
             var response = await nostr.SendNwcRequestAsync<MakeInvoiceResult>(request, cancellationToken).ConfigureAwait(false);
-            if (response is not null)
-                return (new AlbyHubInvoice {
-                    PaymentRequest = response.Invoice,
-                    PaymentHash = response.PaymentHash,
-                    SatsAmount = amountSat
-                });
+            return (new AlbyHubInvoice {
+                PaymentRequest = response.Invoice,
+                PaymentHash = response.PaymentHash,
+                SatsAmount = amountSat
+            });
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error creating invoice.");
+            throw new RequestException("Error creating invoice.", ex);
         }
-        return (null);
     }
-    public async Task<IPaymentResponse?> PayInvoiceAsync(string bolt11, CancellationToken cancellationToken = default)
+    public async Task<IPaymentResponse> PayInvoiceAsync(string bolt11, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -116,18 +112,16 @@ public class AlbyHubService : BackgroundService, ILightningBackend, ISanitizable
             };
 
             var response = await nostr.SendNwcRequestAsync<PayInvoiceResult>(request, cancellationToken).ConfigureAwait(false);
-            if (response is not null)
-                return (new AlbyHubPaymentResponse {
-                    PaymentHash = response.PaymentHash
-                });
+            return (new AlbyHubPaymentResponse {
+                PaymentHash = response.PaymentHash
+            });
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error paying invoice.");
+            throw new RequestException("Error paying invoice.", ex);
         }
-        return (null);
     }
-    public async Task<IPaymentStatus?> CheckPaymentStatusAsync(string paymentHash, CancellationToken cancellationToken = default)
+    public async Task<IPaymentStatus> CheckPaymentStatusAsync(string paymentHash, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -140,23 +134,19 @@ public class AlbyHubService : BackgroundService, ILightningBackend, ISanitizable
                 }
             };
 
-                var response = await nostr.SendNwcRequestAsync<LookupInvoiceResult>(request, cancellationToken).ConfigureAwait(false);
-            if (response is not null)
-            {
-                var isSettled = ((string.Equals(response.State, "settled", StringComparison.OrdinalIgnoreCase)) || (response.Settled == true));
-                return (new AlbyHubPaymentStatus {
-                    Paid = isSettled,
-                    SatsAmount = (response.Amount / 1000),
-                    FiatAmount = 0,
-                    FiatRate = 0
-                });
-            }
+            var response = await nostr.SendNwcRequestAsync<LookupInvoiceResult>(request, cancellationToken).ConfigureAwait(false);
+            var isSettled = ((string.Equals(response.State, "settled", StringComparison.OrdinalIgnoreCase)) || (response.Settled == true));
+            return (new AlbyHubPaymentStatus {
+                Paid = isSettled,
+                SatsAmount = (response.Amount / 1000),
+                FiatAmount = 0,
+                FiatRate = 0
+            });
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error checking payment status.");
+            throw new RequestException("Error checking payment status.", ex);
         }
-        return (null);
     }
     #endregion
 

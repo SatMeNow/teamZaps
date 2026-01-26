@@ -44,36 +44,35 @@ public class LnbitsService : ILightningBackend, ISanitizableBackend
     public Task SanityCheckAsync(CancellationToken cancellationToken) => GetWalletDetailsAsync(cancellationToken);
     #endregion
     #region Operation
-    public async Task<LnbitsWalletDetails?> GetWalletDetailsAsync(CancellationToken cancellationToken = default)
+    public async Task<LnbitsWalletDetails> GetWalletDetailsAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             var res = await RequestAsync<LnbitsWalletDetails>(HttpMethod.Get, "/api/v1/wallet", cancellationToken).ConfigureAwait(false);
             {
-                res!.Balance = (res.Balance / 1000); // Convert msat to sat
+                res.Balance = (res.Balance / 1000); // Convert msat to sat
             }
             return (res);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting wallet details.");
-            return (null);
+            throw new RequestException("Error getting wallet details.", ex);
         }
     }
-    public Task<ILightningInvoice?> CreateInvoiceAsync(double amount, PaymentCurrency currency, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
+    public Task<ILightningInvoice> CreateInvoiceAsync(double amount, PaymentCurrency currency, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
     {
         amount = amount,
         unit = GetUnitName(currency),
         memo = (memo ?? ""),
         @out = false
     }, cancellationToken);
-    public Task<ILightningInvoice?> CreateInvoiceAsync(long amount, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
+    public Task<ILightningInvoice> CreateInvoiceAsync(long amount, string? memo = null, CancellationToken cancellationToken = default) => CreateInvoiceAsync(new
     {
         amount = amount,
         memo = (memo ?? ""),
         @out = false
     }, cancellationToken);
-    private async Task<ILightningInvoice?> CreateInvoiceAsync(object invoiceRequest, CancellationToken cancellationToken)
+    private async Task<ILightningInvoice> CreateInvoiceAsync(object invoiceRequest, CancellationToken cancellationToken)
     {
         try
         {
@@ -81,12 +80,11 @@ public class LnbitsService : ILightningBackend, ISanitizableBackend
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error creating invoice.");
-            return (null);
+            throw new RequestException("Error creating invoice.", ex);
         }
     }
 
-    public async Task<IPaymentResponse?> PayInvoiceAsync(string bolt11, CancellationToken cancellationToken = default)
+    public async Task<IPaymentResponse> PayInvoiceAsync(string bolt11, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -97,31 +95,29 @@ public class LnbitsService : ILightningBackend, ISanitizableBackend
             };
             var res = await RequestAsync<LnbitsPaymentResponse>(HttpMethod.Post, "/api/v1/payments", payRequest, cancellationToken).ConfigureAwait(false);
             {
-                res!.Amount = (res.Amount / 1000); // Convert msat to sat
-                res!.Fee = (res.Fee / 1000); // Convert msat to sat
+                res.Amount = (res.Amount / 1000); // Convert msat to sat
+                res.Fee = (res.Fee / 1000); // Convert msat to sat
             }
             return (res);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error paying invoice.");
-            return (null);
+            throw new RequestException("Error paying invoice.", ex);
         }
     }
-    public async Task<IPaymentStatus?> CheckPaymentStatusAsync(string paymentHash, CancellationToken cancellationToken = default)
+    public async Task<IPaymentStatus> CheckPaymentStatusAsync(string paymentHash, CancellationToken cancellationToken = default)
     {
         try
         {
             var res = await RequestAsync<LnbitsPaymentStatus>(HttpMethod.Get, $"/api/v1/payments/{paymentHash}", cancellationToken).ConfigureAwait(false);
             {
-                res!.Details!.Amount = (res.Details!.Amount / 1000); // Convert msat to sat
+                res.Details!.Amount = (res.Details!.Amount / 1000); // Convert msat to sat
             }
             return (res);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error checking payment status.");
-            return (null);
+            throw new RequestException("Error checking payment status.", ex);
         }
     }
     #endregion
@@ -135,8 +131,8 @@ public class LnbitsService : ILightningBackend, ISanitizableBackend
         else
             throw new NotSupportedException($"Currency '{currency}' is not supported by {(this as ILightningBackend).BackendType} backend!");
     }
-    private Task<T?> RequestAsync<T>(HttpMethod method, string? requestUri, CancellationToken cancellationToken) => RequestAsync<T>(method, requestUri, null, cancellationToken);
-    private async Task<T?> RequestAsync<T>(HttpMethod method, string? requestUri, object? request, CancellationToken cancellationToken)
+    private Task<T> RequestAsync<T>(HttpMethod method, string? requestUri, CancellationToken cancellationToken) => RequestAsync<T>(method, requestUri, null, cancellationToken);
+    private async Task<T> RequestAsync<T>(HttpMethod method, string? requestUri, object? request, CancellationToken cancellationToken)
     {
         try
         {

@@ -64,7 +64,7 @@ public class NostrWalletConnector : IDisposable
     public Task ConnectAsync(CancellationToken cancellationToken = default) => nostrClient.ConnectAndWaitUntilConnected(cancellationToken);
     #endregion
     #region Operation
-	public async Task<TResult?> SendNwcRequestAsync<TResult>(object request, CancellationToken cancellationToken)
+	public async Task<TResult> SendNwcRequestAsync<TResult>(object request, CancellationToken cancellationToken)
         where TResult : class
 	{
 		try
@@ -127,15 +127,17 @@ public class NostrWalletConnector : IDisposable
 				var responseEvent = await responseReceived.Task.WaitAsync(linkedCts.Token).ConfigureAwait(false);
 				var decryptedContent = DecryptNip04(responseEvent!.Content!, walletPubkeyBytes);
 				var response = JsonSerializer.Deserialize<NwcResponse<TResult>>(decryptedContent);
-				logger.LogTrace("Received NWC response for type {ResponseType}.", typeof(TResult).Name);
-
-				if ((response is not null) && (response.Error is not null))
+				if (response is null)
+					throw new RequestException($"Failed to deserialize response of NWC request!");
+				else if (response.Error is not null)
+					throw new RequestException($"NWC request failed with code {response.Error.Code}: {response.Error.Message}");
+				else if (response.Result is null)
+					throw new RequestException($"NWC request failed with empty result!");
+				else
 				{
-					logger.LogError("Received error: {Code} - {Message}", response.Error.Code, response.Error.Message);
-					return (null);
+					logger.LogTrace("Received NWC response for type {ResponseType}.", typeof(TResult).Name);
+					return (response.Result);
 				}
-
-				return (response?.Result);
 			}
 			finally
 			{

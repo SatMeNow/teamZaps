@@ -548,7 +548,7 @@ namespace TeamZaps.Backends.Indexer;
         if (features is null)
             throw new Exception("Failed to deserialize server features.");
         else
-            return features;
+            return (features);
     }
     #endregion
 
