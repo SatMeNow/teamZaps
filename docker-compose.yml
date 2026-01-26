@@ -56,6 +56,9 @@ services:
       - Recovery__DailyScanTime=${RECOVERY_DAILY_SCAN_TIME}
       
     volumes:
+      # Use hosts timezone configuration
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
       # Mount appsettings.json if you want to configure it from the host
       - ./appsettings.json:/app/appsettings.json
       # Mount data directory if the app writes logs or data
