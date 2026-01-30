@@ -163,6 +163,9 @@ public interface ILightningBackend : IBackend
     /// Create a Lightning invoice.
     /// </summary>
     Task<ILightningInvoice> CreateInvoiceAsync(double amount, PaymentCurrency currency, string? memo = null, CancellationToken cancellationToken = default);
+    /// <inheritdoc cref="CreateInvoiceAsync(double, PaymentCurrency, string?, CancellationToken)"/> 
+    Task<ILightningInvoice> CreateInvoiceAsync(long amount, string? memo = null, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Pay a BOLT11 Lightning invoice.
     /// </summary>

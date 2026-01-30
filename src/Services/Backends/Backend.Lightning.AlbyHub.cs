@@ -66,22 +66,27 @@ public class AlbyHubService : BackgroundService, ILightningBackend, ISanitizable
             throw new RequestException("Error getting wallet balance.", ex);
         }
     }
-    public async Task<ILightningInvoice> CreateInvoiceAsync(double amount, PaymentCurrency currency, string? memo = null, CancellationToken cancellationToken = default)
+    public Task<ILightningInvoice> CreateInvoiceAsync(double amount, PaymentCurrency currency, string? memo = null, CancellationToken cancellationToken = default)
+    {
+        // Convert to sats:
+        long amountSat;
+        if (currency == PaymentCurrency.Sats)
+            amountSat = (long)(amount);
+        else
+            amountSat = exchangeRateBackend.ToSats(amount);
+            
+        return (CreateInvoiceAsync(amountSat, memo, cancellationToken));
+    }
+    public async Task<ILightningInvoice> CreateInvoiceAsync(long amount, string? memo = null, CancellationToken cancellationToken = default)
     {
         try
         {
-            long amountSat;
-            if (currency == PaymentCurrency.Sats)
-                amountSat = (long)(amount);
-            else
-                amountSat = exchangeRateBackend.ToSats(amount);
-
             var request = new NwcRequest
             {
                 Method = "make_invoice",
                 Params = new MakeInvoiceParams
                 {
-                    Amount = (amountSat * 1000),
+                    Amount = (amount * 1000),
                     Description = memo ?? ""
                 }
             };
@@ -90,7 +95,7 @@ public class AlbyHubService : BackgroundService, ILightningBackend, ISanitizable
             return (new AlbyHubInvoice {
                 PaymentRequest = response.Invoice,
                 PaymentHash = response.PaymentHash,
-                SatsAmount = amountSat
+                SatsAmount = amount
             });
         }
         catch (Exception ex)
