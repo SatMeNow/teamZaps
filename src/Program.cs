@@ -121,48 +121,13 @@ public static class Program
                     .ToArray();
 
                 // Inject backends:
-                services.AddBackend<IIndexerBackend>(typeof(ElectrumXService));
-                Log.Information($"Using '{typeof(ElectrumXService).Name}' as indexer backend");
-
-                // Inject lightning backend:
-                var lightningBackend = TryGetBackendType<ILightningBackend>(configuredBackends);
-                if (lightningBackend is null)
-                    throw new InvalidOperationException("No lightning backend configured!");
-                services.AddBackend<ILightningBackend>(lightningBackend);
-                Log.Information($"Using '{lightningBackend.Name}' as lightning backend");
-
-                // Inject exchange rate backend if required:
-                if (RequiresExchangeRateBackend(lightningBackend))
-                {
-                    Type? exchangeRateBackend;
-                    if (lightningBackend.IsAssignableTo<IExchangeRateBackend>())
-                        exchangeRateBackend = lightningBackend; // Use lightning backend also as exchange rate backend.
-                    else
-                        exchangeRateBackend = TryGetBackendType<IExchangeRateBackend>(configuredBackends);
-                    if (exchangeRateBackend is null)
-                        throw new InvalidOperationException("No exchange rate backend configured!");
-                    services.AddBackend<IExchangeRateBackend>(exchangeRateBackend);
-                    Log.Information($"Using '{exchangeRateBackend.Name}' as exchange rate backend");
-                }
-                else
-                    Log.Information($"No exchange rate backend required.");
+                services.AddBackend<IIndexerBackend>(configuredBackends);
+                services.AddBackend<IExchangeRateBackend>(configuredBackends);
+                services.AddBackend<ILightningBackend>(configuredBackends);
             });
 
 
     #region Helper
-    private static Type? TryGetBackendType<T>(string[] backends)
-        where T : IBackend
-    {
-        foreach (var backend in backends)
-        {
-            if (Common.BackendTypes.TryGetValue(backend.ToLowerInvariant(), out var backendType))
-            {
-                if (backendType.ProvidedInterfaces.Any(i => (i == typeof(T))))
-                    return (backendType.Type);
-            }
-        }
-        return (null);
-    }
     private static bool RequiresExchangeRateBackend(Type type) => type.GetConstructors()
         .SelectMany(c => c.GetParameters())
         .Any(p => (p.ParameterType == typeof(IExchangeRateBackend)));
@@ -179,8 +144,20 @@ internal static partial class Ext
 
         return (source);
     }
+    public static IServiceCollection AddBackend<T>(this IServiceCollection source, string[] backends)
+        where T : IBackend
+    {
+        var backendType = typeof(T).Name;
+        var backend = TryGetBackendType<T>(backends);
+        if (backend is null)
+            throw new InvalidOperationException($"No backend of type '{backendType}' configured!");
+        source.AddBackend<T>(backend);
+        Log.Information($"Using '{backend.Name}' as backend of type '{backendType}'.");
+
+        return (source);
+    }
     public static IServiceCollection AddBackend<T>(this IServiceCollection source, Type backendType)
-        where T : class, IBackend
+        where T : IBackend
     {
         // Register the concrete backend type as singleton:
         source.AddSingleton(backendType);
@@ -199,6 +176,23 @@ internal static partial class Ext
 
         return (source);
     }
+
+    
+    #region Helper
+    private static Type? TryGetBackendType<T>(string[] backends)
+        where T : IBackend
+    {
+        foreach (var backend in backends)
+        {
+            if (Common.BackendTypes.TryGetValue(backend.ToLowerInvariant(), out var backendType))
+            {
+                if (backendType.ProvidedInterfaces.Any(i => (i == typeof(T))))
+                    return (backendType.Type);
+            }
+        }
+        return (null);
+    }
+    #endregion
 }
 
 /// <summary>

@@ -38,7 +38,7 @@ public partial class UpdateHandler : IUpdateHandler
         // Extract specific backend instances:
         this.indexerBackend = backends.GetMandatoryBackend<IIndexerBackend>();
         this.lightningBackend = backends.GetMandatoryBackend<ILightningBackend>();
-        this.exchangeRateBackend = backends.GetOptionalBackend<IExchangeRateBackend>();
+        this.exchangeRateBackend = backends.GetMandatoryBackend<IExchangeRateBackend>();
     }
 
 
@@ -291,7 +291,7 @@ public partial class UpdateHandler : IUpdateHandler
 
     private readonly IIndexerBackend indexerBackend;
     private readonly ILightningBackend lightningBackend;
-    private readonly IExchangeRateBackend? exchangeRateBackend;
+    private readonly IExchangeRateBackend exchangeRateBackend;
 }
 
 internal static partial class Ext

@@ -594,21 +594,16 @@ public partial class UpdateHandler
         diag.AppendLine($"• Received blocks: *{indexerBackend.ReceivedBlocks}*");
         diag.AppendLineIfNotNull("• Latest block: {0}", indexerBackend.LastBlock?.Format());
 
+        // Exchange rate backend Information (optional)
+        diag.AppendLine("\n💱 *Exchange rate backend status:* ");
+        appendBackendInfo(exchangeRateBackend);
+        diag.AppendLineIfNotNull("• Last update: *{0}*", exchangeRateBackend.LastRateUpdate?.ToString("f"), "⚠️ never");
+        if (exchangeRateBackend.RatesReliable)
+            diag.AppendLine($"• Fiat rate: *{exchangeRateBackend.FiatRate!.Value.FormatFiatRate()}*");
+
         // Lightning backend Information
         diag.AppendLine("\n⚡ *Lightning backend status:*");
         appendBackendInfo(lightningBackend);
-
-        // Exchange rate backend Information (optional)
-        diag.AppendLine("\n💱 *Exchange rate backend status:* ");
-        if (exchangeRateBackend is null)
-            diag.AppendLine("• Backend: 🚫 *none*");
-        else
-        {
-            appendBackendInfo(exchangeRateBackend);
-            diag.AppendLineIfNotNull("• Last update: *{0}*", exchangeRateBackend.LastRateUpdate?.ToString("f"), "⚠️ never");
-            if (exchangeRateBackend.RatesReliable)
-                diag.AppendLine($"• Fiat rate: *{exchangeRateBackend.FiatRate!.Value.FormatFiatRate()}*");
-        }
 
         await botClient.SendMessage(command.ChatId,
             diag.ToString(),
