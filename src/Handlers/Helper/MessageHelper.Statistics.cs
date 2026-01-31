@@ -35,6 +35,9 @@ internal static class ServerStatisticsMessage
             message.AppendLatestMonth("Sessions", stats.SessionsPerMonth);
             message.AppendMappedValue("First session", stats.StartedAtBlock!, statisticService);
             message.AppendLine($"• Total duration: {stats.Duration} blocks");
+            message.AppendLine($"• Avg duration/session: {stats.DurationPerSession} blocks");
+            message.AppendLine($"• Participated users: {stats.ParticipatedUsers}");
+            message.AppendLine($"• Avg Participants/session: {stats.ParticipantsPerSession}");
             message.AppendLine($"• Total participants: {stats.TotalParticipants}");
             message.AppendLatestMonth("Participants", stats.ParticipantsPerMonth);
             message.AppendLine($"• Total sats: {stats.TotalSats.Format()}");
@@ -113,6 +116,9 @@ internal static class GroupStatisticsMessage
             message.AppendLine($"• Sessions: {groupStats.TotalSessions}");
             message.AppendLine($"• First session: {groupStats.StartedAtBlock.Format()}");
             message.AppendLine($"• Total duration: {groupStats.Duration} blocks");
+            message.AppendLine($"• Avg duration/session: {groupStats.DurationPerSession} blocks");
+            message.AppendLine($"• Participated users: {groupStats.ParticipatedUsers}");
+            message.AppendLine($"• Avg Participants/session: {groupStats.ParticipantsPerSession}");
             message.AppendLine($"• Total participants: {groupStats.TotalParticipants}");
             message.AppendLatestMonth("Participants", groupStats.ParticipantsPerMonth);
             

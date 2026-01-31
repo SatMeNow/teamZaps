@@ -29,7 +29,7 @@ public class Sample_Statistics
         if (statisticService.GeneralStats != null)
         {
             Console.WriteLine($"Total Sessions: {statisticService.GeneralStats.TotalSessions}");
-            Console.WriteLine($"Total Users: {statisticService.GeneralStats.TotalParticipants}");
+            Console.WriteLine($"Total Participants: {statisticService.GeneralStats.TotalParticipants}");
             Console.WriteLine($"Total Sats: {statisticService.GeneralStats.TotalSats}");
             Console.WriteLine($"Total Tipped Sats: {statisticService.GeneralStats.TotalTippedSats}");
             Console.WriteLine($"Tipped Percentage: {statisticService.GeneralStats.TotalTippedPercent:F2}%");
@@ -64,49 +64,61 @@ public class Sample_Statistics
     /// </summary>
     private static List<SessionState> GenerateRandomSessions(int count)
     {
+        const int MaxParticipantsPerGroup = 12;
         var random = new Random();
         var sessions = new List<SessionState>();
-        var groups = new Dictionary<long, string>
+        var groups = new Dictionary<long, (string Name, List<User> Users)>
         {
-            { 123456789, "Bitcoin Dev Group" },
-            { 987654321, "Lightning Network Community" },
-            { 555555555, "Zaps Discussion" },
-            { 777777777, "Bitcoin Trading" },
-            { 999999999, "General Crypto" }
+            { 123456789, ("Bitcoin Dev Group", new()) },
+            { 987654321, ("Lightning Network Community", new()) },
+            { 555555555, ("Zaps Discussion", new()) },
+            { 777777777, ("Bitcoin Trading", new()) },
+            { 999999999, ("General Crypto", new()) }
         };
+        
+        // Create consistent participant pools for each group:
+        foreach (var group in groups)
+        {
+            for (var j = 0; j < MaxParticipantsPerGroup; j++)
+            {
+                var participantId = (group.Key + 1000 + j);
+                group.Value.Users.Add(new User
+                {
+                    Id = participantId,
+                    IsBot = false,
+                    FirstName = $"User{participantId}"
+                });
+            }
+        }
+        
         var startBlock = random.Next(900000, 901000);
         var baseFiatPrice = 0.00003; // BTC/USD rate approximation
 
         for (int i = 0; i < count; i++)
         {
             var chatId = groups.Keys.ElementAt(random.Next(groups.Count));
-            var userId = (1000000 + random.Next(10000));
-            var numParticipants = random.Next(3, 12); // More realistic participant count
+            var groupUsers = groups[chatId].Users;
+            var numParticipants = random.Next(3, Math.Min(MaxParticipantsPerGroup, groupUsers.Count) + 1);
+            
+            // Select random participants from the group's pool:
+            var selectedUsers = groupUsers
+                .OrderBy(x => random.Next())
+                .Take(numParticipants)
+                .ToArray();
 
             var session = new SessionState
             {
                 ChatId = chatId,
-                ChatTitle = groups[chatId],
-                StartedByUser = new ParticipantState(new User
-                {
-                    Id = userId,
-                    IsBot = false,
-                    FirstName = $"User{userId}"
-                }),
+                ChatTitle = groups[chatId].Name,
+                StartedByUser = new ParticipantState(selectedUsers[0]),
                 StartedAtBlock = CreateBlockHeader(startBlock),
                 CompletedAtBlock = CreateBlockHeader(startBlock + random.Next(6, 36))
             };
 
-            // Add random participants with payments
-            for (int j = 0; j < numParticipants; j++)
+            // Add selected participants with payments:
+            foreach (var user in selectedUsers)
             {
-                var participantId = 2000000 + random.Next(100000);
-                var participant = new ParticipantState(new User
-                {
-                    Id = participantId,
-                    IsBot = false,
-                    FirstName = $"Participant{participantId}"
-                });
+                var participant = new ParticipantState(user);
 
                 // Generate realistic payment amounts with log-normal distribution
                 var satsAmount = (long)(random.Next(500, 50000));
@@ -127,7 +139,7 @@ public class Sample_Statistics
                     FiatAmount = satsAmount * baseFiatPrice
                 });
 
-                session.Participants.TryAdd(participantId, participant);
+                session.Participants.TryAdd(user.Id, participant);
             }
 
             sessions.Add(session);

@@ -156,10 +156,16 @@ public class PendingPayment : IUser, ITipableAmount
     
     public required PaymentToken[] Tokens { get; init; }
     public required PaymentCurrency Currency { get; init; }
-    long IFormattableAmount.SatsAmount => (SatsAmount ?? 0);
-    public long? SatsAmount { get; init; }
-    public required double TipAmount { get; init; }
+    long IFormattableAmount.SatsAmount => SatsAmount;
+    public required long SatsAmount { get; init; }
     public required double FiatAmount { get; init; }
+    /// <summary>
+    /// Tip amount in fiat currency.
+    /// </summary>
+    /// <remarks>
+    /// Included in the <see cref="FiatAmount"/>.
+    /// </remarks>
+    public required double TipAmount { get; init; }
 
 
     public override string ToString() => $"{User}: {(this as ITipableAmount).FormatAmount()}";

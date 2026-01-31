@@ -209,7 +209,7 @@ Here are some reliable servers to get started:
 The `BotBehaviorOptions` section controls various aspects of bot behavior:
 
 #### MaxBudget
-Controls the maximum total budget (in Euro) across all active sessions.
+Controls the maximum total lottery budget (in Euro) across all active sessions.
 - **Default**: `disabled`
 
 When the limit is reached, new users cannot join lotteries until existing sessions complete or are cancelled.
@@ -218,6 +218,34 @@ When the limit is reached, new users cannot join lotteries until existing sessio
 {
   "BotBehaviorOptions": {
     "MaxBudget": 5000.0
+  }
+}
+```
+
+#### MaxLockedSats
+Controls the maximum total *locked sats* across all active sessions server-wide.
+- **Default**: `disabled` (no limit)
+
+This setting helps avoid locking too much on-chain liquidity at once. When the configured limit is reached, actions that would increase the locked sats (for example creating new sessions or making payments) will be refused.
+
+```json
+{
+  "BotBehaviorOptions": {
+    "MaxLockedSats": 1000000.0
+  }
+}
+```
+
+#### MaxEstimatedLockedSats
+Controls the maximum total *estimated locked sats* across all active sessions server-wide.
+- **Default**: `disabled` (no limit)
+
+Estimated locked sats is a heuristic based on historical group- and user-statistics and can be used to provide a buffer for expected future locked sats. When the configured limit is reached, the bot will refuse actions that would increase the estimated locked sats (for example creating new sessions or making payments) above the limit.
+
+```json
+{
+  "BotBehaviorOptions": {
+    "MaxEstimatedLockedSats": 2000000.0
   }
 }
 ```

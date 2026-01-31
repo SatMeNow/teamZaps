@@ -10,8 +10,26 @@ namespace TeamZaps.Logging;
 
 public enum LogTag
 {
+    [Description("Application shutdown")]
     Shutdown,
+    [Description("Application startup")]
     Startup,
+
+    /// <summary>
+    /// Rejected a session creation due to insufficient liquidity.
+    /// </summary>
+    [Description("Rejected session creation")]
+    RejectCreateSession,
+    /// <summary>
+    /// Rejected a lottery join due to insufficient liquidity.
+    /// </summary>
+    [Description("Rejected lottery join")]
+    RejectJoinLottery,
+    /// <summary>
+    /// Rejected a payment due to insufficient liquidity.
+    /// </summary>
+    [Description("Rejected payment")]
+    RejectPayment
 }
 
 /// <summary>
@@ -31,6 +49,11 @@ public class LiquidityLogService : IHostedService
         this.logger = logger;
         this.sessionManager = sessionManager;
     }
+
+
+    #region Events
+    public event EventHandler<LogTag?>? OnLog;
+    #endregion
 
 
     #region Initialization
@@ -69,6 +92,8 @@ public class LiquidityLogService : IHostedService
                 line += $"#{tag},{0},{0},{0},{0}";
 
             await File.AppendAllTextAsync(LogPath, (line + "\n"), cancellationToken);
+
+            OnLog?.Invoke(this, tag);
         }
         catch (IOException ex) when (ex.Message.Contains("being used by another process"))
         {

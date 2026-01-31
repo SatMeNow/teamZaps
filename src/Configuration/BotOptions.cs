@@ -77,6 +77,16 @@ public class BotBehaviorOptions
     /// </summary>
     public double? MaxBudget { get; set; }
     /// <summary>
+    /// Maximum total locked sats across all active sessions server-wide.
+    /// If set, the bot will refuse actions that would increase the locked sats above this limit.
+    /// </summary>
+    public long? MaxLockedSats { get; set; }
+    /// <summary>
+    /// Maximum estimated locked sats across all active sessions server-wide.
+    /// If set, the bot will refuse actions that would increase the estimated locked sats above this limit.
+    /// </summary>
+    public long? MaxEstimatedLockedSats { get; set; }
+    /// <summary>
     /// Maximum total number of parallel sessions server-wide.
     /// </summary>
     public uint? MaxParallelSessions { get; set; }

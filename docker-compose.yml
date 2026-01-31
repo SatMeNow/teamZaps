@@ -14,6 +14,8 @@ services:
       # Bot Behavior
       - BotBehavior__SanityCheckTime=${SANITY_CHECK_TIME:-03:00:00}
       - BotBehavior__MaxBudget=${MAX_BUDGET}
+      - BotBehavior__MaxLockedSats=${MAX_LOCKED_SATS}
+      - BotBehavior__MaxEstimatedLockedSats=${MAX_ESTIMATED_LOCKED_SATS}
       - BotBehavior__MaxParallelSessions=${MAX_PARALLEL_SESSIONS}
       - BotBehavior__CurrentLocale=${BOT_LOCALE:-en-US}
       

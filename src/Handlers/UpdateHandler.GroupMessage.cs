@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using TeamZaps.Configuration;
+using TeamZaps.Logging;
 using TeamZaps.Services;
 using TeamZaps.Session;
 using TeamZaps.Utils;
@@ -76,14 +77,19 @@ public partial class UpdateHandler
                 .AnswerUser()
                 .ExpireMessage();
         
-        // Check server-wide budget limit
+        // Check server-wide liquidity limits
         var minBudget = botBehaviour.BudgetChoices.Min();
-        if (!CheckServerBudgetLimit(minBudget))
-            throw new InvalidOperationException("💸 Starting a new session would exceed the server-wide budget limit!\n\n" +
-                "Please try again later when some budgets are available.")
+        if (!CheckServerBudgetLimit(minBudget) ||
+            !CheckEstimatedLockedSatsLimit(minBudget) ||
+            !CheckLockedSatsLimit(minBudget))
+        {
+            await liquidityLogService.LogAsync(LogTag.RejectCreateSession, cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException("Sorry, starting a new session would exceed my total available liquidity 🫣")
+                .AddHelp("Please try again later when some budgets are available.")
                 .AddLogLevel(LogLevel.Information)
                 .AnswerUser()
                 .ExpireMessage();
+        }
 
         // Obtain block header at session start
         var currentBlock = await indexerBackend.GetCurrentBlockAsync(cancellationToken).ConfigureAwait(false);
@@ -380,13 +386,10 @@ public partial class UpdateHandler
         return (session.WinnerPayouts.Count);
     }
 
-    private bool CheckServerBudgetLimit(double requestedBudget)
-    {
-        if (botBehaviour.MaxBudget is null)
-            return (true);
-        else
-            return ((sessionManager.ConsumedServerBudget + requestedBudget) <= botBehaviour.MaxBudget.Value);
-    }
+    private bool CheckLockedSatsLimit(long requestedBudget) => (requestedBudget <= (sessionManager.AvailableLockedSats ?? long.MaxValue));
+    private bool CheckEstimatedLockedSatsLimit(long requestedBudget) => (requestedBudget <= (statisticService.AvailableEstimatedLockedSats ?? long.MaxValue));
+    private bool CheckServerBudgetLimit(double requestedBudget) => (requestedBudget <= (sessionManager.AvailableServerBudget ?? double.MaxValue));
+
     private static long CalculateWinnerSats(SessionState session, double fiatAmount)
     {
         // Don't use any exchange rate here!

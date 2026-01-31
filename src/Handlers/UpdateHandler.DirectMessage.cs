@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Numerics;
 using System.Text;
 using TeamZaps;
 using TeamZaps.Backends;
 using TeamZaps.Configuration;
+using TeamZaps.Logging;
 using TeamZaps.Payment;
 using TeamZaps.Services;
 using TeamZaps.Session;
@@ -241,15 +243,19 @@ public partial class UpdateHandler
         // Check server-wide budget limit
         if (!CheckServerBudgetLimit(budget))
         {
+            await liquidityLogService.LogAsync(LogTag.RejectJoinLottery, cancellationToken).ConfigureAwait(false);
+            
             var availBudget = sessionManager.AvailableServerBudget!.Value;
             var minBudget = botBehaviour.BudgetChoices.Min();
-            var message = $"💸 Sorry, your budget of {budget.Format()} would exceed the server-wide limit!\n\n" +
-                $"Available at this time: {availBudget.Format()}\n\n";
+            var message = $"Sorry, your budget of {budget.Format()} would exceed my total allowed liquidity 🫣\n\n" +
+                $"Available at this time: {availBudget.Format()}";
+            string help;
             if (minBudget <= availBudget)
-                message += $"Please choose a lower budget and try again.";
+                help = $"Please choose a lower budget and try again.";
             else
-                message += $"Currently, no budgets are available to join the lottery. Please try again later.";
+                help = $"Currently, no budgets are available to join the lottery. Please try again later.";
             throw new IndexOutOfRangeException(message)
+                .AddHelp(help)
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser();
         }
@@ -340,27 +346,37 @@ public partial class UpdateHandler
                 throw new NotSupportedException($"Only {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()} payments are supported.")
                     .AnswerUser();
 
+            // Calculate total invoice amount
             var grpAmount = (double)tokenGrp.Sum(tGrp => tGrp.Amount);
             var tipAmount = 0.0;
             if (participant.Options.Tip > 0)
                 tipAmount = ((grpAmount * participant.Options.Tip!.Value) / 100.0);
-            var invoiceAmount = (grpAmount + tipAmount);
+            var invoiceFiatAmount = (grpAmount + tipAmount);
+            var invoiceSatsAmount = exchangeRateBackend.ToSats(invoiceFiatAmount);
 
             // Check if this payment would exceed the sessions's remaining budget
-            var totalFiatAmount = (session.FiatAmount + session.PendingPayments.Values
-                .Cast<ITipableAmount>()
-                .Sum(p => p.TotalFiatAmount));
-            var remainingFiatAmount = (session.Budget - totalFiatAmount);
-            if (invoiceAmount > remainingFiatAmount)
-                throw new InvalidOperationException($"💸 Payment rejected!\n\n" +
-                    $"Your payment of {invoiceAmount.Format()} would exceed the session's total budget.\n\n" +
-                    $"Available budget: {remainingFiatAmount.Format()}")
+            if (!CheckServerBudgetLimit(invoiceFiatAmount))
+                throw new InvalidOperationException($"Payment rejected!\n" +
+                    $"Your payment of {invoiceFiatAmount.Format()} would exceed the session's total budget 👀\n\n" +
+                    $"Available budget: {sessionManager.AvailableServerBudget!.Value.Format()}")
                     .AddLogLevel(LogLevel.Warning)
                     .AnswerUser();
 
+            // Check if this payment would exceed liquidity limits
+            if (!CheckLockedSatsLimit(invoiceSatsAmount))
+            {
+                await liquidityLogService.LogAsync(LogTag.RejectPayment, cancellationToken).ConfigureAwait(false);
+                throw new InvalidOperationException($"Payment rejected!\n" +
+                    $"Your payment of {invoiceFiatAmount.Format()} would exceed my total available liquidity 🫣")
+                    .AddLogLevel(LogLevel.Warning)
+                    .AnswerUser();
+            }
+
             try
             {
-                var invoice = await lightningBackend.CreateInvoiceAsync(invoiceAmount, grpCurrency, memo, cancellationToken).ConfigureAwait(false);
+                var invoice = await lightningBackend.CreateInvoiceAsync(invoiceSatsAmount, memo, cancellationToken).ConfigureAwait(false);
+                if (invoice.SatsAmount is not null)
+                    Debug.Assert(invoice.SatsAmount == invoiceSatsAmount);
 
                 // Store as pending payment
                 var pending = new PendingPayment
@@ -369,9 +385,9 @@ public partial class UpdateHandler
                     PaymentHash = invoice!.PaymentHash,
                     PaymentRequest = invoice.PaymentRequest,
                     Tokens = tokenGrp.ToArray(),
-                    SatsAmount = invoice.SatsAmount,
+                    SatsAmount = invoiceSatsAmount,
                     TipAmount = tipAmount,
-                    FiatAmount = grpAmount,
+                    FiatAmount = invoiceFiatAmount,
                     Currency = grpCurrency,
                     CreatedAt = DateTimeOffset.Now
                 };
@@ -381,11 +397,11 @@ public partial class UpdateHandler
                 var message = await PaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
                 pending.MessageId = message.MessageId;
 
-                logger.LogInformation("Created invoice for user {User} in session {Session}: {InvoiceAmount}.", user, session, invoiceAmount.Format(grpCurrency));
+                logger.LogInformation("Created invoice for user {User} in session {Session}: {InvoiceAmount}.", user, session, invoiceFiatAmount.Format(grpCurrency));
             }
             catch (Exception ex)
             {
-                throw new Exception($"Failed to create invoice for {invoiceAmount.Format(grpCurrency)}!", ex);
+                throw new Exception($"Failed to create invoice for {invoiceFiatAmount.Format(grpCurrency)}!", ex);
             }
         }
     }
@@ -526,24 +542,44 @@ public partial class UpdateHandler
         diag.AppendLine($"• Uptime: *{DateTimeOffset.Now - Process.GetCurrentProcess().StartTime:dd\\.hh\\:mm\\:ss}*");
         
         // Bot Information
+        void appendLimitInfo<T>(string name, T actual, object? available, object? max, string? noLimit, PaymentCurrency currency)
+            where T : INumber<T>
+        {
+            if (max is null)
+            {
+                if (noLimit is null)
+                    ; // Hide
+                else
+                    diag.AppendLine($"• {name}: *{noLimit}*");
+            }
+            else
+            {
+                diag.AppendLine($"• {name}");
+                diag.AppendLine($"  • Actual: *{actual.Format(currency, false)}* / *{(max as INumber<T>)!.Format(currency)}*");
+                if (T.Zero.CompareTo(actual) < 0)
+                    diag.AppendLine($"  • Remaining: *{(available as INumber<T>)!.Format(currency)}*");
+            }
+        };
+
         diag.AppendLine("\n🤖 *Bot status:*");
         var maxSessions = "";
         if (botBehaviour.MaxParallelSessions > 0)
             maxSessions = $" of *{botBehaviour.MaxParallelSessions.Value}*";
         diag.AppendLine($"• Active sessions: *{sessionManager.ActiveSessions.Count()}*{maxSessions}");
 
-        if (botBehaviour.MaxBudget is null)
-            diag.AppendLine("• Server budget: *Unlimited*");
-        else
+        appendLimitInfo("Budget", sessionManager.ConsumedServerBudget, sessionManager.AvailableServerBudget, botBehaviour.MaxBudget, "unlimited", BotBehaviorOptions.AcceptedFiatCurrency);
+        appendLimitInfo("Estimated sats locked", (statisticService.EstimatedLockedSats ?? 0), statisticService.AvailableEstimatedLockedSats, botBehaviour.MaxEstimatedLockedSats, null, PaymentCurrency.Sats);
+        appendLimitInfo("Sats locked", sessionManager.TotalLockedSats, sessionManager.AvailableLockedSats, botBehaviour.MaxLockedSats, "💤 none", PaymentCurrency.Sats);
+
+        var events = statisticService.GeneralStats?.Events
+            .Where(e => e.Value > 0)
+            .OrderBy(e => e.Key)
+            .ToArray();
+        if (events?.IsEmpty() == false)
         {
-            var consumed = sessionManager.ConsumedServerBudget;
-            if (consumed > 0)
-                diag.AppendLine($"• Server budget: *{consumed.Format()}* / *{botBehaviour.MaxBudget!.Value.Format()}*");
-            var available = sessionManager.AvailableServerBudget ?? 0;
-            if (available > 0)
-                diag.AppendLine($"• Available budget: *{available.Format()}*");
+            diag.AppendLine($"• Events");
+            events.ForEach(e => diag.AppendLine($"  • {e.Key.GetDescription()}: *{e.Value}*"));
         }
-        diag.AppendLineIfNotNull("• Total locked amount: *{0}*", sessionManager.FormatAmount(), "💤 none");
 
         // Lost and Found Recovery Information
         diag.AppendLine("\n🔍 *Lost and Found sats recovery:*");
