@@ -105,7 +105,8 @@ public partial class UpdateHandler : IUpdateHandler
                             expireAfter = TimeSpan.FromSeconds(15);
                         await Task.Delay(expireAfter!.Value, cancellationToken).ConfigureAwait(false);
 
-                        await botClient.DeleteMessageAsync(message, cancellationToken).ConfigureAwait(false);
+                        if (update.Type == UpdateType.Message)
+                            await botClient.DeleteMessageAsync(message, cancellationToken).ConfigureAwait(false);
                         await botClient.DeleteMessageAsync(response, cancellationToken).ConfigureAwait(false);
                     });
                 }
