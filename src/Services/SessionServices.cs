@@ -71,8 +71,13 @@ public class SessionManager : IFormattableAmount
     public double ConsumedServerBudget => ActiveSessions
         .SelectMany(s => s.LotteryParticipants.Values)
         .Sum();
+
+    public long? AvailableLockedSats => (botBehaviour.MaxLockedSats - TotalLockedSats);
+    public long TotalLockedSats => ActiveSessions.Sum(s => s.SatsAmount - s.PayedAmount + s.PendingPayments.Values
+        .Cast<IFormattableAmount>()
+        .Sum(p => p.SatsAmount));
+    
     long IFormattableAmount.SatsAmount => TotalLockedSats;
-    public long TotalLockedSats => ActiveSessions.Sum(s => s.SatsAmount - s.PayedAmount);
     double IFormattableAmount.FiatAmount => TotalLockedFiat;
     public double TotalLockedFiat => ActiveSessions.Sum(s => s.FiatAmount - s.PayedFiatAmount);
     #endregion

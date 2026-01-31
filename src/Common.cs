@@ -168,10 +168,10 @@ public static partial class Extensions
     public static string? Format(this ulong source) => Format(source, PaymentCurrency.Sats);
     public static string? Format(this long source) => Format(source, PaymentCurrency.Sats);
     public static string? Format(this double source) => Format(source, BotBehaviorOptions.AcceptedFiatCurrency);
-    public static string? Format<T>(this INumber<T> source, PaymentCurrency currency)
+    public static string? Format<T>(this INumber<T> source, PaymentCurrency currency, bool hideZero = true)
         where T : INumber<T>
     {
-        if (T.Zero.Equals(source))
+        if ((T.Zero.Equals(source)) && (hideZero))
             return (null);
         
         if (currency == PaymentCurrency.Sats)
@@ -193,6 +193,7 @@ public static partial class Extensions
     public static double DaysToBlocks(this int days) => (days.HoursToBlocks() * 24.0);
     public static double WeeksToBlocks(this int weeks) => (weeks.DaysToBlocks() * 7.0);
     public static double MonthsToBlocks(this int months) => (months.DaysToBlocks() * 30.0);
+    public static double ToBlocks(this TimeSpan duration) => ((int)(duration.TotalMinutes / 30.0)).MinutesToBlocks();
 }
 
 internal static partial class Ext

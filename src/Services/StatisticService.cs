@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using TeamZaps.Backends;
+using TeamZaps.Configuration;
+using TeamZaps.Logging;
 using TeamZaps.Session;
 using TeamZaps.Utils;
 
@@ -12,20 +14,24 @@ public class StatisticService : IHostedService
 {
     #region Constants
     private static readonly TimeSpan HoldBackTime = TimeSpan.FromDays(365 * 5);
+    private static readonly TimeSpan AverageDurationPerSession = TimeSpan.FromHours(2.1);
     #endregion
 
 
     public StatisticService(
         ILogger<StatisticService> logger,
+        IOptions<BotBehaviorOptions> botBehaviour,
         FileService<GeneralStatistics?> genStatsFile, FileService<GroupStatistics?> groupStatsFile, FileService<UserStatistics?> userStatsFile,
-        SessionManager sessionManager,
+        SessionManager sessionManager, LiquidityLogService liquidityLogService,
         IIndexerBackend indexerBackend)
     {
         this.logger = logger;
+        this.botBehaviour = botBehaviour.Value;
         this.genStatsFile = genStatsFile;
         this.groupStatsFile = groupStatsFile;
         this.userStatsFile = userStatsFile;
         this.sessionManager = sessionManager;
+        this.liquidityLogService = liquidityLogService;
         this.indexerBackend = indexerBackend;
     }
 
@@ -39,14 +45,33 @@ public class StatisticService : IHostedService
     private Dictionary<long, UserStatistics> userStats = new();
     public GroupRankingStatistics? GroupRanking { get; set; } = null;
 
-    protected BlockHeader? CurrentBlock { get; private set; }
-    protected int CurrentBlockHeight => (CurrentBlock?.Height ?? 0);
+    protected BlockHeader CurrentBlock => indexerBackend.LastBlock ?? throw new InvalidOperationException("Latest block not available yet!");
+    protected BlockHeader? ReferencedBlock { get; private set; }
+    protected int ReferencedBlockHeight => (ReferencedBlock?.Height ?? 0);
+    
+    public long? AvailableEstimatedLockedSats => (botBehaviour.MaxEstimatedLockedSats - EstimatedLockedSats);
+    public long? EstimatedLockedSats => EstimateLockedSats();
+    #endregion
+
+
+    #region Events
+    private void OnLiquidityLog(object? sender, LogTag? tag)
+    {
+        if ((GeneralStats is not null) && (tag is not null))
+        {
+            var val = GeneralStats.Events.GetValueOrDefault(tag.Value);
+            GeneralStats.Events[tag!.Value] = (val + 1);
+            genStatsFile.WriteAsync(GeneralStats).Wait();
+        }
+    }
     #endregion
 
 
     #region Initialization
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        liquidityLogService.OnLog += OnLiquidityLog;
+
         logger.LogInformation("Loading statistics.");
         try
         {
@@ -68,7 +93,12 @@ public class StatisticService : IHostedService
         // [Testing]
         // await Examples.Sample_Statistics.CreateRandomStatistics(this, 50).ConfigureAwait(false);
     }
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        liquidityLogService.OnLog -= OnLiquidityLog;
+
+        return (Task.CompletedTask);
+    }
     #endregion
     #region Management
     public Task<bool> OnSessionCompleteAsync(SessionState session)
@@ -78,9 +108,9 @@ public class StatisticService : IHostedService
         return (UpdateStatisticsAsync(session, indexerBackend.LastBlock!));
     }
     
-    internal async Task<bool> UpdateStatisticsAsync(SessionState session, BlockHeader currentBlock)
+    internal async Task<bool> UpdateStatisticsAsync(SessionState session, BlockHeader referencedBlock)
     {
-        Debug.Assert(currentBlock is not null);
+        Debug.Assert(referencedBlock is not null);
 
         if (!session.IsValid)
         {
@@ -91,7 +121,7 @@ public class StatisticService : IHostedService
         await update.WaitAsync().ConfigureAwait(false);
         try
         {
-            this.CurrentBlock = currentBlock;
+            this.ReferencedBlock = referencedBlock;
 
             // Update statistics:
             foreach (var userId in session.Participants.Keys)
@@ -117,13 +147,14 @@ public class StatisticService : IHostedService
         // Get or create new statistics:
         var stats = (GeneralStats ?? new GeneralStatistics());
         // Update metrics:
-        stats.TotalParticipants = this.Participants;
+        stats.ParticipatedUsers = this.Participants;
         stats.TotalSessions++;
         stats.TotalGroups = GroupStats.Count;
         stats.Duration += (ulong)session.Duration!.Value;
         stats.StartedAtBlock ??= new MappedValue<BlockHeader>(session.ChatId, session.StartedAtBlock!);
         stats.TotalSats += (ulong)session.SatsAmount;
         stats.TotalTippedSats += (ulong)session.TipAmount;
+        stats.TotalParticipants += session.Participants.Count;
         // Update parallel session metrics
         var parallelSessions = GetParallelSessions(session);
         stats.MaxParallelSessions = Math.Max(stats.MaxParallelSessions, parallelSessions.Count);
@@ -151,6 +182,7 @@ public class StatisticService : IHostedService
         stats.StartedAtBlock ??= session.StartedAtBlock!;
         stats.TotalSats += (ulong)session.SatsAmount;
         stats.TotalTippedSats += (ulong)session.TipAmount;
+        stats.TotalParticipants += session.Participants.Count;
         // Update per-month session metrics
         var month = GetMonth(session.CompletedAtBlock!.LocalTime);
         UpdateValue(stats.ParticipantsPerMonth, month, (v) => (v + session.Participants.Count));
@@ -221,6 +253,96 @@ public class StatisticService : IHostedService
         };
     }
     #endregion
+    #region Operation
+    /// <summary>
+    /// Estimate the locked sats all active sessions based on group- and user statistics.
+    /// </summary>
+    public long? EstimateLockedSats()
+    {
+        var estimatedSats = 0L;
+        foreach (var session in sessionManager.ActiveSessions)
+        {
+            var estSats = EstimateLockedSats(session);
+            if (estSats is null)
+                return (null);
+            estimatedSats += estSats.Value;
+        }
+        return (estimatedSats);
+    }
+    /// <summary>
+    /// Estimate the locked sats for the specified session based on group- and user statistics.
+    /// </summary>
+    private long? EstimateLockedSats(SessionState session)
+    {
+        try
+        {
+            if (session.StartedAtBlock is null)
+                return (GeneralStats!.SatsPerSession);
+
+            GroupStats.TryGetValue(session.ChatId, out var groupStat);
+
+            // Get actal session duration:
+            var currentSessionDuration = 0L;
+            if (session.Duration is null)
+                currentSessionDuration = (CurrentBlock.Height - session.StartedAtBlock!.Height);
+            else
+                currentSessionDuration = session.Duration!.Value;
+
+            // Estimate expected session duration in blocks:
+            var expectedSessionDuration = 0L;
+            if (session.Duration is not null)
+                expectedSessionDuration = session.Duration!.Value;
+            else if (groupStat is not null)
+                expectedSessionDuration = groupStat.DurationPerSession;
+            else if (GeneralStats is not null)
+                expectedSessionDuration = GeneralStats!.DurationPerSession;
+            if (expectedSessionDuration == 0)
+                expectedSessionDuration = (long)AverageDurationPerSession.ToBlocks(); // Fallback
+
+            // Get factor to indicate session maturity:
+            var maturityFactor = 0.0F;
+            if (currentSessionDuration < expectedSessionDuration)
+                maturityFactor = (1.0F - (currentSessionDuration / (float)expectedSessionDuration));
+
+            // Calculate estimated sats based on participant statistics:
+            var estimatedSats = 0L;
+            var estimatedUsers = 0;
+            foreach (var user in session.Participants)
+            {
+                if (userStats.TryGetValue(user.Key, out var userStat))
+                {
+                    var userEstimatedSats = (userStat.SatsPerBlock * expectedSessionDuration);
+                    var userCurrentSats = user.Value.SatsAmount;
+                    // Shift estimated sats towards current sats based on maturity factor:
+                    var estSats = (long)(userCurrentSats + (userEstimatedSats - userCurrentSats) * maturityFactor);
+                    estimatedSats += estSats;
+                    estimatedUsers++;
+                }
+            }
+
+            // Account for missing participants:
+            var expectedParticipants = (groupStat?.ParticipantsPerSession ?? GeneralStats!.ParticipantsPerSession);
+            var missingParticipants = (expectedParticipants - estimatedUsers);
+            if (missingParticipants > 0)
+            {
+                var avgSatsPerParticipant = (groupStat?.SatsPerParticipant ?? GeneralStats!.SatsPerParticipant);
+                var missingSats = (long)(missingParticipants * avgSatsPerParticipant * maturityFactor);
+                estimatedSats += missingSats;
+            }
+
+            return (estimatedSats);
+        }
+        catch (Exception ex) when (GeneralStats is null)
+        {
+            logger.LogWarning(ex, "Failed to estimate locked sats for session {Session} as general statistics are not available!", session);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to estimate locked sats for session {Session}.", session);
+        }
+        return (null);
+    }
+    #endregion
 
 
     #region Helper
@@ -231,7 +353,7 @@ public class StatisticService : IHostedService
         else
             source[month] = update(default!);
 
-        CleanupMonthly(source, CurrentBlock!);
+        CleanupMonthly(source, ReferencedBlock!);
     }
     private void CleanupMonthly<T>(Dictionary<DateOnly, T> source, BlockHeader referenceBlock)
     {
@@ -257,19 +379,21 @@ public class StatisticService : IHostedService
         .ToArray();
 
     private DateOnly GetMonth(DateTimeOffset date) => new DateOnly(date.Year, date.Month, 1);
-    private double GetMinutesSince(int startedHeight) => (CurrentBlockHeight - startedHeight).ToMinutes();
-    private double GetHoursSince(int startedHeight) => (CurrentBlockHeight - startedHeight).ToHours();
-    private double GetDaysSince(int startedHeight) => (CurrentBlockHeight - startedHeight).ToDays();
-    private double GetMonthsSince(int startedHeight) => (CurrentBlockHeight - startedHeight).ToMonths();
+    private double GetMinutesSince(int startedHeight) => (ReferencedBlockHeight - startedHeight).ToMinutes();
+    private double GetHoursSince(int startedHeight) => (ReferencedBlockHeight - startedHeight).ToHours();
+    private double GetDaysSince(int startedHeight) => (ReferencedBlockHeight - startedHeight).ToDays();
+    private double GetMonthsSince(int startedHeight) => (ReferencedBlockHeight - startedHeight).ToMonths();
     #endregion
     
 
     private readonly ILogger<StatisticService> logger;
+    private readonly BotBehaviorOptions botBehaviour;
     private readonly FileService<GeneralStatistics?> genStatsFile;
     private readonly FileService<GroupStatistics?> groupStatsFile;
     private readonly FileService<UserStatistics?> userStatsFile;
 
     private readonly SessionManager sessionManager;
+    private readonly LiquidityLogService liquidityLogService;
     private readonly IIndexerBackend indexerBackend;
     
     private readonly SemaphoreSlim update = new SemaphoreSlim(1, 1);
@@ -291,6 +415,11 @@ public record GeneralStatistics
     /// Total duration of all sessions in blocks.
     /// </summary>
     public ulong Duration { set; get; }
+    /// <summary>
+    /// Average duration per session in blocks.
+    /// </summary>
+    [JsonIgnore]
+    public long DurationPerSession => (TotalSessions > 0) ? (long)(Duration / TotalSessions) : 0;
     /// <summary>
     /// Block height of first session.
     /// </summary>
@@ -352,13 +481,26 @@ public record GeneralStatistics
     /// Maximum amount of sats in parallel sessions within a month.
     /// </summary>
     public Dictionary<DateOnly, long> MaxParallelSatsPerMonth { get; set; } = new();
+    /// <summary>
+    /// Total participants during all sessions.
+    /// </summary>
     public int TotalParticipants { set; get; }
+    /// <summary>
+    /// Individual users that have ever participated.
+    /// </summary>
+    [JsonIgnore]
+    public int ParticipatedUsers { set; get; }
+    [JsonIgnore]
+    public int ParticipantsPerSession => (int)((TotalSessions > 0) ? ((ulong)TotalParticipants / TotalSessions) : 0);
+
     public Dictionary<DateOnly, int> ParticipantsPerMonth { get; set; } = new();
     /// <summary>
     /// Number of participants in the last month.
     /// </summary>
     [JsonIgnore]
     public int ParticipantsLatestMonth => ParticipantsPerMonth.GetLatestValue();
+
+    public Dictionary<LogTag, ulong> Events { get; set; } = new();
 }
 
 [Storage("stats/group", "group_{0}.json")]
@@ -376,6 +518,9 @@ public record GroupStatistics
 
     /// <inheritdoc cref="GeneralStatistics.Duration"/> 
     public ulong Duration { set; get; }
+    /// <inheritdoc cref="GeneralStatistics.DurationPerSession"/> 
+    [JsonIgnore]
+    public long DurationPerSession => (TotalSessions > 0) ? (long)(Duration / TotalSessions) : 0;
     /// <inheritdoc cref="GeneralStatistics.StartedAtBlock"/> 
     public BlockHeader StartedAtBlock { set; get; } = null!;
 
@@ -388,20 +533,27 @@ public record GroupStatistics
     public double TotalTippedPercent => (TotalSats > 0) ? (TotalTippedSats * 100 / TotalSats) : 0;
     /// <inheritdoc cref="GeneralStatistics.TippedSatsPerParticipant"/> 
     [JsonIgnore]
-    public long TippedSatsPerParticipant => (TotalParticipants > 0) ? (long)(TotalTippedSats / (ulong)TotalParticipants) : 0;
+    public long TippedSatsPerParticipant => (ParticipatedUsers > 0) ? (long)(TotalTippedSats / (ulong)ParticipatedUsers) : 0;
     /// <inheritdoc cref="GeneralStatistics.SatsPerBlock"/> 
     [JsonIgnore]
     public long SatsPerBlock => (Duration > 0) ? (long)(TotalSats / Duration) : 0;
     /// <inheritdoc cref="GeneralStatistics.SatsPerUser"/> 
     [JsonIgnore]
-    public long SatsPerParticipant => (TotalParticipants > 0) ? (long)(TotalSats / (ulong)TotalParticipants) : 0;
+    public long SatsPerParticipant => (ParticipatedUsers > 0) ? (long)(TotalSats / (ulong)ParticipatedUsers) : 0;
     /// <inheritdoc cref="GeneralStatistics.SatsPerSession"/> 
     [JsonIgnore]
-    public long SatsPerSession => (TotalSessions > 0) ? (long)(TotalSats / (ulong)TotalSessions) : 0;
+    public long SatsPerSession => (TotalSessions > 0) ? (long)(TotalSats / TotalSessions) : 0;
     
+    /// <inheritdoc cref="GeneralStatistics.TotalParticipants"/> 
+    public int TotalParticipants { set; get; }
+    /// <summary>
+    /// Individual users that have ever participated in this group.
+    /// </summary>
     [JsonIgnore]
-    public int TotalParticipants => ParticipantIds.Count;
-    public HashSet<long> ParticipantIds { get; } = new();
+    public int ParticipatedUsers => ParticipantIds.Count;
+    [JsonIgnore]
+    public int ParticipantsPerSession => (int)((TotalSessions > 0) ? ((ulong)TotalParticipants / TotalSessions) : 0);
+    public HashSet<long> ParticipantIds { init; get; } = new();
     public Dictionary<DateOnly, int> ParticipantsPerMonth { get; set; } = new();
     /// <inheritdoc cref="GeneralStatistics.ParticipantsLatestMonth"/> 
     [JsonIgnore]
