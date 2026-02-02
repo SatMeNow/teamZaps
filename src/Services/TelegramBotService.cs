@@ -23,7 +23,7 @@ public interface IUser : IUserName
 
     long IUserName.UserId => User.Id;
     /// <example>@MyUserName</example>
-    string IUserName.UserName => User.Username.DisplayName(null);
+    string IUserName.UserName => User.UserName().DisplayName(null);
 }
 
 public record struct CommandMessage(Message Source, string Value, string? Recipient, string[] Arguments)
@@ -210,6 +210,7 @@ public class TelegramBotService : BackgroundService
 
 internal static partial class Ext
 {
+    public static string UserName(this User source) => (source.Username ?? $"{source.FirstName}{source.LastName?.Insert(0, " ")}");
     public static string UserName<T>(this T source) where T : IUserName => source.UserName;
     public static string DisplayName<T>(this T source) where T : IUserName => source.DisplayName;
     public static string DisplayName(this User source) => source.ToString();
@@ -221,7 +222,7 @@ internal static partial class Ext
         return (result);
     }
     public static string MarkdownDisplayName<T>(this T source) where T : IUserName => source.MarkdownDisplayName;
-    public static string MarkdownDisplayName(this User source) => MarkdownDisplayName(source.Username, source.Id);
+    public static string MarkdownDisplayName(this User source) => MarkdownDisplayName(source.UserName(), source.Id);
     public static string MarkdownDisplayName(this string? name, long? id = null) => $"[@{name}](tg://user?id={id})";
 
     public static bool IsCommand(this Message source) => (source.Text?.StartsWith('/') == true);

@@ -249,9 +249,9 @@ public partial class UpdateHandler
         {
             var botUser = await botClient.GetMe(cancellationToken).ConfigureAwait(false);
             var welcomeMessage = await botClient.SendMessage(chatId,
-                $"Hey @{user.Username}, we did not meet before ✌️\n" +
+                $"Hey @{user.UserName()}, we did not meet before ✌️\n" +
                 "I'm a telegram bot, *helping you* and your friends *to coordinate lightning payments*.\n\n" +
-                $"ℹ️ Please *start a private chat* to interact with me, by clicking @{botUser.Username}. See you soon 👍",
+                $"ℹ️ Please *start a private chat* to interact with me, by clicking @{botUser.UserName()}. See you soon 👍",
                 parseMode: ParseMode.Markdown,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 

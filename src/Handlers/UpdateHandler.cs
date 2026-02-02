@@ -137,7 +137,7 @@ public partial class UpdateHandler : IUpdateHandler
         if (!string.IsNullOrEmpty(cmd?.Recipient))
         {
             var bot = await botClient.GetBotUser(cancellationToken).ConfigureAwait(false);
-            if (string.Equals(cmd!.Value.Recipient, bot.Username, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(cmd!.Value.Recipient, bot.UserName(), StringComparison.OrdinalIgnoreCase))
                 explicitRecipient = true; // Command is explicitly sent to us.
             else
                 return; // Command is sent to another user.
