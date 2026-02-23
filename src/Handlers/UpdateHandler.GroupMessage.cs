@@ -247,20 +247,25 @@ public partial class UpdateHandler
         }
         catch (Exception)
         {
-            var botUser = await botClient.GetMe(cancellationToken).ConfigureAwait(false);
-            var welcomeMessage = await botClient.SendMessage(chatId,
-                $"Hey @{user.UserName()}, we did not meet before ✌️\n" +
-                "I'm a telegram bot, *helping you* and your friends *to coordinate lightning payments*.\n\n" +
-                $"ℹ️ Please *start a private chat* to interact with me, by clicking @{botUser.UserName()}. See you soon 👍",
-                parseMode: ParseMode.Markdown,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (session.Participants.ContainsKey(user.Id))
+                ; // Skip, we already sent a welcome message (Just wait for them to open the private chat).
+            else
+            {
+                var botUser = await botClient.GetMe(cancellationToken).ConfigureAwait(false);
+                var welcomeMessage = await botClient.SendMessage(chatId,
+                    $"Hey @{user.UserName()}, we did not meet before ✌️\n" +
+                    "I'm a telegram bot, *helping you* and your friends *to coordinate lightning payments*.\n\n" +
+                    $"ℹ️ Please *start a private chat* to interact with me, by clicking @{botUser.UserName()}. See you soon 👍",
+                    parseMode: ParseMode.Markdown,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            // Mark user as pending session join
-            sessionManager.PendingJoins[user.Id] = new PendingJoinInfo(chatId, welcomeMessage.MessageId);
-            // Remove user from participants to avoid inconsistencies
-            session.Participants.Remove(user.Id, out _);
+                // Mark user as pending session join
+                sessionManager.PendingJoins[user.Id] = new PendingJoinInfo(chatId, welcomeMessage.MessageId);
+                // Remove user from participants to avoid inconsistencies
+                session.Participants.Remove(user.Id, out _);
 
-            logger.LogInformation("Invited new user {User} to a private bot chat.", user.DisplayName());
+                logger.LogInformation("Invited new user {User} to a private bot chat.", user.DisplayName());
+            }
             return;
         }
 
