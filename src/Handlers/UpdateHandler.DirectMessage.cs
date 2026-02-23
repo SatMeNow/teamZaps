@@ -486,6 +486,9 @@ public partial class UpdateHandler
 
             if (session.Phase.IsClosed())
             {
+                // Cancel outstanding unpaid invoices:
+                await CancelPendingInvoicesAsync(session, cancellationToken).ConfigureAwait(false);
+
                 // Clean up session
                 workflowService.TryCloseSession(session, false);
 
