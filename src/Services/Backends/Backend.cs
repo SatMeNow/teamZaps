@@ -191,6 +191,13 @@ public interface ILightningBackend : IBackend
     }
     #endregion
 }
+public interface ISupportsCancelInvoice : ILightningBackend
+{
+    /// <summary>
+    /// Cancel an unpaid Lightning invoice by payment hash.
+    /// </summary>
+    Task<bool> CancelInvoiceAsync(string paymentHash, CancellationToken cancellationToken = default);
+}
 
 /// <summary>
 /// Lightning invoice details (BOLT11 payment request).

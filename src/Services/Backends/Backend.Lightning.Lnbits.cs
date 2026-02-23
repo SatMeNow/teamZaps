@@ -7,7 +7,7 @@ using TeamZaps.Session;
 namespace TeamZaps.Backends.Lightning;
 
 [BackendDescription("LNBits")]
-public class LnbitsService : ILightningBackend, ISanitizableBackend
+public class LnbitsService : ILightningBackend, ISupportsCancelInvoice, ISanitizableBackend
 {
     #region Constants
     private static readonly IReadOnlyDictionary<PaymentCurrency, string> SupportedCurrencies = new Dictionary<PaymentCurrency, string>
@@ -120,6 +120,18 @@ public class LnbitsService : ILightningBackend, ISanitizableBackend
             throw new RequestException("Error checking payment status.", ex);
         }
     }
+    public async Task<bool> CancelInvoiceAsync(string paymentHash, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var res = await RequestAsync<LnbitsCancelResponse>(HttpMethod.Delete, $"/api/v1/payments/{paymentHash}", cancellationToken).ConfigureAwait(false);
+            return (string.Equals(res.Status, "cancelled", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            throw new RequestException("Error cancelling invoice.", ex);
+        }
+    }
     #endregion
 
 
@@ -188,6 +200,11 @@ file class LnbitsInvoice : ILightningInvoice
     public string PaymentHash { get; set; } = string.Empty;
 
     long? ILightningInvoice.SatsAmount => null;
+}
+file class LnbitsCancelResponse
+{
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
 }
 file class LnbitsPaymentResponse : IPaymentResponse
 {

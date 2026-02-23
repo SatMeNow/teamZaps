@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using TeamZaps.Backends;
 using TeamZaps.Configuration;
 using TeamZaps.Logging;
 using TeamZaps.Services;
@@ -138,6 +139,9 @@ public partial class UpdateHandler
 
         if (session.HasPayments)
         {
+            // Cancel outstanding unpaid invoices:
+            await CancelPendingInvoicesAsync(session, cancellationToken).ConfigureAwait(false);
+
             // Draw winners based on budget limits
             SelectWinners(session);
             session.Phase = SessionPhase.WaitingForInvoice;
@@ -178,6 +182,9 @@ public partial class UpdateHandler
 
         if (workflowService.TryCloseSession(chatId, true))
         {
+            // Cancel outstanding unpaid invoices:
+            await CancelPendingInvoicesAsync(session!, cancellationToken).ConfigureAwait(false);
+
             await SessionStatusMessage.UpdateAsync(session!, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
             
             // Update user status messages for all participants
@@ -360,6 +367,24 @@ public partial class UpdateHandler
 
 
     #region Helper
+    private async Task CancelPendingInvoicesAsync(SessionState session, CancellationToken cancellationToken)
+    {
+        if (lightningBackend is ISupportsCancelInvoice cancelBackend)
+        {
+            foreach (var pending in session.PendingPayments.Values)
+            {
+                try
+                {
+                    await cancelBackend.CancelInvoiceAsync(pending.PaymentHash, cancellationToken).ConfigureAwait(false);
+                    logger.LogInformation("Cancelled pending invoice {PaymentHash} for session {Session}.", pending.PaymentHash, session);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to cancel pending invoice {PaymentHash} for session {Session}.", pending.PaymentHash, session);
+                }
+            }
+        }
+    }
     private int SelectWinners(SessionState session)
     {
         Debug.Assert(session.WinnerPayouts.IsEmpty());
