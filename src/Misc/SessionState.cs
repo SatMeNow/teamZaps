@@ -16,8 +16,10 @@ public enum SessionPhase
 {
     [Description("⏳ Waiting for lottery entries")]
     WaitingForLotteryParticipants,
-    [Description("💰 Accepting payments")]
-    AcceptingPayments,
+    [Description("📋 Accepting orders")]
+    AcceptingOrders,
+    [Description("⏳ Waiting for payments")]
+    WaitingForPayments,
     [Description("⌛ Waiting for winner invoice(s)")]
     WaitingForInvoice,
 
@@ -27,9 +29,16 @@ public enum SessionPhase
     Completed
 }
 
-public class SessionState : ITipableAmount
+public class SessionState : ITipableAmount, IOrderableAmount
 {
+    #region Constants.Settings
+    static readonly TimeSpan ForceCloseMinPaymentPhaseDuration = TimeSpan.FromMinutes(3);
+    #endregion
+
+
     public bool IsValid => (Duration is not null);
+    public bool CanForceClose => (RemainingForceCloseTime == TimeSpan.Zero);
+    public TimeSpan RemainingForceCloseTime => ((Phase == SessionPhase.WaitingForPayments) && (TimeInCurrentPhase < ForceCloseMinPaymentPhaseDuration)) ? (ForceCloseMinPaymentPhaseDuration - TimeInCurrentPhase) : TimeSpan.Zero;
     
     public required long ChatId { get; init; }
     public required string ChatTitle { get; init; }
@@ -44,7 +53,18 @@ public class SessionState : ITipableAmount
     public BotAdminOptions AdminOptions { get; set; } = new();
     public bool BotCanPinMessages { get; set; }
 
-    public SessionPhase Phase { get; set; } = SessionPhase.AcceptingPayments;
+    public SessionPhase Phase
+    {
+        get => phase;
+        set
+        {
+            phase = value;
+            phaseChangeTime = DateTime.UtcNow;
+        }
+    }
+    private SessionPhase phase = default;
+    private DateTime phaseChangeTime = DateTime.UtcNow;
+    public TimeSpan TimeInCurrentPhase => (DateTime.UtcNow - phaseChangeTime);
 
     public int? StatusMessageId { get; set; }
 
@@ -59,7 +79,18 @@ public class SessionState : ITipableAmount
     /// Max. budget, based on lottery participants' budgets.
     /// </summary>
     public double Budget => LotteryParticipants.Values.Sum();
+    /// <summary>
+    /// Remaining budget after subtracting already collected orders' amount.
+    /// </summary>
+    public double RemainingBudget => (Budget - OrdersFiatAmount);
 
+    public bool HasOrders => Participants.Values.Any(p => p.HasOrders);
+    public IEnumerable<OrderRecord> Orders => Participants.Values.SelectMany(p => p.Orders);
+    double IOrderableAmount.FiatAmount => OrdersFiatAmount;
+    public double OrdersFiatAmount => Orders.Sum(o => o.FiatAmount);
+    double IOrderableAmount.TipAmount => OrdersTipAmount;
+    public double OrdersTipAmount => Orders.Sum(o => o.TipAmount);
+    
     public Dictionary<ParticipantState, double> LotteryParticipants { get; } = new(); // User -> MaxBudget
     public Dictionary<ParticipantState, PayableFiatAmount> WinnerPayouts { get; } = new(); // User -> Payout info
     public ICollection<ParticipantState> Winners => WinnerPayouts.Keys;
@@ -84,9 +115,17 @@ public class SessionState : ITipableAmount
     #endregion
 }
 
+public record OrderRecord
+{
+    public required PaymentToken[] Tokens;
+    public required double FiatAmount;
+    public required double TipAmount;
+    public required DateTimeOffset Timestamp;
+}
+
 public record PendingJoinInfo(long ChatId, int WelcomeMessageId);
 
-public class ParticipantState : IUser, ITipableAmount
+public class ParticipantState : IUser, ITipableAmount, IOrderableAmount
 {
     public ParticipantState(User user) : this(user, new()) {}
     public ParticipantState(User user, BotUserOptions options)
@@ -100,14 +139,22 @@ public class ParticipantState : IUser, ITipableAmount
     public long UserId => User.Id;
     public BotUserOptions Options { get; }
 
+    public List<OrderRecord> Orders { get; } = new();
+    public bool HasOrders => (Orders.Count > 0);
+    double IOrderableAmount.FiatAmount => OrdersFiatAmount;
+    public double OrdersFiatAmount => Orders.Sum(o => o.FiatAmount);
+    double IOrderableAmount.TipAmount => OrdersTipAmount;
+    public double OrdersTipAmount => Orders.Sum(o => o.TipAmount);
+
     public List<PaymentRecord> Payments { get; } = new();
     public bool HasPayments => (Payments.Count > 0);
-    public long SatsAmount => (HasPayments ? Payments.Sum(p => p.SatsAmount) : 0);
-    public double TipAmount => (HasPayments ? Payments.Sum(p => p.TipAmount) : 0.0);
-    public double FiatAmount => (HasPayments ? Payments.Sum(p => p.FiatAmount) : 0.0F);
+    public long SatsAmount => Payments.Sum(p => p.SatsAmount);
+    public double TipAmount => Payments.Sum(p => p.TipAmount);
+    public double FiatAmount => Payments.Sum(p => p.FiatAmount);
 
     public int? StatusMessageId { get; set; }
     public int? PaymentHelpMessageId { get; set; }
+    public int? OrderConfirmationMessageId { get; set; }
     public int? BudgetSelectionMessageId { get; set; }
     public int? TipSelectionMessageId { get; set; }
 
@@ -141,9 +188,10 @@ public record PaymentRecord() : IUser, ITipableAmount
     public override string ToString() => $"{User}: {this}";
 }
 
-public class PendingPayment : IUser, ITipableAmount
+public class PendingPayment : IUser, ITipableAmount, IOrderableAmount
 {
-    public required User User { get; init; }
+    public required ParticipantState Participant { get; init; }
+    public User User => Participant.User;
     public long UserId => User.Id;
 
     public required string PaymentHash { get; init; }
@@ -206,9 +254,9 @@ public class PayableFiatAmount : PayableAmount, IFormattableAmount
 
 internal static partial class Ext
 {
-    public static void AppendPayments(this StringBuilder source, IEnumerable<PaymentRecord> payments)
+    public static void AppendOrders(this StringBuilder source, IEnumerable<OrderRecord> orders)
     {
-        foreach (var token in payments.SelectMany(p => p.Tokens))
+        foreach (var token in orders.SelectMany(p => p.Tokens))
         {
             var memo = string.IsNullOrWhiteSpace(token.Note) ? "" : $" - {token.Note}";
             source.AppendLine($"  • {token.FormatAmount()}{memo}");

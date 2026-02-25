@@ -55,15 +55,15 @@ internal static class SessionSummaryMessage
         }
         summary.AppendLine();
 
-        summary.AppendLine("*Payments:*");
+        summary.AppendLine("*Orders* in this session:");
         foreach (var participant in session.Participants.Values)
         {
             summary.AppendLine($"{participant.MarkdownDisplayName()}:");
-            summary.AppendPayments(participant.Payments);
+            summary.AppendOrders(participant.Orders);
         }
         summary.AppendLine();
         
-        summary.AppendLine($"Total: 💶 {session.FormatTotalFiatAmount()}");
+        summary.AppendLine($"Total: 💶 {session.FormatOrderedAmount()}");
         summary.AppendLine();
         summary.AppendLine($"⚡ Please create a *lightning invoice* for *{winnerSats.Format()}* and send it to me now.");
         summary.AppendLine($"ℹ️ Feel free to split the payout into multiple invoices if needed.");

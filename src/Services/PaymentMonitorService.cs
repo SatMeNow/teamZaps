@@ -97,16 +97,13 @@ public class PaymentMonitorService : BackgroundService
                         // Delete payment help message if it exists
                         if (participant.PaymentHelpMessageId is not null)
                         {
-                            try
-                            {
-                                await botClient.DeleteMessage(participant.UserId, participant.PaymentHelpMessageId!.Value, cancellationToken).ConfigureAwait(false);
-                            }
-                            catch (Exception)
-                            {
-                            }
-                            
+                            await botClient.DeleteMessageAsync(participant.UserId, participant.PaymentHelpMessageId!.Value, cancellationToken).ConfigureAwait(false);
                             participant.PaymentHelpMessageId = null;
                         }
+
+                        // If all participant invoices are paid, draw the lottery:
+                        if ((session.Phase == SessionPhase.WaitingForPayments) && session.PendingPayments.IsEmpty)
+                            await DrawLotteryAsync(session, cancellationToken).ConfigureAwait(false);
                         
                         // Update log
                         await liquidityLogService.LogAsync(cancellationToken).ConfigureAwait(false);
@@ -118,6 +115,31 @@ public class PaymentMonitorService : BackgroundService
                 }
             }
         }
+    }
+
+    public async Task DrawLotteryAsync(SessionState session, CancellationToken cancellationToken)
+    {
+        // Draw winners based on budget limits:
+        LotteryHelper.SelectWinners(session);
+        session.Phase = SessionPhase.WaitingForInvoice;
+
+        var winners = string.Join(", ", session.WinnerPayouts.Select(w => $"{w.Key} ({w.Value.FiatAmount.Format()})"));
+        logger.LogInformation("Winner(s) selected for session {Session}: {Winners}.", session, winners);
+
+        // Update recovery files (remove losers, add winner payouts):
+        var losers = session.Participants.Values.Except(session.Winners);
+        recoveryService.ClearLostSats(losers);
+        foreach (var winner in session.WinnerPayouts)
+            await recoveryService.WriteLostSatsAsync(winner.Key, winner.Value.SatsAmount, $"Winner payout for session *{session.ChatTitle}*").ConfigureAwait(false);
+
+        // Send winner notifications:
+        await SessionSummaryMessage.SendAsync(botClient, logger, session, cancellationToken).ConfigureAwait(false);
+        await WinnerMessage.SendAsync(session, botClient, workflowService, cancellationToken).ConfigureAwait(false);
+        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+
+        // Update user status messages for all participants:
+        foreach (var p in session.Participants.Values)
+            await UserStatusMessage.UpdateAsync(session, p, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
     }
 
 

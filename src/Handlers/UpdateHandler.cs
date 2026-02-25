@@ -15,7 +15,7 @@ public partial class UpdateHandler : IUpdateHandler
     public UpdateHandler(
         ILogger<UpdateHandler> logger, IHostEnvironment hostEnvironment,
         IOptions<BotBehaviorOptions> botBehaviour, IOptions<DebugSettings> debugSettings, IOptions<TelegramSettings> telegramSettings,
-        FileService<BotAdminOptions> adminOptionsService, FileService<BotUserOptions> userOptionsService, RecoveryService recoveryService,
+        FileService<BotAdminOptions> adminOptionsService, FileService<BotUserOptions> userOptionsService, RecoveryService recoveryService, PaymentMonitorService paymentMonitorService,
         LiquidityLogService liquidityLogService, SessionManager sessionManager, SessionWorkflowService workflowService, StatisticService statisticService,
         IEnumerable<IBackend> backends)
     {
@@ -29,7 +29,7 @@ public partial class UpdateHandler : IUpdateHandler
         this.adminOptionsService = adminOptionsService;
         this.userOptionsService = userOptionsService;
         this.recoveryService = recoveryService;
-        
+        this.paymentMonitorService = paymentMonitorService;
         this.liquidityLogService = liquidityLogService;
         this.sessionManager = sessionManager;
         this.workflowService = workflowService;
@@ -99,16 +99,8 @@ public partial class UpdateHandler : IUpdateHandler
                 // Delete expired messages:
                 if (ex.IsMessageExpiring(out var expireAfter))
                 {
-                    _ = Task.Run(async () =>
-                    {
-                        if (expireAfter is null)
-                            expireAfter = TimeSpan.FromSeconds(15);
-                        await Task.Delay(expireAfter!.Value, cancellationToken).ConfigureAwait(false);
-
-                        if (update.Type == UpdateType.Message)
-                            await botClient.DeleteMessageAsync(message, cancellationToken).ConfigureAwait(false);
-                        await botClient.DeleteMessageAsync(response, cancellationToken).ConfigureAwait(false);
-                    });
+                    var msg = (update.Type == UpdateType.Message) ? message : response;
+                    botClient.DeleteMessageAfterAsync(msg, expireAfter, cancellationToken);
                 }
             }
         }
@@ -216,20 +208,23 @@ public partial class UpdateHandler : IUpdateHandler
             case CallbackActions.CancelSession:
                 await HandleCancelSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
                 break;
+            case CallbackActions.ForceClose:
+                await HandleForceCloseSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
+                break;
 
-            case CallbackActions.MakePayment:
+            case CallbackActions.AddOrder:
                 var session = workflowService.TryGetSessionByUser(userId);
                 if (session is not null && session.Participants.TryGetValue(userId, out var participant))
                 {
                     var message = await botClient.SendMessage(chatId, 
-                        "💰 To make payments, simply send me *euro denominated* amounts like:\n" +
+                        "💰 To make orders, simply send me *euro denominated* amounts like:\n" +
                         "`3,99` or `5,50eur` or `5€`\n\n" +
                         "• Add a *note* to improve your overview:\n" +
                         "  `3,99 Beer`\n" +
                         "• *Combine payments* with `+` or `newline`:\n" +
                         "  `4,50 Pizza + 2,50 Water`\n\n" +
                         "⚡ I'll create Lightning invoices for you to pay!\n" +
-                        "ℹ️ You can also send amounts without using the `payment` button.", 
+                        "ℹ️ You can also send amounts without using the `order` button.", 
                         parseMode: ParseMode.Markdown,
                         cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -284,6 +279,7 @@ public partial class UpdateHandler : IUpdateHandler
     private readonly FileService<BotAdminOptions> adminOptionsService;
     private readonly FileService<BotUserOptions> userOptionsService;
     private readonly RecoveryService recoveryService;
+    private readonly PaymentMonitorService paymentMonitorService;
 
     private readonly LiquidityLogService liquidityLogService;
     private readonly SessionManager sessionManager;

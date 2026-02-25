@@ -44,7 +44,7 @@ internal static class PaymentMessage
     private static string Build(PendingPayment payment, PaymentStatus status)
     {
         var paymentReq = payment.PaymentRequest;
-        if (status == PaymentStatus.Paid)
+        if (status != PaymentStatus.Pending)
             paymentReq = paymentReq.ObfuscatePaymentRequest();
             
         var notes = payment.Tokens
@@ -52,17 +52,16 @@ internal static class PaymentMessage
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .ToArray();
             
-        var message = new StringBuilder();
-        message.AppendLine("⚡ *Lightning invoice*");
-        message.AppendLine();
-        message.AppendLineIf("• Notes: *{0}*", !notes.IsEmpty(), string.Join(", ", notes));
-        message.AppendLine($"• Amount: {payment.FormatTotalFiatAmount()}");
-        message.AppendLine($"• Status: *{status}*");
-        message.AppendLine();
-        message.AppendLine($"`{paymentReq}`");
-        message.AppendLine();
-        message.AppendLine($"{status.GetIcon()} {status.GetDescription()}");
-        
-        return message.ToString();
+        return (new StringBuilder()
+            .AppendLine("⚡ *Lightning invoice*")
+            .AppendLine()
+            .AppendLineIf("• Notes: *{0}*", !notes.IsEmpty(), string.Join(", ", notes))
+            .AppendLine($"• Amount: {payment.FormatOrderedAmount()}")
+            .AppendLine($"• Status: *{status}*")
+            .AppendLine()
+            .AppendLine($"`{paymentReq}`")
+            .AppendLine()
+            .AppendLine($"{status.GetIcon()} {status.GetDescription()}")
+            .ToString());
     }
 }

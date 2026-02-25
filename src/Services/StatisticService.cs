@@ -48,9 +48,6 @@ public class StatisticService : IHostedService
     protected BlockHeader CurrentBlock => indexerBackend.LastBlock ?? throw new InvalidOperationException("Latest block not available yet!");
     protected BlockHeader? ReferencedBlock { get; private set; }
     protected int ReferencedBlockHeight => (ReferencedBlock?.Height ?? 0);
-    
-    public long? AvailableEstimatedLockedSats => (botBehaviour.MaxEstimatedLockedSats - EstimatedLockedSats);
-    public long? EstimatedLockedSats => EstimateLockedSats();
     #endregion
 
 
@@ -214,8 +211,8 @@ public class StatisticService : IHostedService
         stats.TotalSessions++;
         stats.Duration += (ulong)session.Duration!.Value;
         stats.StartedAtBlock ??= session.StartedAtBlock!;
-        stats.TotalSats += (ulong)session.SatsAmount;
-        stats.TotalTippedSats += (ulong)participant.Payments.Sum(p => p.TipAmount);
+        stats.TotalSats += (ulong)participant.SatsAmount;
+        stats.TotalTippedSats += (ulong)participant.TipAmount;
         // Update lottery metrics:
         if (session.LotteryParticipants.ContainsKey(participant))
         {
@@ -251,96 +248,6 @@ public class StatisticService : IHostedService
             SatsPerSession = GetRanking(s => s.SatsPerSession),
             ParticipantsLatestMonth = GetRanking(s => s.ParticipantsLatestMonth),
         };
-    }
-    #endregion
-    #region Operation
-    /// <summary>
-    /// Estimate the locked sats all active sessions based on group- and user statistics.
-    /// </summary>
-    public long? EstimateLockedSats()
-    {
-        var estimatedSats = 0L;
-        foreach (var session in sessionManager.ActiveSessions)
-        {
-            var estSats = EstimateLockedSats(session);
-            if (estSats is null)
-                return (null);
-            estimatedSats += estSats.Value;
-        }
-        return (estimatedSats);
-    }
-    /// <summary>
-    /// Estimate the locked sats for the specified session based on group- and user statistics.
-    /// </summary>
-    private long? EstimateLockedSats(SessionState session)
-    {
-        try
-        {
-            if (session.StartedAtBlock is null)
-                return (GeneralStats!.SatsPerSession);
-
-            GroupStats.TryGetValue(session.ChatId, out var groupStat);
-
-            // Get actal session duration:
-            var currentSessionDuration = 0L;
-            if (session.Duration is null)
-                currentSessionDuration = (CurrentBlock.Height - session.StartedAtBlock!.Height);
-            else
-                currentSessionDuration = session.Duration!.Value;
-
-            // Estimate expected session duration in blocks:
-            var expectedSessionDuration = 0L;
-            if (session.Duration is not null)
-                expectedSessionDuration = session.Duration!.Value;
-            else if (groupStat is not null)
-                expectedSessionDuration = groupStat.DurationPerSession;
-            else if (GeneralStats is not null)
-                expectedSessionDuration = GeneralStats!.DurationPerSession;
-            if (expectedSessionDuration == 0)
-                expectedSessionDuration = (long)AverageDurationPerSession.ToBlocks(); // Fallback
-
-            // Get factor to indicate session maturity:
-            var maturityFactor = 0.0F;
-            if (currentSessionDuration < expectedSessionDuration)
-                maturityFactor = (1.0F - (currentSessionDuration / (float)expectedSessionDuration));
-
-            // Calculate estimated sats based on participant statistics:
-            var estimatedSats = 0L;
-            var estimatedUsers = 0;
-            foreach (var user in session.Participants)
-            {
-                if (userStats.TryGetValue(user.Key, out var userStat))
-                {
-                    var userEstimatedSats = (userStat.SatsPerBlock * expectedSessionDuration);
-                    var userCurrentSats = user.Value.SatsAmount;
-                    // Shift estimated sats towards current sats based on maturity factor:
-                    var estSats = (long)(userCurrentSats + (userEstimatedSats - userCurrentSats) * maturityFactor);
-                    estimatedSats += estSats;
-                    estimatedUsers++;
-                }
-            }
-
-            // Account for missing participants:
-            var expectedParticipants = (groupStat?.ParticipantsPerSession ?? GeneralStats!.ParticipantsPerSession);
-            var missingParticipants = (expectedParticipants - estimatedUsers);
-            if (missingParticipants > 0)
-            {
-                var avgSatsPerParticipant = (groupStat?.SatsPerParticipant ?? GeneralStats!.SatsPerParticipant);
-                var missingSats = (long)(missingParticipants * avgSatsPerParticipant * maturityFactor);
-                estimatedSats += missingSats;
-            }
-
-            return (estimatedSats);
-        }
-        catch (Exception ex) when (GeneralStats is null)
-        {
-            logger.LogWarning(ex, "Failed to estimate locked sats for session {Session} as general statistics are not available!", session);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to estimate locked sats for session {Session}.", session);
-        }
-        return (null);
     }
     #endregion
 
