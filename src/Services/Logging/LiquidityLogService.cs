@@ -40,7 +40,15 @@ public class LiquidityLogService : IHostedService
 {
     #region Constants
     private static readonly string LogPath = Path.Combine(Common.LogPath, "liquidity.csv");
-    private static readonly string[] Columns = [ "Timestamp", "Tag", "Participants", "Sessions", PaymentCurrency.Sats.GetDescription(), BotBehaviorOptions.AcceptedFiatCurrency.GetDescription() ];
+    private static readonly string[] Columns = [
+        "Timestamp",
+        "Tag",
+        "Participants",
+        "Sessions",
+        $"Ordered {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()}",
+        $"Locked {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()}",
+        $"Locked {PaymentCurrency.Sats.GetDescription()}"
+    ];
     #endregion
 
 
@@ -82,14 +90,15 @@ public class LiquidityLogService : IHostedService
             {
                 var participantCount = sessionManager.ActiveParticipants.Count();
                 var sessionCount = sessionManager.ActiveSessions.Count();
+                var orderedFiat = sessionManager.TotalOrderedFiat.ToString("N2", CultureInfo.InvariantCulture);
+                var lockedFiat = sessionManager.TotalLockedFiat.ToString("N2", CultureInfo.InvariantCulture);
                 var lockedSats = sessionManager.TotalLockedSats;
-                var lockedFiat = sessionManager.TotalLockedFiat;
 
-                line += $"{null},{participantCount},{sessionCount},{lockedSats},{lockedFiat.ToString("N2", CultureInfo.InvariantCulture)}";
+                line += $"{null},{participantCount},{sessionCount},{orderedFiat},{lockedFiat},{lockedSats}";
             }
             else
                 // Write specific tag to file
-                line += $"#{tag},{0},{0},{0},{0}";
+                line += $"#{tag},,,,,";
 
             await File.AppendAllTextAsync(LogPath, (line + "\n"), cancellationToken);
 

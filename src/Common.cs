@@ -46,8 +46,12 @@ public enum PaymentStatus
     Pending,
     [Icon("✅"), Description("*Thank you!* Your payment has been confirmed.")]
     Paid,
-    [Icon("❌"), Description("This invoice has *expired*.")]
-    Expired
+    [Icon("⛔"), Description("This invoice has *expired*.")]
+    Expired,
+    [Icon("❌"), Description("This invoice has been *canceled*.")]
+    Canceled,
+    [Icon("⚠️"), Description("This invoice has been *removed*. Please *ignore* and *do not pay* it!")]
+    Removed
 }
 public enum PaymentCurrency
 {
@@ -73,6 +77,11 @@ public interface ITipableAmount : IFormattableAmount
 {
     double TipAmount { get; }
     double TotalFiatAmount => (TipAmount + FiatAmount);
+}
+public interface IOrderableAmount
+{
+    double FiatAmount { get; }
+    double TipAmount { get; }
 }
 
 
@@ -140,9 +149,9 @@ public static partial class Extensions
     public static string FormatTip(this byte? source) => FormatTip(source ?? 0);
     public static string FormatTip(this byte source) => (source <= 0) ? "🚫 None" : $"{source}%";
 
-    public static string? FormatTotalFiatAmount(this ITipableAmount source)
+    public static string? FormatOrderedAmount(this IOrderableAmount source)
     {
-        var amount = $"*{source.TotalFiatAmount.Format()}*";
+        var amount = $"*{source.FiatAmount.Format()}*";
         var tipAmount = source.TipAmount;
         if (tipAmount > 0.01)
             amount += $" (inkl. {tipAmount.Format()} tip)";

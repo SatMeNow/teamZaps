@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using TeamZaps.Utils;
 using System.Diagnostics;
 using TeamZaps.Session;
+using TeamZaps.Handlers;
 
 namespace TeamZaps.Services;
 
@@ -46,6 +47,33 @@ public class SessionWorkflowService
 
     public Task<ParticipantState> EnsureParticipantAsync(SessionState session, User user) => sessionManager.GetOrAddParticipantAsync(session, user);
 
+    /// <summary>
+    /// Removes a participant from the session.
+    /// </summary>
+    /// <remarks>
+    /// Does not cancel pending invoices! Do that before calling this if needed.
+    /// </remarks>
+    public ParticipantState? RemoveParticipant(SessionState session, long userId)
+    {
+        if (!session.Participants.TryRemove(userId, out var removed))
+            return (null);
+
+        // Remove from lottery:
+        session.LotteryParticipants.Remove(removed);
+
+        // Remove pending payment(s):
+        session.PendingPayments.Values
+            .Where(p => p.UserId == userId)
+            .Select(p => p.PaymentHash)
+            .ToArray()
+            .ForEach(h => session.PendingPayments.TryRemove(h, out _));
+
+        // Remove winner payout if selected:
+        session.WinnerPayouts.Remove(removed);
+
+        return (removed);
+    }
+
 
     private readonly SessionManager sessionManager;
     private readonly BotBehaviorOptions botBehaviour;
@@ -72,14 +100,14 @@ public class SessionManager : IFormattableAmount
         .SelectMany(s => s.LotteryParticipants.Values)
         .Sum();
 
+    long IFormattableAmount.SatsAmount => TotalLockedSats;
+    double IFormattableAmount.FiatAmount => TotalLockedFiat;
     public long? AvailableLockedSats => (botBehaviour.MaxLockedSats - TotalLockedSats);
     public long TotalLockedSats => ActiveSessions.Sum(s => s.SatsAmount - s.PayedAmount + s.PendingPayments.Values
         .Cast<IFormattableAmount>()
         .Sum(p => p.SatsAmount));
-    
-    long IFormattableAmount.SatsAmount => TotalLockedSats;
-    double IFormattableAmount.FiatAmount => TotalLockedFiat;
     public double TotalLockedFiat => ActiveSessions.Sum(s => s.FiatAmount - s.PayedFiatAmount);
+    public double TotalOrderedFiat => ActiveSessions.Sum(s => s.OrdersFiatAmount);
     #endregion
 
 

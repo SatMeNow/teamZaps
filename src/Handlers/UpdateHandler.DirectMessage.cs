@@ -178,18 +178,17 @@ public partial class UpdateHandler
                 switch (session.Phase)
                 {
                     case SessionPhase.WaitingForLotteryParticipants:
-                        throw new InvalidOperationException("Payments are blocked until someone enters the lottery!\n\n" +
+                        throw new InvalidOperationException("Orders are blocked until someone enters the lottery!\n\n" +
                             "Use the 🎰 Enter Lottery button in your welcome message or ask someone to enter the lottery first.")
                             .AddLogLevel(LogLevel.Warning)
                             .AnswerUser();
 
-                    case SessionPhase.AcceptingPayments:
-                        await ProcessPrivatePaymentAsync(botClient, session, user, tokens, text, cancellationToken).ConfigureAwait(false);
+                    case SessionPhase.AcceptingOrders:
+                        await ProcessPrivateOrderAsync(botClient, session, user, tokens, text, cancellationToken).ConfigureAwait(false);
                         return (true);
 
                     default:
-                        throw new InvalidOperationException($"Payments are not available in current session phase `{session.Phase.GetDescription()}`.")
-                            .AddLogLevel(LogLevel.Warning)
+                        throw new InvalidOperationException($"Orders are not available in current session phase `{session.Phase.GetDescription()}`.")                            .AddLogLevel(LogLevel.Warning)
                             .AnswerUser();
                 }
             }
@@ -263,11 +262,11 @@ public partial class UpdateHandler
         // Add user to lottery with budget
         session.LotteryParticipants[participant] = budget;
 
-        // Handle first lottery participant - unlock payments
+        // Handle first lottery participant - unlock orders
         if (session.Phase == SessionPhase.WaitingForLotteryParticipants)
         {
-            session.Phase = SessionPhase.AcceptingPayments;
-            logger.LogInformation("First lottery participant {User} in chat {ChatId}, payments unlocked.", user, chatId);
+            session.Phase = SessionPhase.AcceptingOrders;
+            logger.LogInformation("First lottery participant {User} in chat {ChatId}, orders unlocked.", user, chatId);
         }
         else
             logger.LogInformation("User {User} joined lottery in chat {ChatId} with {Budget} budget.", user, chatId, budget.Format());
@@ -332,78 +331,61 @@ public partial class UpdateHandler
     }
 
 
-    private async Task ProcessPrivatePaymentAsync(ITelegramBotClient botClient, SessionState session, User user, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
+    private async Task ProcessPrivateOrderAsync(ITelegramBotClient botClient, SessionState session, User user, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
     {
         var participant = session.Participants[user.Id];
-        // Process each token and create invoices
         foreach (var tokenGrp in tokens.GroupBy(t => t.Currency))
         {
             var grpCurrency = tokenGrp.Key;
-            var memo = $"{session.ChatTitle}'{user} zapped";
 
-            // Ensure invoice to be payed in Euro only
+            // Ensure order to be in the accepted fiat currency only:
             if (grpCurrency != BotBehaviorOptions.AcceptedFiatCurrency)
-                throw new NotSupportedException($"Only {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()} payments are supported.")
+                throw new NotSupportedException($"Only {BotBehaviorOptions.AcceptedFiatCurrency.GetDescription()} orders are supported.")
                     .AnswerUser();
 
-            // Calculate total invoice amount
+            // Calculate total order amount:
             var grpAmount = (double)tokenGrp.Sum(tGrp => tGrp.Amount);
             var tipAmount = 0.0;
             if (participant.Options.Tip > 0)
                 tipAmount = ((grpAmount * participant.Options.Tip!.Value) / 100.0);
-            var invoiceFiatAmount = (grpAmount + tipAmount);
-            var invoiceSatsAmount = exchangeRateBackend.ToSats(invoiceFiatAmount);
+            var orderFiatAmount = (grpAmount + tipAmount);
 
-            // Check if this payment would exceed the sessions's remaining budget
-            if (!CheckServerBudgetLimit(invoiceFiatAmount))
-                throw new InvalidOperationException($"Payment rejected!\n" +
-                    $"Your payment of {invoiceFiatAmount.Format()} would exceed the session's total budget 👀\n\n" +
-                    $"Available budget: {sessionManager.AvailableServerBudget!.Value.Format()}")
+            // Check if this order would exceed the session's remaining budget:
+            if (orderFiatAmount > session.RemainingBudget)
+                throw new InvalidOperationException($"Order rejected!\n" +
+                    $"Your order of {orderFiatAmount.Format()} would exceed the session's remaining budget.\n\n" +
+                    $"Remaining session budget: {session.RemainingBudget.Format()}")
                     .AddLogLevel(LogLevel.Warning)
                     .AnswerUser();
 
-            // Check if this payment would exceed liquidity limits
-            if (!CheckLockedSatsLimit(invoiceSatsAmount))
+            // Store the order:
+            var order = new OrderRecord
             {
-                await liquidityLogService.LogAsync(LogTag.RejectPayment, cancellationToken).ConfigureAwait(false);
-                throw new InvalidOperationException($"Payment rejected!\n" +
-                    $"Your payment of {invoiceFiatAmount.Format()} would exceed my total available liquidity 🫣")
-                    .AddLogLevel(LogLevel.Warning)
-                    .AnswerUser();
-            }
+                Tokens = tokenGrp.ToArray(),
+                FiatAmount = orderFiatAmount,
+                TipAmount = tipAmount,
+                Timestamp = DateTimeOffset.Now
+            };
+            participant.Orders.Add(order);
 
-            try
-            {
-                var invoice = await lightningBackend.CreateInvoiceAsync(invoiceSatsAmount, memo, cancellationToken).ConfigureAwait(false);
-                if (invoice.SatsAmount is not null)
-                    Debug.Assert(invoice.SatsAmount == invoiceSatsAmount);
-
-                // Store as pending payment
-                var pending = new PendingPayment
-                {
-                    User = user,
-                    PaymentHash = invoice!.PaymentHash,
-                    PaymentRequest = invoice.PaymentRequest,
-                    Tokens = tokenGrp.ToArray(),
-                    SatsAmount = invoiceSatsAmount,
-                    TipAmount = tipAmount,
-                    FiatAmount = invoiceFiatAmount,
-                    Currency = grpCurrency,
-                    CreatedAt = DateTimeOffset.Now
-                };
-
-                session.PendingPayments.TryAdd(invoice.PaymentHash, pending);
-
-                var message = await PaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
-                pending.MessageId = message.MessageId;
-
-                logger.LogInformation("Created invoice for user {User} in session {Session}: {InvoiceAmount}.", user, session, invoiceFiatAmount.Format(grpCurrency));
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Failed to create invoice for {invoiceFiatAmount.Format(grpCurrency)}!", ex);
-            }
+            // Update log
+            await liquidityLogService.LogAsync(cancellationToken).ConfigureAwait(false);
+            
+            logger.LogInformation("Order registered for user {User} in session {Session}: {OrderAmount}.", user, session, orderFiatAmount.Format(grpCurrency));
         }
+
+        // Confirm order and update status messages:
+        if (await botClient.DeleteMessageAsync(participant.UserId, participant.OrderConfirmationMessageId, cancellationToken).ConfigureAwait(false))
+            participant.OrderConfirmationMessageId = null;
+        var confirmMsg = await botClient.SendMessage(participant.UserId,
+            "✅ *Order registered!*\n\n" +
+            "_Lightning invoices will be sent to everyone once the session host closes the order phase._",
+            parseMode: ParseMode.Markdown,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        participant.OrderConfirmationMessageId = confirmMsg.MessageId;
+
+        await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
     }
     private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, User user, string bolt11, CancellationToken cancellationToken)
     {
@@ -487,7 +469,7 @@ public partial class UpdateHandler
             if (session.Phase.IsClosed())
             {
                 // Cancel outstanding unpaid invoices:
-                await CancelPendingInvoicesAsync(session, cancellationToken).ConfigureAwait(false);
+                await CancelPendingInvoicesAsync(botClient, session, cancellationToken).ConfigureAwait(false);
 
                 // Clean up session
                 workflowService.TryCloseSession(session, false);
@@ -571,7 +553,6 @@ public partial class UpdateHandler
         diag.AppendLine($"• Active sessions: *{sessionManager.ActiveSessions.Count()}*{maxSessions}");
 
         appendLimitInfo("Budget", sessionManager.ConsumedServerBudget, sessionManager.AvailableServerBudget, botBehaviour.MaxBudget, "unlimited", BotBehaviorOptions.AcceptedFiatCurrency);
-        appendLimitInfo("Estimated sats locked", (statisticService.EstimatedLockedSats ?? 0), statisticService.AvailableEstimatedLockedSats, botBehaviour.MaxEstimatedLockedSats, null, PaymentCurrency.Sats);
         appendLimitInfo("Sats locked", sessionManager.TotalLockedSats, sessionManager.AvailableLockedSats, botBehaviour.MaxLockedSats, "💤 none", PaymentCurrency.Sats);
 
         var events = statisticService.GeneralStats?.Events

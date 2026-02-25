@@ -66,14 +66,12 @@ public static class CallbackActions
     public const string JoinSession = "joinSession";
     public const string CloseSession = "closeSession";
     public const string CancelSession = "cancelSession";
-    public const string MakePayment = "makePayment";
+    public const string AddOrder = "addOrder";
     public const string SelectBudget = "selectBudget";
     public const string SetTip = "setTip";
     public const string SelectTip = "selectTip";
     public const string AdminOptions = "adminOptions";
-    public const string RecoverCreate = "recoverCreate";
-    public const string RecoverCancel = "recoverCancel";
-    public const string RecoverInvoice = "recoverInvoice";
+    public const string ForceClose = "forceClose";
 }
 
 public class TelegramBotService : BackgroundService
@@ -272,6 +270,12 @@ internal static partial class Ext
         return (null);
     }
     
+    public static void DeleteMessageAfterAsync(this ITelegramBotClient source, Message message, TimeSpan? after, CancellationToken cancellationToken) => Task.Run(async () =>
+    {
+        after ??= TimeSpan.FromSeconds(15);
+        await Task.Delay(after.Value, cancellationToken).ConfigureAwait(false);
+        await source.DeleteMessageAsync(message, cancellationToken).ConfigureAwait(false);
+    });
     public static Task<bool> DeleteMessageAsync(this ITelegramBotClient source, Message message, CancellationToken cancellationToken) => DeleteMessageAsync(source, message.Chat.Id, message.MessageId, cancellationToken);
     public static async Task<bool> DeleteMessageAsync(this ITelegramBotClient source, long chatId, int? messageId, CancellationToken cancellationToken)
     {

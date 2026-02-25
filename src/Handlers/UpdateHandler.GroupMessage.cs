@@ -80,12 +80,13 @@ public partial class UpdateHandler
         
         // Check server-wide liquidity limits
         var minBudget = botBehaviour.BudgetChoices.Min();
-        if (!CheckServerBudgetLimit(minBudget) ||
-            !CheckEstimatedLockedSatsLimit(minBudget) ||
-            !CheckLockedSatsLimit(minBudget))
+        // [Hint] Following checks are obsolete, since we have introduced a dedicated payment phase (which is expected very short):
+        // - CheckEstimatedLockedSatsLimit(minBudget)
+        // - CheckLockedSatsLimit(minBudget)
+        if (!CheckServerBudgetLimit(minBudget))
         {
             await liquidityLogService.LogAsync(LogTag.RejectCreateSession, cancellationToken).ConfigureAwait(false);
-            throw new InvalidOperationException("Sorry, starting a new session would exceed my total available liquidity 🫣")
+            throw new InvalidOperationException("Sorry, starting a new session would *exceed my total available liquidity* 🫣")
                 .AddHelp("Please try again later when some budgets are available.")
                 .AddLogLevel(LogLevel.Information)
                 .AnswerUser()
@@ -131,38 +132,49 @@ public partial class UpdateHandler
                 .AnswerUser()
                 .ExpireMessage();
 
-        if (session.Phase > SessionPhase.AcceptingPayments)
-            throw new InvalidOperationException("Session has already moved past the payment phase.")
+        if (session.Phase > SessionPhase.AcceptingOrders)
+            throw new InvalidOperationException("Session has already moved past the order phase.")
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser()
                 .ExpireMessage();
 
-        if (session.HasPayments)
+        // Check for available liquidity
+        var totalSats = exchangeRateBackend.ToSats(session.OrdersFiatAmount);
+        if (!CheckLockedSatsLimit(totalSats))
+            throw new InvalidOperationException("Sorry, there is *not enough liquidity available* right now to cover all invoices 🫣")
+                .AddHelp("Please try to *close the session again* in a few minutes.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser()
+                .ExpireMessage();
+
+        if (session.HasOrders)
         {
-            // Cancel outstanding unpaid invoices:
-            await CancelPendingInvoicesAsync(session, cancellationToken).ConfigureAwait(false);
+            // Transition to payment phase - create one consolidated invoice per participant:
+            session.Phase = SessionPhase.WaitingForPayments;
 
-            // Draw winners based on budget limits
-            SelectWinners(session);
-            session.Phase = SessionPhase.WaitingForInvoice;
+            foreach (var participant in session.Participants.Values.Where(p => p.HasOrders))
+            {
+                try
+                {
+                    await CreateParticipantInvoiceAsync(botClient, session, participant, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to create invoice for participant {User} in session {Session}.", participant, session);
+                }
+            }
 
-            var winners = string.Join(", ", session.WinnerPayouts.Select(w => $"{w.Key} ({w.Value.FiatAmount.Format()})"));
-            logger.LogInformation("Winner(s) selected for session {Session}: {Winners}.", session, winners);
+            logger.LogInformation("Order phase closed for session {Session}, invoices sent to {Count} participant(s).", session, session.PendingPayments.Count);
 
-            // Update recovery files(remove losers, add winner payouts):
-            var losers = session.Participants.Values.Except(session.Winners);
-            recoveryService.ClearLostSats(losers);
-            foreach (var winner in session.WinnerPayouts)
-                await recoveryService.WriteLostSatsAsync(winner.Key, winner.Value.SatsAmount, $"Winner payout for session *{session.ChatTitle}*").ConfigureAwait(false);
-            
-            // Update session status messages
-            await SessionSummaryMessage.SendAsync(botClient, logger, session, cancellationToken).ConfigureAwait(false);
-            await WinnerMessage.SendAsync(session, botClient, workflowService, cancellationToken).ConfigureAwait(false);
+            // Update session status messages:
             await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
-            
-            // Update user status messages for all participants
+
+            // Update user status messages for all participants:
             foreach (var participant in session.Participants.Values)
                 await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+
+            var payMessage = await botClient.SendMessage(chatId, $"⚡ *Invoices have been sent* to all participants.\n\nPlease check your private chat and *pay now*.", parseMode: ParseMode.Markdown, cancellationToken: cancellationToken).ConfigureAwait(false);
+            botClient.DeleteMessageAfterAsync(payMessage, TimeSpan.FromMinutes(1), cancellationToken);
         }
         else
             await HandleCancelSessionAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false);
@@ -183,7 +195,7 @@ public partial class UpdateHandler
         if (workflowService.TryCloseSession(chatId, true))
         {
             // Cancel outstanding unpaid invoices:
-            await CancelPendingInvoicesAsync(session!, cancellationToken).ConfigureAwait(false);
+            await CancelPendingInvoicesAsync(botClient, session!, cancellationToken).ConfigureAwait(false);
 
             await SessionStatusMessage.UpdateAsync(session!, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
             
@@ -199,6 +211,88 @@ public partial class UpdateHandler
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser()
                 .ExpireMessage();   
+    }
+    private async Task HandleForceCloseSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
+    {
+        var session = workflowService.TryGetSessionByChat(chatId);
+        if (session is null)
+            throw new InvalidOperationException("No active session in this group.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser()
+                .ExpireMessage();
+
+        // Admin-only, unconditionally:
+        if (!await IsUserAdminAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false))
+            throw new InvalidOperationException("Only group administrators can force close a session.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser()
+                .ExpireMessage();
+
+        if (session.Phase != SessionPhase.WaitingForPayments)
+            throw new InvalidOperationException("Session is not in the payment phase.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser()
+                .ExpireMessage();
+
+        // Check if removing unpaid participants would drop the budget below already paid amount:
+        var pendingPayments = session.PendingPayments.Values.ToArray();
+        var removedBudget = session.PendingPayments.Values
+            .Select(p => session.LotteryParticipants[p.Participant])
+            .Sum();
+        var remainingBudget = (session.Budget - removedBudget);
+        if (remainingBudget < session.OrdersFiatAmount)
+            throw new InvalidOperationException($"I'm sorry, but we *cannot force-close*!\n\n" + 
+                $"Removing unpaid participants would *drop the session budget* below the already collected *{session.FiatAmount.Format()}* 🤷‍♂️")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser()
+                .ExpireMessage();
+
+        #if !DEBUG
+        // Enforce minimum payment phase duration:
+        if (!session.CanForceClose)
+        {
+            var remaining = session.RemainingForceCloseTime;
+            throw new InvalidOperationException($"Don't hurry! *Let's wait* another {remaining:mm\\:ss} minute(s) to force close this session.")
+                .AddLogLevel(LogLevel.Information)
+                .AnswerUser()
+                .ExpireMessage();
+        }
+        #endif
+
+        logger.LogInformation("Force closing payment phase for session {Session}.", session);
+            
+        if (session.HasPayments)
+        {
+            // Remove unpaid participants from the session and cancel their invoices:
+            foreach (var pending in pendingPayments)
+            {
+                var canceledInvoice = await CancelPendingInvoiceAsync(botClient, session, pending.PaymentHash, cancellationToken).ConfigureAwait(false);
+
+                workflowService.RemoveParticipant(session, pending.UserId);
+
+                // Notify user:
+                var removeText = $"⚠️ You have been *removed* from the session in *{session.ChatTitle}*!\n\n";
+                if (!canceledInvoice)
+                    removeText += "☝️ So *don't pay your lightning invoice!*\n";
+                removeText += $"Instead, you will have to *pay your bill* of {pending.FiatAmount.Format()} by your own *in cash*.";
+                await botClient.SendMessage(pending.UserId, removeText, parseMode: ParseMode.Markdown, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            Debug.Assert(session.PendingPayments.IsEmpty);
+
+            // Notify group:
+            var removedUsers = string.Join("\n", pendingPayments
+                .Select(p => $"• {p.Participant.MarkdownDisplayName()}"));
+            await botClient.SendMessage(chatId, $"ℹ️ Session has been *force-closed*.\n\n" +
+                $"⚠️ The following *participant(s)* did not pay in time and *have been removed*:\n{removedUsers}\n\n" +
+                $"They will need to pay their own bills *in cash*.",
+                parseMode: ParseMode.Markdown, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
+        if (session.HasPayments)
+            await paymentMonitorService.DrawLotteryAsync(session, cancellationToken).ConfigureAwait(false);
+        else
+            // Regular cancel session if there are no payments:
+            await HandleCancelSessionAsync(botClient, chatId, user, cancellationToken).ConfigureAwait(false);
     }
     private async Task HandleJoinSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
@@ -216,7 +310,7 @@ public partial class UpdateHandler
                 .AnswerUser()
                 .ExpireMessage();
         // Check if session is accepting new participants
-        if (session.Phase > SessionPhase.AcceptingPayments)
+        if (session.Phase > SessionPhase.AcceptingOrders)
             throw new InvalidOperationException("Session is currently not accepting new participants.")
                 .AddLogLevel(LogLevel.Information)
                 .AnswerUser()
@@ -367,66 +461,75 @@ public partial class UpdateHandler
 
 
     #region Helper
-    private async Task CancelPendingInvoicesAsync(SessionState session, CancellationToken cancellationToken)
+    private async Task CancelPendingInvoicesAsync(ITelegramBotClient botClient, SessionState session, CancellationToken cancellationToken)
     {
-        if (lightningBackend is ISupportsCancelInvoice cancelBackend)
+        foreach (var paymentHash in session.PendingPayments.Keys)
+            await CancelPendingInvoiceAsync(botClient, session, paymentHash, cancellationToken).ConfigureAwait(false);
+
+        Debug.Assert(session.PendingPayments.IsEmpty);
+    }
+    private async Task<bool> CancelPendingInvoiceAsync(ITelegramBotClient botClient, SessionState session, string paymentHash, CancellationToken cancellationToken)
+    {
+        var result = false;
+        try
         {
-            foreach (var pending in session.PendingPayments.Values)
+            if (session.PendingPayments.TryRemove(paymentHash, out var removed))
             {
-                try
+                if (lightningBackend is ISupportsCancelInvoice cancelBackend)
                 {
-                    await cancelBackend.CancelInvoiceAsync(pending.PaymentHash, cancellationToken).ConfigureAwait(false);
-                    logger.LogInformation("Cancelled pending invoice {PaymentHash} for session {Session}.", pending.PaymentHash, session);
+                    result = await cancelBackend.CancelInvoiceAsync(paymentHash, cancellationToken).ConfigureAwait(false);
+                    logger.LogInformation("Cancelled pending invoice {PaymentHash} for session {Session}.", paymentHash, session);
                 }
-                catch (Exception ex)
+
+                if (removed.MessageId is not null)
                 {
-                    logger.LogWarning(ex, "Failed to cancel pending invoice {PaymentHash} for session {Session}.", pending.PaymentHash, session);
+                    var status = (result ? PaymentStatus.Canceled : PaymentStatus.Removed);
+                    await PaymentMessage.UpdateAsync(removed, status, botClient, logger, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
-    }
-    private int SelectWinners(SessionState session)
-    {
-        Debug.Assert(session.WinnerPayouts.IsEmpty());
-
-        var remainingAmount = ((ITipableAmount)session).TotalFiatAmount;
-
-        // Shuffle participants for fair random selection
-        var seed = HashCode.Combine(Environment.TickCount, session.ChatTitle, session.StartedAtBlock?.Height, session.Participants.Count, remainingAmount);
-        var random = new Random(seed);
-        var lotteryParticipants = session.LotteryParticipants
-            .OrderBy(_ => random.Next())
-            .ToArray();
-
-        foreach (var participant in lotteryParticipants)
+        catch (Exception ex)
         {
-            if (remainingAmount <= 0)
-                break;
-
-            var userId = participant.Key;
-            var budget = participant.Value;
-            var amountToPay = Math.Min(budget, remainingAmount);
-            var satsAmount = CalculateWinnerSats(session, amountToPay);
-            
-            session.WinnerPayouts[participant.Key] = new PayableFiatAmount(amountToPay, satsAmount);
-
-            remainingAmount -= amountToPay;
+            logger.LogWarning(ex, "Failed to cancel pending invoice {PaymentHash} for session {Session}.", paymentHash, session);
         }
-
-        return (session.WinnerPayouts.Count);
+        return (result);
     }
+    private int SelectWinners(SessionState session) => LotteryHelper.SelectWinners(session);
 
     private bool CheckLockedSatsLimit(long requestedBudget) => (requestedBudget <= (sessionManager.AvailableLockedSats ?? long.MaxValue));
-    private bool CheckEstimatedLockedSatsLimit(long requestedBudget) => (requestedBudget <= (statisticService.AvailableEstimatedLockedSats ?? long.MaxValue));
     private bool CheckServerBudgetLimit(double requestedBudget) => (requestedBudget <= (sessionManager.AvailableServerBudget ?? double.MaxValue));
 
-    private static long CalculateWinnerSats(SessionState session, double fiatAmount)
+    private async Task CreateParticipantInvoiceAsync(ITelegramBotClient botClient, SessionState session, ParticipantState participant, CancellationToken cancellationToken)
     {
-        // Don't use any exchange rate here!
-        // > Just calculate proportionally to the total fiat and sats amounts.
-        var totalFiat = ((ITipableAmount)session).TotalFiatAmount;
-        var totalSats = session.SatsAmount;
-        return (long)(totalSats * (fiatAmount / totalFiat));
+        var user = participant.User;
+        var totalFiat = participant.OrdersFiatAmount;
+        var totalTip = participant.OrdersTipAmount;
+        var totalSats = exchangeRateBackend.ToSats(totalFiat);
+        var allTokens = participant.Orders.SelectMany(o => o.Tokens).ToArray();
+        var memo = $"{session.ChatTitle}: invoice for {user}";
+
+        var invoice = await lightningBackend.CreateInvoiceAsync(totalSats, memo, cancellationToken).ConfigureAwait(false);
+
+        // Store as pending payment:
+        var pending = new PendingPayment
+        {
+            Participant = participant,
+            PaymentHash = invoice.PaymentHash,
+            PaymentRequest = invoice.PaymentRequest,
+            Tokens = allTokens,
+            SatsAmount = totalSats,
+            TipAmount = totalTip,
+            FiatAmount = totalFiat,
+            Currency = BotBehaviorOptions.AcceptedFiatCurrency,
+            CreatedAt = DateTimeOffset.Now
+        };
+        session.PendingPayments.TryAdd(invoice.PaymentHash, pending);
+
+        // Send invoice to participant:
+        var message = await PaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
+        pending.MessageId = message.MessageId;
+
+        logger.LogInformation("Created payment invoice for participant {User} in session {Session}: {Amount}.", user, session, totalFiat.Format());
     }
 
     private async Task<BotAdminOptions> GetAdminOptions(SessionState? session, long chatId)

@@ -9,14 +9,15 @@ Team Zaps helps groups coordinate Lightning payments for shared expenses. When B
 Your team meets up for food and drinks, but the venue doesn't accept Bitcoin? Here's how Team Zaps solves this:
 
 1. **Start a Session** - Someone creates a Team Zaps session in your Telegram group
-2. **Join & Pay** - Everyone joins the session and sends Lightning payments for their orders
-3. **Lottery Draw** - One participant is randomly selected to pay the bill in fiat  
-4. **Winner Takes All** - The selected person receives all the Lightning payments as compensation
+2. **Join & Order** - Everyone joins the session and submits their orders in private chat
+3. **Payment Phase** - Once the admin closes the order phase, everyone receives an invoice and pays in sats
+4. **Lottery Draw** - Once all payments are confirmed, one participant is randomly selected to pay the bill in fiat
+5. **Winner Takes All** - The selected person receives all the Lightning payments as compensation for covering the fiat bill
 
 ### The Result 🎉
 - ✅ The venue gets their worthless fiat money
 - ✅ Everyone pays for their meal in Bitcoin
-- ✅ The winner effectively swaps fiat for sats at market rate
+- ✅ The winner effectively swaps fiat for sats at market rate — KYC-free, no exchange required
 - ✅ No one needs to deal with currency exchange
 
 ## 🚀 Getting Started
@@ -58,17 +59,20 @@ How to participate:
   
 - Click the pinned session message's **🎯 Join** button to join a session.
 - If you're willing to pay the bill in fiat, click **🎰 Enter Lottery**.
-- For payments and private info, open a private chat with the bot and send amounts like:
+- To submit your orders, open a private chat with the bot and send your items like:
   - `5.99 beer`
   - `12.50 pizza + 3.00 tip`
   - Multiple lines are allowed.
+- Once the order phase is closed, you'll receive a Lightning invoice in private chat — pay it to confirm your participation.
 
 Payment flow summary:
 1. Join session in group
 2. Enter lottery (optional)
-3. Send payments in private chat
-4. Admin closes session → winner is drawn
-5. Winner submits Lightning invoice → automatic payout
+3. Submit orders in private chat
+4. Order phase closes → invoices sent to all participants
+5. Pay your Lightning invoice
+6. All payments confirmed → winner is drawn
+7. Winner submits Lightning invoice → automatic payout
 
 ## Payments and Invoices
 
@@ -82,15 +86,17 @@ How to split invoices:
 Tips:
 - If you encounter routing failures, try smaller invoices (for example, 50–90% of the problematic route size) and send multiple invoices.
 
-## ⚡ Payment Examples
+## ⚡ Order Examples
 
-The bot accepts various payment formats:
+The bot accepts various order formats in private chat:
 
 ```
 5.99 Beer                    # Euro amount with note
 12.50€ lunch                 # Explicit Euro symbol  
 3.00 Milk + 2.50 Pizza       # Multiple amounts
 ```
+
+Once the session host closes the order phase, the bot converts all orders to Lightning invoices and sends them to each participant privately.
 
 ## 🎰 Lottery System
 
@@ -106,7 +112,7 @@ The bot accepts various payment formats:
 | Command | Description | Who can Use |
 |---------|-------------|-------------|
 | `/startzap` | Start a new payment session | Admins (configurable) |
-| `/closezap` | Close payments and draw winner | Admins (configurable) |
+| `/closezap` | Close orders and start payment phase | Admins (configurable) |
 | `/cancelzap` | Cancel the current session | Admins (configurable) |
 | `/config` | Change options (e.g. permissions) | Admins |
 | `/status` | View current session status | Anyone |

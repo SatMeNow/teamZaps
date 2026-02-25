@@ -91,11 +91,10 @@ internal static class SessionStatusMessage
             status.AppendLine($"• Lottery entries: 🎫 *{session.LotteryParticipants.Count}*");
             status.AppendLine($"• Total budget: 💰 *{session.Budget.Format()}*");
         }
-
-        if (session.HasPayments)
+        if (session.HasOrders)
         {
-            status.AppendLine($"• Payments: *{session.Payments.Count()}*");
-            status.AppendLine($"• Total: 💶 {session.FormatTotalFiatAmount()}");
+            status.AppendLine($"• Orders: *{session.Orders.Count()}*");
+            status.AppendLine($"• Total: 💶 {session.FormatOrderedAmount()}");
         }
 
         if (!session.Participants.IsEmpty)
@@ -103,11 +102,17 @@ internal static class SessionStatusMessage
             status.AppendLine($"\n*{session.Participants.Count}* Participant(s):");
             foreach (var participant in session.Participants.Values)
             {
-                var joinedLottery = "";
+                var icons = "";
                 if (session.LotteryParticipants.ContainsKey(participant))
-                    joinedLottery = "🎫 ";
-                var p = $"• {joinedLottery}{participant.MarkdownDisplayName()}";
-                if (participant.HasPayments)
+                    icons += "🎫";
+                if ((participant.HasOrders) && (session.Phase == SessionPhase.WaitingForPayments))
+                    icons += (participant.HasPayments) ? " ✅" : "🫰";
+                if (icons.Length > 0)
+                    icons += " ";
+                var p = $"• {icons}{participant.MarkdownDisplayName()}";
+                if (participant.HasOrders && !participant.HasPayments)
+                    p += $": {participant.OrdersFiatAmount.Format()}";
+                else if (participant.HasPayments)
                     p += $": {participant.FormatAmount()}";
                 status.AppendLine(p);
             }
@@ -116,7 +121,7 @@ internal static class SessionStatusMessage
         if (session.Phase == SessionPhase.WaitingForLotteryParticipants)
         {
             status.AppendLine($"\n🎯 *New session* started by {session.StartedByUser.MarkdownDisplayName()}!");
-            status.AppendLine("\n⚠️ *Payments are blocked* until someone enters the lottery first!");
+            status.AppendLine("\n⚠️ *Orders are blocked* until someone enters the lottery first!");
         }
 
         if (session.WinnerPayouts.Count == 1)
@@ -140,16 +145,21 @@ internal static class SessionStatusMessage
 
     private static InlineKeyboardMarkup? BuildKeyboard(SessionState session, long userId)
     {
-        if (session.Phase <= SessionPhase.AcceptingPayments)
+        if (session.Phase <= SessionPhase.AcceptingOrders)
         {
             bool alreadyJoined = session.Participants.ContainsKey(userId);
             var joinButton = InlineKeyboardButton.WithCallbackData(alreadyJoined ? "✅ Joined" : "🎯 Join", CallbackActions.JoinSession);
             InlineKeyboardButton closeButton;
-            if (session.HasPayments)
+            if (session.HasOrders)
                 closeButton = InlineKeyboardButton.WithCallbackData("🏆 Close", CallbackActions.CloseSession);
             else
                 closeButton = InlineKeyboardButton.WithCallbackData("❌ Cancel", CallbackActions.CancelSession);
             return new InlineKeyboardMarkup(new[] { joinButton, closeButton });
+        }
+        else if (session.Phase == SessionPhase.WaitingForPayments)
+        {
+            var forceCloseButton = InlineKeyboardButton.WithCallbackData("🏆‼️ Force close", CallbackActions.ForceClose);
+            return new InlineKeyboardMarkup(new[] { forceCloseButton });
         }
         else
             return (null);
@@ -245,35 +255,36 @@ internal static class UserStatusMessage
             else
                 status.AppendLine("• Lottery: 🎟️ *Not joined*");
             
-            if (session.Phase >= SessionPhase.AcceptingPayments)
+            if (session.Phase >= SessionPhase.AcceptingOrders)
             {
                 var tip = participant.Options.Tip.FormatTip();
                 if (participant.Options.Tip > 0)
-                    tip = $"🎩 *{tip}* per payment";
+                    tip = $"🎩 *{tip}* per order";
                 status.AppendLine($"• Tip: {tip}");
             }
         }
         status.AppendLine();
 
-        if ((session.Phase >= SessionPhase.AcceptingPayments) && (participant?.HasPayments == true))
+        if ((session.Phase >= SessionPhase.AcceptingOrders) && (participant?.HasOrders == true))
         {
-            status.AppendLine("*Payments:*");
-            status.AppendPayments(participant.Payments);
+            status.AppendLine("*Orders:*");
+            status.AppendOrders(participant.Orders);
             status.AppendLine();
-            
-            status.AppendLine($"💶 Total: {participant.FormatTotalFiatAmount()}");
+            status.AppendLine($"💶 Total: {participant.FormatOrderedAmount()}");
             status.AppendLine();
         }
-        
+
         switch (session.Phase)
         {
             case SessionPhase.WaitingForLotteryParticipants:
                 status.AppendLine("🎰 *Enter the lottery* if you're willing to pay fiat! Set your maximum budget.\n");
-                status.AppendLine("⚠️ *Payments are blocked* until someone enters the lottery first!");
+                status.AppendLine("⚠️ *Orders are blocked* until someone enters the lottery first!");
                 break;
-            case SessionPhase.AcceptingPayments:
-                status.AppendLine("Use the button below to *make payments*.");
-                status.AppendLine("I'll create Lightning invoices for you to pay.");
+            case SessionPhase.AcceptingOrders:
+                status.AppendLine("📋 Use the button below to *add your orders*.");
+                break;
+            case SessionPhase.WaitingForPayments:
+                status.AppendLine("⚡ *Invoice sent!* Please pay your Lightning invoice to participate.");
                 break;
         }
         
@@ -284,12 +295,12 @@ internal static class UserStatusMessage
     private static InlineKeyboardMarkup? BuildKeyboard(SessionState session, ParticipantState? participant = null)
     {
         var buttons = new List<InlineKeyboardButton>();
-        if ((session.Phase <= SessionPhase.AcceptingPayments) && (participant?.JoinedLottery(session) != true))
+        if ((session.Phase <= SessionPhase.AcceptingOrders) && (participant?.JoinedLottery(session) != true))
             buttons.Add(InlineKeyboardButton.WithCallbackData("🎰 Enter Lottery", CallbackActions.JoinLottery));
-        if (session.Phase == SessionPhase.AcceptingPayments)
+        if (session.Phase == SessionPhase.AcceptingOrders)
         {
             buttons.Add(InlineKeyboardButton.WithCallbackData("🎩 Set tip", CallbackActions.SetTip));
-            buttons.Add(InlineKeyboardButton.WithCallbackData("💰 Make Payment", CallbackActions.MakePayment));
+            buttons.Add(InlineKeyboardButton.WithCallbackData("📋 Add Order", CallbackActions.AddOrder));
         }
         return (new InlineKeyboardMarkup(buttons));
     }

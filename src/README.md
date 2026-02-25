@@ -324,21 +324,25 @@ When disabled, all recovery operations are stopped: no lost sats records are cre
 graph TD
     A[Start Session] --> B[Waiting for Lottery]
     B --> C[Someone Enters Lottery]
-    C --> D[Accepting Payments]
-    D --> E[Close Session]
-    E --> F[Draw Winner]
-    F --> G[Winner Submits Invoice]
-    G --> H[Execute Payout]
-    H --> I[Session Completed]
+    C --> D[Accepting Orders]
+    D --> E[Session Host Closes Orders]
+    E --> F[Invoices Sent to Participants]
+    F --> G[Waiting for Payments]
+    G --> H[All Payments Confirmed]
+    H --> I[Draw Winner]
+    I --> J[Winner Submits Invoice]
+    J --> K[Execute Payout]
+    K --> L[Session Completed]
 ```
 
 ### Payment Flow
 
-1. **User Input** - Natural language parsing (`"5.99 Beer"`)
-2. **Token Generation** - Structured `PaymentToken` objects with amounts and memos
-3. **Invoice Creation** - LNbits API calls to generate Lightning invoices
-4. **Payment Monitoring** - Background service polls payment status
-5. **Confirmation** - UI updates and session state changes
+1. **User Input** - Natural language parsing (`"5.99 Beer"`) submitted as an **order** during `AcceptingOrders` phase
+2. **Order Registration** - Structured `OrderRecord` objects stored per participant with amounts and memos
+3. **Order Phase Closes** - Session host calls `/closezap`; the bot converts all orders to Lightning invoices
+4. **Invoice Creation** - One consolidated Lightning invoice created per participant; session enters `WaitingForPayments`
+5. **Payment Monitoring** - Background service polls payment status
+6. **Confirmation** - UI updates and session state changes; once all invoices are paid the lottery draw runs automatically
 
 ### Lost and Found Recovery System
 
@@ -731,7 +735,7 @@ public bool HasPayments => !Payments.IsEmpty();
 // ✅ Good: Use pattern matching 
 var status = phase switch
 {
-    SessionPhase.AcceptingPayments => "Ready for payments",
+    SessionPhase.WaitingForPayments => "Ready for payments",
     SessionPhase.Completed => "Session finished",
     _ => "Unknown status"
 };
@@ -883,11 +887,13 @@ tests/
 
 - [ ] Start session in group chat
 - [ ] Join session from multiple users
-- [ ] Enter lottery and verify payment unlock
-- [ ] Send various payment formats
+- [ ] Enter lottery and verify order phase unlocks
+- [ ] Send various order formats in private chat
+- [ ] Close order phase (`/closezap`) and verify invoices are sent to participants
 - [ ] Pay Lightning invoices and verify confirmation
-- [ ] Close session and verify winner selection
+- [ ] Verify lottery draw runs automatically once all invoices are paid
 - [ ] Submit winner invoice and verify payout
+- [ ] Test force-close of payment phase (button on status message)
 - [ ] Test error scenarios (invalid amounts, network issues)
 - [ ] Verify message updates and cleanup
 

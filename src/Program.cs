@@ -100,7 +100,7 @@ public static class Program
                 services.AddSingleton<SessionManager>();
                 services.AddSingleton<SessionWorkflowService>();
                 services.AddHostedServiceAsSingleton<LiquidityLogService>();
-                services.AddHostedService<PaymentMonitorService>();
+                services.AddHostedServiceAsSingleton<PaymentMonitorService>();
                 services.AddHostedService<RecoveryService>();
                 services.AddHostedService<TelegramBotService>();
                 services.AddSingleton<UpdateHandler>();
