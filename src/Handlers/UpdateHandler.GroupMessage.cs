@@ -254,7 +254,7 @@ public partial class UpdateHandler
         }
         catch (Exception)
         {
-            if (session.Participants.ContainsKey(user.Id))
+            if (sessionManager.PendingJoins.ContainsKey(user.Id))
                 ; // Skip, we already sent a welcome message (Just wait for them to open the private chat).
             else
             {
