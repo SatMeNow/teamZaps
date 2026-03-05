@@ -206,7 +206,7 @@ Here are some reliable servers to get started:
 
 ### Bot Behavior Options
 
-The `BotBehaviorOptions` section controls various aspects of bot behavior:
+The `BotBehavior` section controls various aspects of bot behavior:
 
 #### MaxBudget
 Controls the maximum total lottery budget (in Euro) across all active sessions.
@@ -216,7 +216,7 @@ When the limit is reached, new users cannot join lotteries until existing sessio
 
 ```json
 {
-  "BotBehaviorOptions": {
+  "BotBehavior": {
     "MaxBudget": 5000.0
   }
 }
@@ -230,7 +230,7 @@ This setting helps avoid locking too much on-chain liquidity at once. When the c
 
 ```json
 {
-  "BotBehaviorOptions": {
+  "BotBehavior": {
     "MaxLockedSats": 1000000.0
   }
 }
@@ -244,7 +244,7 @@ Estimated locked sats is a heuristic based on historical group- and user-statist
 
 ```json
 {
-  "BotBehaviorOptions": {
+  "BotBehavior": {
     "MaxEstimatedLockedSats": 2000000.0
   }
 }
@@ -258,13 +258,13 @@ When the limit is reached, new sessions cannot be started until existing session
 
 ```json
 {
-  "BotBehaviorOptions": {
+  "BotBehavior": {
     "MaxParallelSessions": 10
   }
 }
 ```
 
-#### CurrentLocale
+#### Locale
 Controls the locale/culture used system-wide for formatting and localization.
 - **Default**: `en-US`
 
@@ -276,7 +276,7 @@ This setting controls:
 ```json
 {
   "BotBehavior": {
-    "CurrentLocale": "de-DE"
+    "Locale": "de-DE"
   }
 }
 ```
@@ -441,7 +441,7 @@ All backends must:
 Backends are automatically registered based on configuration:
 ```json
 {
-  "Lightning": {
+  "Backends": {
     "AlbyHub": { /* config */ },  // ← First backend is selected
     "LNBits": { /* config */ }
   }
@@ -680,7 +680,7 @@ Create `appsettings.Development.json`:
     "BotToken": "YOUR_BOT_TOKEN_FROM_BOTFATHER",
     "RootUsers": [ 123456789 ]
   },
-  "Lightning": {
+  "Backends": {
     "LNBits": {
       "LndhubUrl": "YOUR_LNDHUB_URL_HERE",
       "ApiKey": "YOUR_API_KEY_HERE"
@@ -690,10 +690,7 @@ Create `appsettings.Development.json`:
       "RelayUrls": [ "YOUR_RELAY_URLS_HERE" ]
     }
   },
-  "BotBehaviorOptions": {
-    "AllowNonAdminSessionStart": false,
-    "AllowNonAdminSessionClose": false, 
-    "AllowNonAdminSessionCancel": false,
+  "BotBehavior": {
     "BudgetChoices": [50, 100, 150, 200, 250, 300],
     "MaxBudget": 10000.0
   },
@@ -812,7 +809,7 @@ This automatically assigns a default budget to users joining the lottery, bypass
 ```json
 {
   "Debug": {
-    "FixBudget": 5.0  // Users get 100€ budget automatically
+    "FixBudget": 5.0  // Users get 5€ budget automatically
   }
 }
 ```
@@ -910,25 +907,22 @@ tests/
         "teamZaps": "Information"
       }
     }
-  },
-  "BotBehaviorOptions": {
-    "AllowNonAdminSessionStart": false,
-    "AllowNonAdminSessionClose": false,
-    "AllowNonAdminSessionCancel": false
   }
 }
 ```
+
+> **Note:** Per-group admin restrictions (session start/close/cancel) are per-chat settings configured via the `/config` command inside each group.
 
 ### Environment Variables
 ```bash
 # Required
 export Telegram__BotToken="production-token"
-export Lnbits__LndhubUrl="https://your-lnbits.com/lndhub/ext/"
-export Lnbits__ApiKey="production-api-key"
+export Backends__LNBits__LndhubUrl="https://your-lnbits.com/lndhub/ext/"
+export Backends__LNBits__ApiKey="production-api-key"
 
 # Optional
 export ASPNETCORE_ENVIRONMENT="Production"
-export BotBehaviorOptions__AllowNonAdminSessionStart="false"
+export BotBehavior__MaxBudget="5000"
 ```
 
 ### Docker Deployment (Recommended)

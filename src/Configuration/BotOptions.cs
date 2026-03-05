@@ -67,11 +67,11 @@ public class BotBehaviorOptions
     /// <summary>
     /// Tip (in [%]) choices, if the user wants to give a tip.
     /// </summary>
-    public byte[] TipChoices { get; set; } = [ 1, 3, 5, 7, 10, 12, 15 ];
+    public ChoiceWithDefault<byte> Tip { get; set; } = new ([ 1, 3, 5, 7, 10, 12, 15 ], 3);
     /// <summary>
     /// Budget choices, provided to the user for joining the lottery.
     /// </summary>
-    public uint[] BudgetChoices { get; set; } = [ 50, 100, 150, 200, 250, 300, 350, 400 ];
+    public ChoiceWithDefault<uint> Budget { get; set; } = new ([ 50, 100, 150, 200, 250, 300, 350, 400 ], 100);
     /// <summary>
     /// Maximum total budget (in <see cref="AcceptedFiatCurrency">fiat</see>) across all active sessions server-wide.
     /// </summary>

@@ -212,7 +212,7 @@ public partial class UpdateHandler
             participant.BudgetSelectionMessageId = null;
 
         var availBudget = sessionManager.AvailableServerBudget;
-        var keyboard = botBehaviour.BudgetChoices
+        var keyboard = botBehaviour.Budget.Choices
             .Where(c => (availBudget is null) || (c <= availBudget!))
             .Select(c => InlineKeyboardButton.WithCallbackData($"{c}{BotBehaviorOptions.AcceptedFiatCurrency.ToSymbol()}", $"{CallbackActions.SelectBudget}_{c}"))
             .Chunk(4)
@@ -245,7 +245,7 @@ public partial class UpdateHandler
             await liquidityLogService.LogAsync(LogTag.RejectJoinLottery, cancellationToken).ConfigureAwait(false);
             
             var availBudget = sessionManager.AvailableServerBudget!.Value;
-            var minBudget = botBehaviour.BudgetChoices.Min();
+            var minBudget = botBehaviour.Budget.Default;
             var message = $"Sorry, your budget of {budget.Format()} would exceed my total allowed liquidity 🫣\n\n" +
                 $"Available at this time: {availBudget.Format()}";
             string help;
@@ -296,7 +296,7 @@ public partial class UpdateHandler
     {
         workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
              
-        var keyboard = new InlineKeyboardMarkup(botBehaviour.TipChoices
+        var keyboard = new InlineKeyboardMarkup(botBehaviour.Tip.Choices
             .Prepend((byte)0)
             .Select(t => InlineKeyboardButton.WithCallbackData(t.FormatTip(), $"{CallbackActions.SelectTip}_{t}"))
             .Chunk(4)

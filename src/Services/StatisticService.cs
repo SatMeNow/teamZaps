@@ -178,7 +178,7 @@ public class StatisticService : IHostedService
         stats.Duration += (ulong)session.Duration!.Value;
         stats.StartedAtBlock ??= session.StartedAtBlock!;
         stats.TotalSats += (ulong)session.SatsAmount;
-        stats.TotalTippedSats += (ulong)session.TipAmount;
+        stats.TotalTippedSats += (ulong)session.TipSatsAmount;
         stats.TotalParticipants += session.Participants.Count;
         // Update per-month session metrics
         var month = GetMonth(session.CompletedAtBlock!.LocalTime);
@@ -196,7 +196,7 @@ public class StatisticService : IHostedService
             StartBlock = session.StartedAtBlock!,
             EndBlock = session.CompletedAtBlock!,
             TotalSats = session.SatsAmount,
-            TotalTippedSats = (long)session.TipAmount,
+            TotalTippedSats = session.TipSatsAmount,
             ParticipantIds = new HashSet<long>(session.Participants.Keys)
         };
     }

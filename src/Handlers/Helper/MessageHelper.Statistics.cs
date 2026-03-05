@@ -291,7 +291,7 @@ internal static partial class Ext
             var ranking = rankIcons.ElementAtOrDefault(rank.Value - 1);
             if (string.IsNullOrEmpty(ranking))
                 ranking = $"#{rank.Value}";
-            source.AppendLine($"• {ranking} {label}: {value}");
+            source.AppendLine($"• {ranking} {label}: {value:N0}");
         }
 
         return (source);
