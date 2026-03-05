@@ -17,7 +17,7 @@ services:
       - BotBehavior__MaxLockedSats=${MAX_LOCKED_SATS}
       - BotBehavior__MaxEstimatedLockedSats=${MAX_ESTIMATED_LOCKED_SATS}
       - BotBehavior__MaxParallelSessions=${MAX_PARALLEL_SESSIONS}
-      - BotBehavior__CurrentLocale=${BOT_LOCALE:-en-US}
+      - BotBehavior__Locale=${BOT_LOCALE:-en-US}
       
       # Telegram Settings
       - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}

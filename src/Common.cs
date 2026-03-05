@@ -40,6 +40,19 @@ public class CurrencyAttribute : Attribute, IEquatable<string>
     }
 }
 
+public class ChoiceWithDefault<T>
+{
+    public ChoiceWithDefault(T[] choices, T @default)
+    {
+        this.Choices = choices;
+        this.Default = @default;
+    }
+
+
+    public T[] Choices { get; }
+    public T Default { get; }
+}
+
 public enum PaymentStatus
 {
     [Icon("⏳"), Description("*Pay this invoice* to add your contribution to the session!")]

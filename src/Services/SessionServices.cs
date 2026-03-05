@@ -189,14 +189,11 @@ public class SessionManager : IFormattableAmount
         // Load saved user options:
         var userOptions = await userOptionsService.ReadAsync(user.Id).ConfigureAwait(false);
         // Create default options if none exist:
-        if (userOptions is null)
+        userOptions ??= new BotUserOptions
         {
-            userOptions = new BotUserOptions
-            {
-                Tip = botBehaviour.TipChoices.Min() // Default to the lowest tip choice
-            };
-        }
-
+            Tip = botBehaviour.Tip.Default
+        };
+        
         return (new ParticipantState(user, userOptions));
     }
     public async Task<ParticipantState> GetOrAddParticipantAsync(SessionState session, User user)

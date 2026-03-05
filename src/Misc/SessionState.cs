@@ -76,6 +76,10 @@ public class SessionState : ITipableAmount, IOrderableAmount
     public double FiatAmount => Payments.Sum(p => p.FiatAmount);
     public double TipAmount => Payments.Sum(p => p.TipAmount);
     /// <summary>
+    /// Tip amount in sats.
+    /// </summary>
+    public long TipSatsAmount => (long)(SatsAmount * TipAmount / FiatAmount);
+    /// <summary>
     /// Max. budget, based on lottery participants' budgets.
     /// </summary>
     public double Budget => LotteryParticipants.Values.Sum();

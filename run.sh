@@ -3,9 +3,7 @@
 # Team Zaps - Run Script
 # This script helps you quickly run the Telegram bot
 
-set -e
-
-PROJECT_DIR="src/teamZaps"
+PROJECT_DIR="src"
 PROJECT_NAME="teamZaps"
 
 echo "🚀 Team Zaps - Telegram Bot"
@@ -33,7 +31,7 @@ if [ "$BOT_TOKEN" == "YOUR_BOT_TOKEN_HERE" ] && [ -z "$Telegram__BotToken" ]; th
     echo "⚠️  Warning: Bot token is not configured!"
     echo ""
     echo "Please configure your bot token by either:"
-    echo "1. Editing src/teamZaps/appsettings.json"
+    echo "1. Editing src/appsettings.json"
     echo "2. Setting environment variable: export Telegram__BotToken=\"YOUR_TOKEN\""
     echo ""
     echo "Get your token from @BotFather on Telegram"

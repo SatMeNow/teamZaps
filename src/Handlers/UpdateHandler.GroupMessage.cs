@@ -79,10 +79,7 @@ public partial class UpdateHandler
                 .ExpireMessage();
         
         // Check server-wide liquidity limits
-        var minBudget = botBehaviour.BudgetChoices.Min();
-        // [Hint] Following checks are obsolete, since we have introduced a dedicated payment phase (which is expected very short):
-        // - CheckEstimatedLockedSatsLimit(minBudget)
-        // - CheckLockedSatsLimit(minBudget)
+        var minBudget = botBehaviour.Budget.Default;
         if (!CheckServerBudgetLimit(minBudget))
         {
             await liquidityLogService.LogAsync(LogTag.RejectCreateSession, cancellationToken).ConfigureAwait(false);
