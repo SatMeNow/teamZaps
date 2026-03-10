@@ -103,10 +103,10 @@ internal static class SessionStatusMessage
             foreach (var participant in session.Participants.Values)
             {
                 var icons = "";
-                if (session.LotteryParticipants.ContainsKey(participant))
-                    icons += "🎫";
                 if ((participant.HasOrders) && (session.Phase == SessionPhase.WaitingForPayments))
                     icons += (participant.HasPayments) ? " ✅" : "🫰";
+                if (session.LotteryParticipants.ContainsKey(participant))
+                    icons += "🎫";
                 if (icons.Length > 0)
                     icons += " ";
                 var p = $"• {icons}{participant.MarkdownDisplayName()}";

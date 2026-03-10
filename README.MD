@@ -8,17 +8,19 @@ Team Zaps helps groups coordinate Lightning payments for shared expenses. When B
 
 Your team meets up for food and drinks, but the venue doesn't accept Bitcoin? Here's how Team Zaps solves this:
 
-1. **Start a Session** - Someone creates a Team Zaps session in your Telegram group
-2. **Join & Order** - Everyone joins the session and submits their orders in private chat
-3. **Payment Phase** - Once the admin closes the order phase, everyone receives an invoice and pays in sats
-4. **Lottery Draw** - Once all payments are confirmed, one participant is randomly selected to pay the bill in fiat
-5. **Winner Takes All** - The selected person receives all the Lightning payments as compensation for covering the fiat bill
+1. **Start a Session** - Someone creates a Team Zaps session
+2. **Join & Order** - Everyone is free to join the session and submits their orders
+3. **Payment Phase** - Once the the order phase will be closed, everyone receives an invoice and pays in sats
+4. **Lottery Draw** - One participant (sometimes more) is randomly selected to pay the bill in fiat
+5. **Winner Takes All** - The selected person(s) receive all the Lightning payments as compensation for covering the fiat bill
 
 ### The Result 🎉
-- ✅ The venue gets their worthless fiat money
-- ✅ Everyone pays for their meal in Bitcoin
-- ✅ The winner effectively swaps fiat for sats at market rate — KYC-free, no exchange required
-- ✅ No one needs to deal with currency exchange
+
+What actually happend on a completed session is:
+
+- ✅ The **venue gets** their worthless **fiat money**
+- ✅ **Everyone pays** for their meal **in Bitcoin**
+- ✅ The winner effectively **swaps fiat for sats** at market rate — **KYC-free**, no exchange required
 
 ## 🚀 Getting Started
 
@@ -26,6 +28,9 @@ Follow the appropriate path below depending on whether you are a group admin or 
 
 ### Admins: Set up the bot for your group
 1. Add the bot to your group: search for `@TeamZapsBot` and invite it.
+
+   > **Note:** If your group uses anti-spam bots (e.g. `@ShieldyBot`) that may automatically kick newly invited bots, see the [Troubleshooting → Anti-spam bots](#anti-spam-bots) section below how to manage inviting `@TeamZapsBot`.
+
 2. Open `Group Info` → `Administrators` → Promote the bot to an administrator.
    - Grant these permissions at minimum:
      - **Delete messages**
@@ -240,6 +245,20 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - 🐛 **Bug Reports**: Create an [issue](https://github.com/SatMeNow/teamZaps/issues) on GitHub
 - 💡 **Feature Requests**: Create an [issue](https://github.com/SatMeNow/teamZaps/issues) on GitHub
 - 📖 **Documentation**: Check the [developer documents](src/README.md) or the [user documents](README.md)
+
+## Troubleshooting
+
+### Anti-spam bots
+
+If your group uses anti-spam bots such as `@ShieldyBot`, it may immediately kick newly invited bots like `@TeamZapsBot` after they are added. To avoid that, group admins can temporarily allow inviting bots and then restore the previous setting.
+
+Recommended steps for `@ShieldyBot` (other bots will differ):
+
+1. Run `/allowInvitingBots` to allow inviting new bots.
+2. Grant admin rights to `@TeamZapsBot`.
+3. Run `/allowInvitingBots` again to restore the previous setting.
+
+If problems persist, check the anti-spam bot's logs/settings or temporarily disable it while configuring bot permissions.
 
 ## Related documents
 
