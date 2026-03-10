@@ -130,9 +130,6 @@ ipch/
 # Visual Studio Trace Files
 *.e2e
 
-# AI
-/AGENTS.md
-
 # TFS 2012 Local Workspace
 $tf/
 
