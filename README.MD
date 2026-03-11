@@ -14,6 +14,8 @@ Your team meets up for food and drinks, but the venue doesn't accept Bitcoin? He
 4. **Lottery Draw** - One participant (sometimes more) is randomly selected to pay the bill in fiat
 5. **Winner Takes All** - The selected person(s) receive all the Lightning payments as compensation for covering the fiat bill
 
+> Refer to the [Session Walkthrough](#-session-walkthrough) below for a step-by-step illustrated guide.
+
 ### The Result 🎉
 
 What actually happend on a completed session is:
@@ -21,6 +23,10 @@ What actually happend on a completed session is:
 - ✅ The **venue gets** their worthless **fiat money**
 - ✅ **Everyone pays** for their meal **in Bitcoin**
 - ✅ The winner effectively **swaps fiat for sats** at market rate — **KYC-free**, no exchange required
+
+<p align="center">
+  <img src="docs/session-complete.png" alt="Team Zaps" height="240">
+</p>
 
 ## 🚀 Getting Started
 
@@ -78,6 +84,24 @@ Payment flow summary:
 5. Pay your Lightning invoice
 6. All payments confirmed → winner is drawn
 7. Winner submits Lightning invoice → automatic payout
+
+## 📸 Session Walkthrough
+
+This section walks through a complete session from start to finish with screenshots.
+
+| Screenshot | Step |
+|:---:|:---|
+| <img src="docs/screenshots/step-01-session-started.png" width="80%"> | **1 — New session**<br>A user starts a new session in the group chat. The bot posts a pinned status message. Order submission is blocked until at least one participant enters the lottery. |
+| <img src="docs/screenshots/step-02a-joined-private.png" width="80%"><img src="docs/screenshots/step-02b-group-status.png" width="80%"> | **2 — Join the session**<br>Members click the **🎯 Join** button on the pinned status message. The bot opens a private chat `#1` with each user showing their personal session status. The group status `#2` updates in parallel. |
+| <img src="docs/screenshots/step-03-lottery-entered.png" width="50%"> | **3 — Enter the lottery**<br>Participants willing to pay the fiat bill click **🎰 Enter Lottery** and set a budget. Order submission unlocks once the first entry is in. |
+| <img src="docs/screenshots/step-04-order-placed.png" width="80%"> | **4 — Place orders**<br>Each participant opens a private chat with the bot and submits their orders. The bot confirms each order and shows a running total. |
+| <img src="docs/screenshots/step-05b-invoice-private.png" width="80%"><img src="docs/screenshots/step-05a-group-status.png" width="50%"> | **5 — Close the order phase**<br>The admin clicks **🏆 Close**. The phase moves to *Waiting for Payments*. Everyone who ordered receives a Lightning invoice in private chat `#1`. The group status `#2` shows 🫰 next to unpaid participants. |
+| <img src="docs/screenshots/step-06-invoice-received.png" width="60%"> | **6 — Participants pay their invoices**<br>As payments are confirmed, the 🫰 icon changes to ✅ in the group status message. |
+| <img src="docs/screenshots/step-07-winner-drawn.png" width="80%"> | **7 — Winner drawn**<br>Once every participant has paid, the bot draws the winner from the lottery pool. The group status announces the winner and payout amount. The phase moves to *Waiting for Winner Invoice*. |
+| <img src="docs/screenshots/step-08-winner-invoice.png" width="80%"> | **8 — Winner submits payout invoice**<br>The winner receives a private message asking them to submit a Lightning invoice for the full payout amount. They paste invoices until the total is met. |
+| <img src="docs/screenshots/step-09-completed.png" width="60%"> | **9 — Session complete**<br>The bot pays the winner's invoice. The group status updates to ✅ Completed with a full session summary. |
+
+---
 
 ## Payments and Invoices
 
