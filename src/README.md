@@ -880,6 +880,30 @@ tests/
     └── TestSessionFactory.cs
 ```
 
+### Screenshot Generation
+
+Mock screenshots for the user docs are generated in two steps:
+
+**1. Send mock messages** — run the bot locally and call `Sample_Screenshots.SendStatusScreenshotsAsync()`. This sends labeled message pairs (`📸 \`step-XX-name\`` followed by the actual mock message) to the configured root user's DM.
+
+**2. Capture screenshots** — use the Playwright script in `tools/screenshots/`:
+
+```bash
+cd tools/screenshots
+npm install
+npx playwright install chromium
+node screenshot.js
+```
+
+Workflow:
+1. A browser opens — log in with your Telegram account (QR code on first run; session is cached in `.session/`).
+2. Navigate to the bot's DM chat and press Enter.
+3. Click the first mock message (or its `📸` label) and press Enter — all remaining screenshots are captured automatically.
+
+Output files are written to `docs/screenshots/*.png`.
+
+---
+
 ### Manual Testing Checklist
 
 - [ ] Start session in group chat

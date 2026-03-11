@@ -221,3 +221,9 @@ throw new InvalidOperationException("Session is not currently accepting new part
 ## Tests
 - `tests/Test.cs` — base `UnitTest<T>` with `Mock<ILogger<T>>`, `BackendUnitTest<T>`
 - `tests/Backend/Test.ElectrumX.cs` — ElectrumX tests (incomplete)
+
+## Screenshot Tooling
+- `src/Examples/Sample.Screenshots.cs` — sends 11 labeled mock message pairs to the root user's DM via `SendStatusScreenshotsAsync()`; uses reflection to call private `Build`/`BuildKeyboard` methods; fresh `ParticipantState` per step; Alice 10% tip, Bob 5% tip, Charlie no tip; only Alice and Bob in lottery
+- `tools/screenshots/screenshot.js` — Playwright (Node.js) script that opens Telegram Web, lets the user click the first mock message, then auto-advances through all 11 messages using DOM sibling walking and saves cropped PNGs to `docs/screenshots/`
+- `tools/screenshots/package.json` — declares `playwright` dependency; run `npm install && npx playwright install chromium` once
+- Session is persisted in `tools/screenshots/.session/` (gitignored)
