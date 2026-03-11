@@ -1,0 +1,13 @@
+{
+  "name": "teamzaps-screenshots",
+  "version": "1.0.0",
+  "description": "Automated Telegram Web screenshots for TeamZaps docs",
+  "type": "module",
+  "scripts": {
+    "install-browsers": "playwright install chromium",
+    "screenshot": "node screenshot.js"
+  },
+  "dependencies": {
+    "playwright": "^1.50.0"
+  }
+}

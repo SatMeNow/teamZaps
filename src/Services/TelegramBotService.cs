@@ -119,6 +119,10 @@ public class TelegramBotService : BackgroundService
             _ = Task.Run(() => botClient.ReceiveAsync(updateHandler, receiverOptions, stoppingToken));
 
             logger.LogInformation("Bot {BotUsername} initialized successfully.", me);
+
+
+            // [Testing]
+            // await Examples.Sample_Screenshots.SendStatusScreenshotsAsync(botClient, telegramSettings, stoppingToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
