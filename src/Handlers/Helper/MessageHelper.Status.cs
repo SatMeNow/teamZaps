@@ -301,7 +301,87 @@ internal static class UserStatusMessage
         {
             buttons.Add(InlineKeyboardButton.WithCallbackData("🎩 Set tip", CallbackActions.SetTip));
             buttons.Add(InlineKeyboardButton.WithCallbackData("📋 Add Order", CallbackActions.AddOrder));
+            if (participant?.HasOrders == true)
+                buttons.Add(InlineKeyboardButton.WithCallbackData("✏️ Edit Order", CallbackActions.ShowEditPicker));
         }
         return (new InlineKeyboardMarkup(buttons));
+    }
+}
+
+/// <summary>
+/// Item-picker message sent to the user's DM during AcceptingOrders phase.
+/// Shows a row per PaymentToken with ✏️ (edit) and 🗑️ (remove) buttons.
+/// </summary>
+internal static class EditOrderPickerMessage
+{
+    public static async Task SendAsync(ParticipantState participant, ITelegramBotClient botClient, long chatId, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
+    {
+        var keyboard = BuildKeyboard(participant);
+        if (keyboard is null)
+            return;
+
+        try
+        {
+            var message = await botClient.SendMessage(chatId,
+                BuildText(),
+                parseMode: ParseMode.Markdown,
+                replyMarkup: keyboard,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            participant.EditPickerMessageId = message.MessageId;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send edit picker to user {User}.", participant);
+        }
+    }
+
+    public static async Task UpdateAsync(ParticipantState participant, ITelegramBotClient botClient, Microsoft.Extensions.Logging.ILogger logger, CancellationToken cancellationToken)
+    {
+        if (participant.EditPickerMessageId is null)
+            return;
+
+        var keyboard = BuildKeyboard(participant);
+        if (keyboard is null)
+            return;
+
+        try
+        {
+            await botClient.EditMessageReplyMarkup(
+                chatId: participant.UserId,
+                messageId: participant.EditPickerMessageId.Value,
+                replyMarkup: keyboard,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (ApiRequestException ex) when (ex.Message.Contains("message is not modified"))
+        {
+            // fine
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to update edit picker for user {User}.", participant);
+        }
+    }
+
+    private static string BuildText() => "📋 *Edit your orders*\n\nTap ✏️ to replace an item or 🗑️ to remove it:";
+
+    public static InlineKeyboardMarkup? BuildKeyboard(ParticipantState participant)
+    {
+        var allTokens = participant.Orders
+            .SelectMany((order, oi) => order.Tokens.Select((token, ti) => (OrderIndex: oi, TokenIndex: ti, Token: token)))
+            .ToList();
+
+        if (allTokens.Count == 0)
+            return null;
+
+        var rows = allTokens
+            .Select(t => (IEnumerable<InlineKeyboardButton>)new[]
+            {
+                InlineKeyboardButton.WithCallbackData($"✏️ {t.Token}", $"{CallbackActions.EditToken}_{t.OrderIndex}_{t.TokenIndex}"),
+                InlineKeyboardButton.WithCallbackData("🗑️", $"{CallbackActions.RemoveToken}_{t.OrderIndex}_{t.TokenIndex}")
+            })
+            .Append(new[] { InlineKeyboardButton.WithCallbackData("✖️ Close", CallbackActions.CancelEdit) });
+
+        return new InlineKeyboardMarkup(rows);
     }
 }

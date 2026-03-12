@@ -13,6 +13,13 @@ public record PaymentToken : IFormattableAmount
 
     public long SatsAmount => Currency.Equals(PaymentCurrency.Sats) ? (long)Amount : 0;
     public double FiatAmount => Currency.Equals(PaymentCurrency.Sats) ? 0 : (double)Amount;
+
+
+    public override string ToString()
+    {
+        var memo = string.IsNullOrWhiteSpace(Note) ? "" : $" - {Note}";
+        return $"{Amount.Format(Currency, false)!}{memo}";
+    }
 }
 
 public static class PaymentParser
