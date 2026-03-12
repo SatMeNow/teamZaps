@@ -167,8 +167,7 @@ public partial class UpdateHandler
             await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
 
             // Update user status messages for all participants:
-            foreach (var participant in session.Participants.Values)
-                await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+            await UpdateAllParticipantStatusesAsync(session, botClient, cancellationToken).ConfigureAwait(false);
 
             var payMessage = await botClient.SendMessage(chatId, $"⚡ *Invoices have been sent* to all participants.\n\nPlease check your private chat and *pay now*.", parseMode: ParseMode.Markdown, cancellationToken: cancellationToken).ConfigureAwait(false);
             botClient.DeleteMessageAfterAsync(payMessage, TimeSpan.FromMinutes(1), cancellationToken);
@@ -197,8 +196,7 @@ public partial class UpdateHandler
             await SessionStatusMessage.UpdateAsync(session!, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
             
             // Update user status messages for all participants
-            foreach (var participant in session!.Participants.Values)
-                await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+            await UpdateAllParticipantStatusesAsync(session!, botClient, cancellationToken).ConfigureAwait(false);
         
             await botClient.SendMessage(chatId, "❌ Session has been cancelled and removed.", cancellationToken: cancellationToken).ConfigureAwait(false);
             logger.LogInformation("Session {Session} cancelled by user {User}.", session, user);

@@ -117,8 +117,9 @@ throw new InvalidOperationException("Session is not currently accepting new part
 
 ## Key Data Models
 - `SessionState`: ChatId, Title, Participants, PendingPayments, LotteryParticipants, WinnerPayouts, OrdersFiatAmount, SatsAmount, TipAmount, Duration (Bitcoin blocks)
-- `ParticipantState`: User, Orders, Payments, Tip preference, message IDs
-- `OrderRecord`: FiatAmount, TipAmount, PaymentTokens, Timestamp
+- `ParticipantState`: User, Orders, Payments, Tip preference, message IDs (`OrderConfirmationMessageId`, `BudgetSelectionMessageId`, `TipSelectionMessageId`, `EditPickerMessageId`), `PendingEdit` (`PendingEditToken?`)
+- `OrderRecord`: FiatAmount, TipAmount, PaymentTokens, Timestamp; `RemoveToken(index, tip)` removes one token and recalculates totals
+- `PendingEditToken`: OrderIndex, TokenIndex, PromptMessageId — tracks in-progress item edit (cleared after apply or cancel)
 - `PaymentRecord`: User, SatsAmount, FiatAmount, PaymentHash, PaymentRequest, Tokens
 - `PendingPayment`: PaymentHash, Created, NotifiedPaid, Tokens, Currency
 - `PayableAmount` / `PayableFiatAmount`: track payout progress
@@ -137,9 +138,8 @@ throw new InvalidOperationException("Session is not currently accepting new part
 
 ## Update Handlers
 - `UpdateHandler.cs` — main router; validates bot recipient
-- `UpdateHandler.DirectMessage.cs` — `/start`, `/stat`, `/recover`, `/help`, `/about`, `/diag` (root-only), payment tokens, BOLT11 invoices, recovery invoices
-- `UpdateHandler.GroupMessage.cs` — `/startzap [title]`, `/closezap`, `/cancelzap`, `/status`, `/stat`, `/config`; callbacks: JoinSession, JoinLottery, SelectBudget, CloseSession, ForceClose, SetTip, AdminOptions
-
+- `UpdateHandler.DirectMessage.cs` — `/start`, `/stat`, `/recover`, `/help`, `/about`, `/diag` (root-only), payment tokens, BOLT11 invoices, recovery invoices; edit order callbacks: ShowEditPicker, EditToken, RemoveToken, CancelEdit (HandleShowEditPickerAsync, HandleEditTokenAsync, HandleRemoveTokenAsync, HandleCancelEditAsync, HandleApplyEditAsync)
+- `UpdateHandler.GroupMessage.cs` — `/startzap [title]`, `/closezap`, `/cancelzap`, `/status`, `/stat`, `/config`; callbacks: JoinSession, JoinLottery, SelectBudget, CloseSession, ForceClose, SetTip, AdminOptions- `MessageHelper.Status.cs` — `UserStatusMessage` (shows ✏️ Edit Order button when participant has orders), `EditOrderPickerMessage` (inline item picker with per-token ✏️/🗑️ buttons and ✖️ Close)
 ## Configuration Sections
 - **BotBehavior**: Locale, SanityCheckTime, Tip/Budget choices, MaxBudget, MaxLockedSats, MaxParallelSessions
 - **Telegram**: BotToken, RootUsers

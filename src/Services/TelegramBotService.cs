@@ -72,6 +72,10 @@ public static class CallbackActions
     public const string SelectTip = "selectTip";
     public const string AdminOptions = "adminOptions";
     public const string ForceClose = "forceClose";
+    public const string ShowEditPicker = "showEditPicker";
+    public const string EditToken = "editToken";
+    public const string RemoveToken = "removeToken";
+    public const string CancelEdit = "cancelEdit";
 }
 
 public class TelegramBotService : BackgroundService

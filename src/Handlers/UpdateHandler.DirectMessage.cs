@@ -184,7 +184,13 @@ public partial class UpdateHandler
                             .AnswerUser();
 
                     case SessionPhase.AcceptingOrders:
-                        await ProcessPrivateOrderAsync(botClient, session, user, tokens, text, cancellationToken).ConfigureAwait(false);
+                        var participant = session.Participants.TryGetValue(user.Id);
+                        if (participant?.PendingEdit is null)
+                            // User placed a new order:
+                            await ProcessPrivateOrderAsync(botClient, session, user, tokens, text, cancellationToken).ConfigureAwait(false);
+                        else
+                            // User edited an order:
+                            await HandleApplyEditAsync(botClient, session, user, participant, tokens, cancellationToken).ConfigureAwait(false);
                         return (true);
 
                     default:
@@ -274,8 +280,7 @@ public partial class UpdateHandler
         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
         
         // Update user status messages for all participants
-        foreach (var p in session.Participants.Values)
-            await UserStatusMessage.UpdateAsync(session, p, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+        await UpdateAllParticipantStatusesAsync(session, botClient, cancellationToken).ConfigureAwait(false);
     }
     private async Task HandleJoinLotteryWithBudgetAsync(ITelegramBotClient botClient, long chatId, User user, double budget, CancellationToken cancellationToken)
     {
@@ -331,6 +336,136 @@ public partial class UpdateHandler
     }
 
 
+    private async Task HandleShowEditPickerAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
+    {
+        workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
+
+        if (session.Phase != SessionPhase.AcceptingOrders)
+            return;
+
+        if (participant.EditPickerMessageId is not null)
+            await EditOrderPickerMessage.UpdateAsync(participant, botClient, logger, cancellationToken).ConfigureAwait(false);
+        else
+            await EditOrderPickerMessage.SendAsync(participant, botClient, chatId, logger, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleEditTokenAsync(ITelegramBotClient botClient, long chatId, User user, int orderIndex, int tokenIndex, CancellationToken cancellationToken)
+    {
+        workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
+
+        if (session.Phase != SessionPhase.AcceptingOrders)
+            return;
+
+        // Guard against stale callbacks
+        if (orderIndex < 0 || orderIndex >= participant.Orders.Count ||
+            tokenIndex < 0 || tokenIndex >= participant.Orders[orderIndex].Tokens.Length)
+            return;
+
+        var token = participant.Orders[orderIndex].Tokens[tokenIndex];
+
+        // Delete previous prompt if any
+        if (participant.PendingEdit is { PromptMessageId: not null })
+            await botClient.DeleteMessageAsync(chatId, participant.PendingEdit.PromptMessageId.Value, cancellationToken).ConfigureAwait(false);
+
+        var prompt = await botClient.SendMessage(chatId,
+            $"✏️ *Editing:* {token}\n\n" +
+            $"Send the new amount and note, for example:\n`3,99 Beer`\n\n" +
+            "_Tap ✖️ Close to cancel._",
+            parseMode: ParseMode.Markdown,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        participant.PendingEdit = new PendingEditToken(orderIndex, tokenIndex, prompt.MessageId);
+    }
+
+    private async Task HandleRemoveTokenAsync(ITelegramBotClient botClient, long chatId, User user, int orderIndex, int tokenIndex, CancellationToken cancellationToken)
+    {
+        workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
+
+        if (session.Phase != SessionPhase.AcceptingOrders)
+            return;
+
+        // Guard against stale callbacks
+        if (orderIndex < 0 || orderIndex >= participant.Orders.Count ||
+            tokenIndex < 0 || tokenIndex >= participant.Orders[orderIndex].Tokens.Length)
+            return;
+
+        var order = participant.Orders[orderIndex];
+        if (order.Tokens.Length == 1)
+        {
+            participant.Orders.RemoveAt(orderIndex);
+        }
+        else
+            order.RemoveToken(tokenIndex, participant.Options.Tip);
+
+        await liquidityLogService.LogAsync(cancellationToken).ConfigureAwait(false);
+
+        // Refresh or dismiss picker
+        if (participant.HasOrders)
+            await EditOrderPickerMessage.UpdateAsync(participant, botClient, logger, cancellationToken).ConfigureAwait(false);
+        else
+            await CloseEditPickerAsync(botClient, participant, cancellationToken).ConfigureAwait(false);
+
+        await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleCancelEditAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
+    {
+        if (!workflowService.TryGetSessionByUser(user.Id, out var session) ||
+            !session.Participants.TryGetValue(user.Id, out var participant))
+            return;
+
+        if (participant.PendingEdit?.PromptMessageId is not null)
+            await botClient.DeleteMessageAsync(chatId, participant.PendingEdit!.PromptMessageId!, cancellationToken).ConfigureAwait(false);
+        participant.PendingEdit = null;
+
+        await CloseEditPickerAsync(botClient, participant, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleApplyEditAsync(ITelegramBotClient botClient, SessionState session, User user, ParticipantState participant, List<PaymentToken> tokens, CancellationToken cancellationToken)
+    {
+        var pendingEdit = participant.PendingEdit!;
+
+        if (tokens.Count != 1)
+            throw new InvalidOperationException("Please send a *single item* to replace.\n\nExample: `4.50 Coffee`")
+                .AnswerUser();
+
+        // Validate indices (order may have been modified in the meantime)
+        if (pendingEdit.OrderIndex >= participant.Orders.Count ||
+            pendingEdit.TokenIndex >= participant.Orders[pendingEdit.OrderIndex].Tokens.Length)
+        {
+            participant.PendingEdit = null;
+            return;
+        }
+
+        var newToken = tokens[0];
+        var order = participant.Orders[pendingEdit.OrderIndex];
+        var oldToken = order.Tokens[pendingEdit.TokenIndex];
+
+        // Currency is immutable — only amount and note can change
+        if (newToken.Currency != oldToken.Currency)
+            throw new InvalidOperationException($"Currency cannot be changed! Only the amount and note can be updated.")
+                .AnswerUser();
+
+        // Remove the old token first (freeing up its budget share), then re-add via normal order flow
+        if (order.Tokens.Length == 1)
+            participant.Orders.RemoveAt(pendingEdit.OrderIndex);
+        else
+            order.RemoveToken(pendingEdit.TokenIndex, participant.Options.Tip);
+
+        // Clear pending edit and delete prompt
+        var promptMsgId = pendingEdit.PromptMessageId;
+        participant.PendingEdit = null;
+        if (promptMsgId is not null)
+            await botClient.DeleteMessageAsync(participant.UserId, promptMsgId.Value, cancellationToken).ConfigureAwait(false);
+
+        // Re-add as a new order — handles budget check, tip, confirmation message and status updates
+        await ProcessPrivateOrderAsync(botClient, session, user, [newToken], newToken.Note ?? newToken.Amount.ToString(), cancellationToken).ConfigureAwait(false);
+
+        await CloseEditPickerAsync(botClient, participant, cancellationToken).ConfigureAwait(false);
+    }
+
+
     private async Task ProcessPrivateOrderAsync(ITelegramBotClient botClient, SessionState session, User user, List<PaymentToken> tokens, string inputExpression, CancellationToken cancellationToken)
     {
         var participant = session.Participants[user.Id];
@@ -383,6 +518,8 @@ public partial class UpdateHandler
             parseMode: ParseMode.Markdown,
             cancellationToken: cancellationToken).ConfigureAwait(false);
         participant.OrderConfirmationMessageId = confirmMsg.MessageId;
+
+        await CloseEditPickerAsync(botClient, participant, cancellationToken).ConfigureAwait(false);
 
         await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
@@ -447,8 +584,7 @@ public partial class UpdateHandler
                 // Update the pinned status message
                 await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
                 // Update user status messages for all participants
-                foreach (var p in session.Participants.Values)
-                    await UserStatusMessage.UpdateAsync(session, p, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+                await UpdateAllParticipantStatusesAsync(session, botClient, cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -730,6 +866,19 @@ public partial class UpdateHandler
 
 
     #region Helper
+    private async Task UpdateAllParticipantStatusesAsync(SessionState session, ITelegramBotClient botClient, CancellationToken cancellationToken)
+    {
+        foreach (var participant in session.Participants.Values)
+        {
+            await CloseEditPickerAsync(botClient, participant, cancellationToken).ConfigureAwait(false);
+            await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+        }
+    }
+    private async Task CloseEditPickerAsync(ITelegramBotClient botClient, ParticipantState participant, CancellationToken cancellationToken)
+    {
+        if (await botClient.DeleteMessageAsync(participant.UserId, participant.EditPickerMessageId, cancellationToken).ConfigureAwait(false))
+            participant.EditPickerMessageId = null;
+    }
     private void ValidateInvoiceAmount(long expectedSats, long invoiceSats)
     {
         if (invoiceSats > expectedSats)

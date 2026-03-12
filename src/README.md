@@ -339,10 +339,11 @@ graph TD
 
 1. **User Input** - Natural language parsing (`"5.99 Beer"`) submitted as an **order** during `AcceptingOrders` phase
 2. **Order Registration** - Structured `OrderRecord` objects stored per participant with amounts and memos
-3. **Order Phase Closes** - Session host calls `/closezap`; the bot converts all orders to Lightning invoices
-4. **Invoice Creation** - One consolidated Lightning invoice created per participant; session enters `WaitingForPayments`
-5. **Payment Monitoring** - Background service polls payment status
-6. **Confirmation** - UI updates and session state changes; once all invoices are paid the lottery draw runs automatically
+3. **Order Editing** - During `AcceptingOrders`, participants can tap **✏️ Edit Order** to open an inline item picker: edit individual tokens (sends a new value replacing the old one) or remove them with 🗑️; currency cannot be changed
+4. **Order Phase Closes** - Session host calls `/closezap`; the bot converts all orders to Lightning invoices
+5. **Invoice Creation** - One consolidated Lightning invoice created per participant; session enters `WaitingForPayments`
+6. **Payment Monitoring** - Background service polls payment status
+7. **Confirmation** - UI updates and session state changes; once all invoices are paid the lottery draw runs automatically
 
 ### Lost and Found Recovery System
 
@@ -366,6 +367,7 @@ Team Zaps employs sophisticated message lifecycle management:
 
 - **Status Messages** - Pinned group messages showing session state
 - **User Messages** - Private messages with personal status and controls
+- **Edit Order Picker** - Inline item picker sent to the user's DM during `AcceptingOrders`; shows each token with ✏️ (replace) and 🗑️ (remove) buttons; auto-dismissed on phase changes or new orders
 - **Payment Messages** - Lightning invoice messages with QR codes
 - **Winner Messages** - Lottery result announcements
 - **Summary Messages** - Complete payment breakdowns for winners

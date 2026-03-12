@@ -125,9 +125,21 @@ public record OrderRecord
     public required double FiatAmount;
     public required double TipAmount;
     public required DateTimeOffset Timestamp;
+
+
+    public void RemoveToken(int index, byte? tip)
+    {
+        Tokens = Tokens.Where((_, i) => i != index).ToArray();
+        
+        // Recalculate amounts after token removal
+        var gross = (double)Tokens.Sum(t => t.Amount);
+        TipAmount = (tip > 0) ? Math.Round(gross * tip.Value / 100.0, 2) : 0.0;
+        FiatAmount = Math.Round(gross + TipAmount, 2);
+    }
 }
 
 public record PendingJoinInfo(long ChatId, int WelcomeMessageId);
+public record PendingEditToken(int OrderIndex, int TokenIndex, int? PromptMessageId);
 
 public class ParticipantState : IUser, ITipableAmount, IOrderableAmount
 {
@@ -161,6 +173,8 @@ public class ParticipantState : IUser, ITipableAmount, IOrderableAmount
     public int? OrderConfirmationMessageId { get; set; }
     public int? BudgetSelectionMessageId { get; set; }
     public int? TipSelectionMessageId { get; set; }
+    public int? EditPickerMessageId { get; set; }
+    public PendingEditToken? PendingEdit { get; set; }
 
 
     public override string ToString() => User.ToString();
@@ -261,10 +275,7 @@ internal static partial class Ext
     public static void AppendOrders(this StringBuilder source, IEnumerable<OrderRecord> orders)
     {
         foreach (var token in orders.SelectMany(p => p.Tokens))
-        {
-            var memo = string.IsNullOrWhiteSpace(token.Note) ? "" : $" - {token.Note}";
-            source.AppendLine($"  • {token.FormatAmount()}{memo}");
-        }
+            source.AppendLine($"  • {token}");
     }
     public static void AppendSessionState(this StringBuilder source, SessionState session)
     {

@@ -74,6 +74,10 @@ How to participate:
   - `5.99 beer`
   - `12.50 pizza + 3.00 tip`
   - Multiple lines are allowed.
+- To modify your orders after submitting, tap **✏️ Edit Order** in your private status message:
+  - Tap **✏️** next to an item to replace it — send the new amount and note as a single entry.
+  - Tap **🗑️** next to an item to remove it.
+  - Tap **✖️ Close** to dismiss the picker without changes.
 - Once the order phase is closed, you'll receive a Lightning invoice in private chat — pay it to confirm your participation.
 
 Payment flow summary:
@@ -94,7 +98,7 @@ This section walks through a complete session from start to finish with screensh
 | <img src="docs/screenshots/step-01-session-started.png" width="80%"> | **1 — New session**<br>A user starts a new session in the group chat. The bot posts a pinned status message. Order submission is blocked until at least one participant enters the lottery. |
 | <img src="docs/screenshots/step-02a-joined-private.png" width="80%"><img src="docs/screenshots/step-02b-group-status.png" width="80%"> | **2 — Join the session**<br>Members click the **🎯 Join** button on the pinned status message. The bot opens a private chat `#1` with each user showing their personal session status. The group status `#2` updates in parallel. |
 | <img src="docs/screenshots/step-03-lottery-entered.png" width="50%"> | **3 — Enter the lottery**<br>Participants willing to pay the fiat bill click **🎰 Enter Lottery** and set a budget. Order submission unlocks once the first entry is in. |
-| <img src="docs/screenshots/step-04-order-placed.png" width="80%"> | **4 — Place orders**<br>Each participant opens a private chat with the bot and submits their orders. The bot confirms each order and shows a running total. |
+| <img src="docs/screenshots/step-04-order-placed.png" width="80%"> | **4 — Place orders**<br>Each participant opens a private chat with the bot and submits their orders. The bot confirms each order and shows a running total. Tap **✏️ Edit Order** in the status message to edit or remove individual items at any time before the order phase closes. |
 | <img src="docs/screenshots/step-05b-invoice-private.png" width="80%"><img src="docs/screenshots/step-05a-group-status.png" width="50%"> | **5 — Close the order phase**<br>The admin clicks **🏆 Close**. The phase moves to *Waiting for Payments*. Everyone who ordered receives a Lightning invoice in private chat `#1`. The group status `#2` shows 🫰 next to unpaid participants. |
 | <img src="docs/screenshots/step-06-invoice-received.png" width="60%"> | **6 — Participants pay their invoices**<br>As payments are confirmed, the 🫰 icon changes to ✅ in the group status message. |
 | <img src="docs/screenshots/step-07-winner-drawn.png" width="80%"> | **7 — Winner drawn**<br>Once every participant has paid, the bot draws the winner from the lottery pool. The group status announces the winner and payout amount. The phase moves to *Waiting for Winner Invoice*. |
@@ -124,6 +128,8 @@ The bot accepts various order formats in private chat:
 12.50€ lunch                 # Explicit Euro symbol  
 3.00 Milk + 2.50 Pizza       # Multiple amounts
 ```
+
+Once submitted, you can edit or remove individual items at any time before the order phase is closed. Use the **✏️ Edit Order** button in your private status message to open the item picker.
 
 Once the session host closes the order phase, the bot converts all orders to Lightning invoices and sends them to each participant privately.
 

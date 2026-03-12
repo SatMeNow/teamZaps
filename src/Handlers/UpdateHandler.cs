@@ -242,6 +242,26 @@ public partial class UpdateHandler : IUpdateHandler
             case CallbackActions.AdminOptions:
                 await HandleSetOptionsAsync(botClient, query, cancellationToken).ConfigureAwait(false);
                 break;
+
+            case CallbackActions.ShowEditPicker:
+                await HandleShowEditPickerAsync(botClient, chatId, query.From, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case CallbackActions.EditToken when (data.Length == 3):
+                var editOrderIdx = int.Parse(data[1]);
+                var editTokenIdx = int.Parse(data[2]);
+                await HandleEditTokenAsync(botClient, chatId, query.From, editOrderIdx, editTokenIdx, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case CallbackActions.RemoveToken when (data.Length == 3):
+                var removeOrderIdx = int.Parse(data[1]);
+                var removeTokenIdx = int.Parse(data[2]);
+                await HandleRemoveTokenAsync(botClient, chatId, query.From, removeOrderIdx, removeTokenIdx, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case CallbackActions.CancelEdit:
+                await HandleCancelEditAsync(botClient, chatId, query.From, cancellationToken).ConfigureAwait(false);
+                break;
         }
     }
     
