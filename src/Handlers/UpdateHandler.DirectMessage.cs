@@ -51,7 +51,17 @@ public partial class UpdateHandler
                 if (pendingJoin is not null)
                 {
                     await HandleJoinSessionAsync(botClient, pendingJoin.ChatId, command.Source.From!, cancellationToken).ConfigureAwait(false);
-                    await botClient.DeleteMessageAsync(pendingJoin.ChatId, pendingJoin.WelcomeMessageId, cancellationToken).ConfigureAwait(false);
+
+                    // Update or delete the shared group welcome message
+                    var joinedSession = workflowService.TryGetSessionByChat(pendingJoin.ChatId);
+                    if (joinedSession?.PendingWelcome is not null)
+                    {
+                        joinedSession.PendingWelcome!.PendingUsers.RemoveAll(u => u.Id == command.UserId);
+                        if (joinedSession.PendingWelcome?.PendingUsers!.IsEmpty() == true)
+                            await WelcomeMessage.DeleteAsync(joinedSession, botClient, cancellationToken).ConfigureAwait(false);
+                        else
+                            await WelcomeMessage.UpdateAsync(joinedSession, botClient, cancellationToken).ConfigureAwait(false);
+                    }
                 }
                 break;
 
