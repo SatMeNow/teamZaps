@@ -67,6 +67,7 @@ public class SessionState : ITipableAmount, IOrderableAmount
     public TimeSpan TimeInCurrentPhase => (DateTime.UtcNow - phaseChangeTime);
 
     public int? StatusMessageId { get; set; }
+    public PendingChatWelcome? PendingWelcome { get; set; }
 
     public ConcurrentDictionary<long, ParticipantState> Participants { get; } = new();
     public ConcurrentDictionary<string, PendingPayment> PendingPayments { get; } = new();
@@ -138,7 +139,8 @@ public record OrderRecord
     }
 }
 
-public record PendingJoinInfo(long ChatId, int WelcomeMessageId);
+public record PendingJoinInfo(long ChatId);
+public record PendingChatWelcome(int MessageId, List<User> PendingUsers);
 public record PendingEditToken(int OrderIndex, int TokenIndex, int? PromptMessageId);
 
 public class ParticipantState : IUser, ITipableAmount, IOrderableAmount

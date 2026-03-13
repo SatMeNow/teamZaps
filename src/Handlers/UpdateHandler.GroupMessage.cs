@@ -343,25 +343,27 @@ public partial class UpdateHandler
         }
         catch (Exception)
         {
-            if (sessionManager.PendingJoins.ContainsKey(user.Id))
-                ; // Skip, we already sent a welcome message (Just wait for them to open the private chat).
+            if (!sessionManager.PendingJoins.ContainsKey(user.Id))
+            {
+                // Mark user as pending session join
+                sessionManager.PendingJoins[user.Id] = new PendingJoinInfo(chatId);
+                // Remove user from participants to avoid inconsistencies
+                session.Participants.Remove(user.Id, out _);
+            }
+
+            // Update the single shared welcome message for this chat
+            if (session.PendingWelcome is not null)
+            {
+                session.PendingWelcome!.PendingUsers.Add(user);
+                await WelcomeMessage.UpdateAsync(session, botClient, cancellationToken).ConfigureAwait(false);
+            }
             else
             {
                 var botUser = await botClient.GetMe(cancellationToken).ConfigureAwait(false);
-                var welcomeMessage = await botClient.SendMessage(chatId,
-                    $"Hey @{user.UserName()}, we did not meet before ✌️\n" +
-                    "I'm a telegram bot, *helping you* and your friends *to coordinate lightning payments*.\n\n" +
-                    $"ℹ️ Please *start a private chat* to interact with me, by clicking @{botUser.UserName()}. See you soon 👍",
-                    parseMode: ParseMode.Markdown,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-
-                // Mark user as pending session join
-                sessionManager.PendingJoins[user.Id] = new PendingJoinInfo(chatId, welcomeMessage.MessageId);
-                // Remove user from participants to avoid inconsistencies
-                session.Participants.Remove(user.Id, out _);
-
-                logger.LogInformation("Invited new user {User} to a private bot chat.", user.DisplayName());
+                await WelcomeMessage.SendAsync(session, user, botClient, cancellationToken).ConfigureAwait(false);
             }
+
+            logger.LogInformation("Invited new user {User} to a private bot chat.", user.DisplayName());
             return;
         }
 
