@@ -153,7 +153,10 @@ public partial class UpdateHandler
             {
                 try
                 {
-                    await CreateParticipantInvoiceAsync(botClient, session, participant, cancellationToken).ConfigureAwait(false);
+                    if (participant.Options.PreferredPaymentMethod == PaymentMethod.Cashu && cashuBackend is not null)
+                        await CreateParticipantCashuRequestAsync(botClient, session, participant, cancellationToken).ConfigureAwait(false);
+                    else
+                        await CreateParticipantInvoiceAsync(botClient, session, participant, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -481,7 +484,7 @@ public partial class UpdateHandler
                 if (removed.MessageId is not null)
                 {
                     var status = (result ? PaymentStatus.Canceled : PaymentStatus.Removed);
-                    await PaymentMessage.UpdateAsync(removed, status, botClient, logger, cancellationToken).ConfigureAwait(false);
+                    await LightningPaymentMessage.UpdateAsync(removed, status, botClient, logger, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -523,10 +526,40 @@ public partial class UpdateHandler
         session.PendingPayments.TryAdd(invoice.PaymentHash, pending);
 
         // Send invoice to participant:
-        var message = await PaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
+        var message = await LightningPaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
         pending.MessageId = message.MessageId;
 
         logger.LogInformation("Created payment invoice for participant {User} in session {Session}: {Amount}.", user, session, totalFiat.Format());
+    }
+
+    private async Task CreateParticipantCashuRequestAsync(ITelegramBotClient botClient, SessionState session, ParticipantState participant, CancellationToken cancellationToken)
+    {
+        var user = participant.User;
+        var totalFiat = participant.OrdersFiatAmount;
+        var totalTip = participant.OrdersTipAmount;
+        var totalSats = exchangeRateBackend.ToSats(totalFiat);
+        var allTokens = participant.Orders.SelectMany(o => o.Tokens).ToArray();
+
+        // Push-based: no invoice is created; the user will paste a cashuA token to the bot.
+        var pending = new PendingPayment
+        {
+            Participant = participant,
+            PaymentHash = Guid.NewGuid().ToString("N"), // local identifier, no mint contact
+            PaymentRequest = null,                       // marks this as a Cashu token payment
+            Tokens = allTokens,
+            SatsAmount = totalSats,
+            TipAmount = totalTip,
+            FiatAmount = totalFiat,
+            Currency = BotBehaviorOptions.AcceptedFiatCurrency,
+            CreatedAt = DateTimeOffset.Now
+        };
+        session.PendingPayments.TryAdd(pending.PaymentHash, pending);
+
+        // Prompt participant to paste a cashuA token:
+        var message = await CashuPaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
+        pending.MessageId = message.MessageId;
+
+        logger.LogInformation("Created Cashu payment request for participant {User} in session {Session}: {Amount}.", user, session, totalFiat.Format());
     }
 
     private async Task<BotAdminOptions> GetAdminOptions(SessionState? session, long chatId)

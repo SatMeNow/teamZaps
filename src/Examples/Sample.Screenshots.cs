@@ -277,7 +277,7 @@ public class Sample_Screenshots
     private static readonly MethodInfo GroupKeyboardBuild = typeof(SessionStatusMessage).GetMethod("BuildKeyboard", BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo UserStatusBuild = typeof(UserStatusMessage).GetMethod("Build", BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo UserKeyboardBuild = typeof(UserStatusMessage).GetMethod("BuildKeyboard", BindingFlags.NonPublic | BindingFlags.Static)!;
-    private static readonly MethodInfo PaymentBuild = typeof(PaymentMessage).GetMethod("Build", BindingFlags.NonPublic | BindingFlags.Static)!;
+    private static readonly MethodInfo PaymentBuild = typeof(LightningPaymentMessage).GetMethod("Build", BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo WinnerBuild = typeof(WinnerMessage).GetMethod("Build", BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo SummaryBuild = typeof(SessionSummaryMessage).GetMethod("BuildSummary", BindingFlags.NonPublic | BindingFlags.Static)!;
 

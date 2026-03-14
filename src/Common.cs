@@ -123,7 +123,8 @@ public static partial class Common
 public static partial class Extensions
 {
     #region Constants
-    private static readonly IReadOnlyDictionary<PaymentStatus, IconAttribute> IconMap = UtilEnum.GetCustomAttributes<PaymentStatus, IconAttribute>();
+    private static readonly IReadOnlyDictionary<PaymentStatus, IconAttribute> PaymentStatusIconMap = UtilEnum.GetCustomAttributes<PaymentStatus, IconAttribute>();
+    private static readonly IReadOnlyDictionary<PaymentMethod, IconAttribute> PaymentMethodIconMap = UtilEnum.GetCustomAttributes<PaymentMethod, IconAttribute>();
     private static readonly IReadOnlyDictionary<PaymentCurrency, CurrencyAttribute> CurrencyMap = UtilEnum.GetCustomAttributes<PaymentCurrency, CurrencyAttribute>();
     #endregion
 
@@ -140,7 +141,9 @@ public static partial class Extensions
         }
     }
 
-    public static string GetIcon(this PaymentStatus source) => (IconMap.TryGetValue(source, out var icon) ? icon.Icon : "");
+    public static string GetIcon(this PaymentStatus source) => (PaymentStatusIconMap.TryGetValue(source, out var icon) ? icon.Icon : "");
+    public static string GetIcon(this PaymentMethod source) => (PaymentMethodIconMap.TryGetValue(source, out var icon) ? icon.Icon : "");
+    public static string Format(this PaymentMethod source) => $"{source.GetIcon()} {source.GetDescription()}";
 
     public static PaymentCurrency? ToCurrency(this string? source)
     {

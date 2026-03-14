@@ -1,4 +1,5 @@
 using System.Text;
+using TeamZaps.Configuration;
 using TeamZaps.Services;
 using TeamZaps.Session;
 using TeamZaps.Utils;
@@ -261,6 +262,9 @@ internal static class UserStatusMessage
                 if (participant.Options.Tip > 0)
                     tip = $"🎩 *{tip}* per order";
                 status.AppendLine($"• Tip: {tip}");
+
+                var pm = participant.Options.PreferredPaymentMethod;
+                status.AppendLine($"• Preferred payment: *{pm.Format()}*");
             }
         }
         status.AppendLine();
@@ -308,6 +312,8 @@ internal static class UserStatusMessage
         if (session.Phase == SessionPhase.AcceptingOrders)
         {
             buttons.Add(InlineKeyboardButton.WithCallbackData("🎩 Set tip", CallbackActions.SetTip));
+            var pmIcon = participant?.Options.PreferredPaymentMethod.GetIcon() ?? PaymentMethod.Lightning.GetIcon();
+            buttons.Add(InlineKeyboardButton.WithCallbackData($"{pmIcon} Preferred payment", CallbackActions.SetPaymentMethod));
             buttons.Add(InlineKeyboardButton.WithCallbackData("📋 Add Order", CallbackActions.AddOrder));
             if (participant?.HasOrders == true)
                 buttons.Add(InlineKeyboardButton.WithCallbackData("✏️ Edit Order", CallbackActions.ShowEditPicker));

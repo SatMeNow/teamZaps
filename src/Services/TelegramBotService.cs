@@ -77,6 +77,8 @@ public static class CallbackActions
     public const string RemoveToken = "removeToken";
     public const string CancelEdit = "cancelEdit";
     public const string LeaveSession = "leaveSession";
+    public const string SetPaymentMethod = "setPayMethod";
+    public const string SelectPaymentMethod = "selPayMethod";
 }
 
 public class TelegramBotService : BackgroundService

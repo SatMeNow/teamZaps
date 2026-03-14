@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using TeamZaps;
 using TeamZaps.Services;
 using TeamZaps.Session;
 
@@ -30,6 +32,14 @@ public class BotAdminOptions
     #endregion
 }
 
+public enum PaymentMethod
+{
+    [Icon("⚡"), Description("Lightning")]
+    Lightning,
+    [Icon("🥜"), Description("Cashu eCash")]
+    Cashu
+}
+
 [Storage("userOpt", "user_{0}.json")]
 public class BotUserOptions
 {
@@ -39,6 +49,11 @@ public class BotUserOptions
     /// </summary>
     [JsonPropertyName("tip")]
     public byte? Tip { get; set; }
+    /// <summary>
+    /// User's preferred payment method.
+    /// </summary>
+    [JsonPropertyName("paymentMethod")]
+    public PaymentMethod PreferredPaymentMethod { get; set; } = PaymentMethod.Lightning;
     #endregion
 }
 

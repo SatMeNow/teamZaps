@@ -40,6 +40,7 @@ src/
 │   └── Backends/                 # Pluggable backend implementations
 │       ├── Backend.cs            # Backend interfaces and base types
 │       ├── Backend.AlbyHub.cs    # AlbyHub NWC backend
+│       ├── Backend.Cashu.cs      # Cashu mint backend (NUT-04/NUT-05)
 │       ├── Backend.Lnbits.cs     # LNBits REST API backend
 │       ├── Backend.CoinGecko.cs  # CoinGecko exchange rate backend
 │       └── Backend.ElectrumX.cs  # ElectrumX blockchain data backend
@@ -109,6 +110,53 @@ LNBits uses a traditional REST API for Lightning operations. Requires a running 
 **Configuration:**
 - `LndhubUrl` - LNDhub extension URL (must end with `/lndhub/ext/`)
 - `ApiKey` - Invoice/read key from your LNbits wallet
+
+#### Cashu Mint Backend (NUT-04/NUT-05)
+
+Cashu mint backend for bi-directional eCash ↔ Lightning bridging using [DotNut](https://github.com/Kukks/DotNut). Implements `ICashuBackend : ILightningBackend`.
+
+- **NUT-04 (mint)**: Creates Lightning invoices; mints eCash proofs into a local wallet once paid.
+- **NUT-05 (melt)**: Pays Lightning invoices by melting eCash proofs from the local wallet.
+- **NUT-03 (swap)**: Atomically exchanges proofs — used for receiving `cashuA` tokens (burn user's proofs, issue fresh ones to bot wallet) and for obtaining exact change when sending tokens.
+- **Proof wallet**: Persisted to `data/wallets/cashu.json`.
+
+```json
+{
+  "Backends": {
+    "Cashu": {
+      "MintUrl": "https://mint.example.com",
+      "Unit": "sat"
+    }
+  }
+}
+```
+
+**Configuration:**
+- `MintUrl` - Cashu mint base URL (e.g. `https://mint.minibits.cash/Bitcoin`)
+- `Unit` - Token denomination unit (default: `sat`)
+
+**How it works (flow):**
+1. `CreateInvoiceAsync` → `POST /v1/mint/quote/bolt11` → returns a Lightning invoice; stores `quoteId` as payment identifier
+2. `CheckPaymentStatusAsync(quoteId)` → `GET /v1/mint/quote/bolt11/{quoteId}`; if PAID → `POST /v1/mint/bolt11` with BDHKE blinded messages → unblind signatures → proofs saved to wallet
+3. `PayInvoiceAsync(bolt11)` → `POST /v1/melt/quote/bolt11`; selects proofs from wallet; `POST /v1/melt/bolt11` → proofs spent, invoice paid
+4. `ReceiveTokenAsync(cashuA)` — NUT-03 swap: decodes Base64url token, validates mint URL matches, creates fresh blinded outputs for the same total amount, calls `POST /v1/swap` to atomically burn input proofs and issue new ones, absorbs new proofs into wallet; returns sats received
+5. `SendTokenAsync(sats)` — greedy coin selection; if overshoot, NUT-03 swap to get exact change; serializes selected proofs to NUT-00 `cashuA` Base64url token string; removes proofs from wallet
+
+**Proof wallet format and recovery:**
+
+`cashu.json` stores proofs in their raw internal form — not the portable `cashuA…` token format that other Cashu wallets accept:
+
+```json
+{ "proofs": [{ "amount": 64, "id": "009a1f…", "secret": "a3f0…", "C": "02ab…" }] }
+```
+
+To recover funds (if required), proofs must be wrapped in the NUT-00 token envelope and base64url-encoded:
+
+```json
+{ "token": [{ "mint": "https://mint.minibits.cash/Bitcoin", "proofs": [{ "amount": 64, "id": "…", "secret": "…", "C": "…" }] }] }
+```
+
+`Sample_CashuExport.ExportTokensAsync(walletStorage, mintUrl)` (`Examples/Sample.CashuExport.cs`) does this conversion and prints one `cashuA…` string per keyset to stdout. The output can be pasted into any NUT-00-compatible wallet (Minibits, eNuts, etc.).
 
 #### Exchange Rate Backends
 
@@ -402,6 +450,14 @@ All backends must:
   - Implements: `ILightningBackend`
   - Configuration: `Backends:AlbyHub` section
   - Features: Invoice creation, payment, status checks via Nostr relays
+
+- **Cashu** - Cashu eCash mint backend (NUT-04 mint + NUT-05 melt + NUT-03 swap/receive)
+  - Implements: `ICashuBackend : ILightningBackend`
+  - Configuration: `Backends:Cashu` section
+  - Features: Creates Lightning invoices (NUT-04), pays Lightning invoices via eCash melt (NUT-05), persists proof wallet to `data/wallets/cashu.json`
+  - Library: [DotNut](https://github.com/Kukks/DotNut) NuGet package
+  - Extra interface: `ICashuBackend` adds `MintUrl` and `GetBalanceAsync()`
+  - **Cashu as primary backend**: When configured as the only Lightning backend, Cashu is registered as both `ILightningBackend` and queried for `ICashuBackend` support via `lightningBackend as ICashuBackend`. Users can set their *preferred payment method* (Lightning or Cashu eCash) via the `⚡ Preferred payment` button on their private status message. The preference is persisted in `BotUserOptions.PreferredPaymentMethod`. If the user prefers Cashu but the backend does not implement `ICashuBackend`, Lightning is used silently as fallback — no parallel/secondary backends needed.
 
 - **LNBits** - Traditional REST API integration
   - Implements: `ILightningBackend`

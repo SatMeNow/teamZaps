@@ -79,16 +79,17 @@ How to participate:
   - Tap **🗑️** next to an item to remove it.
   - Tap **✖️ Close** to dismiss the picker without changes.
 - To leave a session before the order phase closes, tap **🚪 Leave** in your private status message. Leaving is blocked if you are a lottery participant and removing your budget would drop the total below what other participants have already ordered.
-- Once the order phase is closed, you'll receive a Lightning invoice in private chat — pay it to confirm your participation.
+- Tap **Preferred payment** in your private status message to choose between a ⚡ Lightning invoice or a 🥜 Cashu eCash mint invoice. The preference is saved and used for all future sessions. If you select Cashu but the bot doesn't support Cashu at the time, Lightning is used automatically.
+- Once the order phase is closed, you'll receive a ⚡ Lightning invoice in private chat — pay it to confirm your participation. (🥜 Cashu eCash also supported — see *Preferred payment* above.)
 
 Payment flow summary:
 1. Join session in group
 2. Enter lottery (optional)
 3. Submit orders in private chat
-4. Order phase closes → invoices sent to all participants
-5. Pay your Lightning invoice
+4. Order phase closes → Lightning invoices sent to all participants
+5. Pay your Lightning invoice (or Cashu token if preferred)
 6. All payments confirmed → winner is drawn
-7. Winner submits Lightning invoice → automatic payout
+7. Winner submits Lightning invoice → automatic payout (or receives Cashu token if preferred)
 
 ## 📸 Session Walkthrough
 
@@ -100,10 +101,10 @@ This section walks through a complete session from start to finish with screensh
 | <img src="docs/screenshots/step-02a-joined-private.png" width="80%"><img src="docs/screenshots/step-02b-group-status.png" width="80%"> | **2 — Join the session**<br>Members click the **🎯 Join** button on the pinned status message. The bot opens a private chat `#1` with each user showing their personal session status. The group status `#2` updates in parallel. |
 | <img src="docs/screenshots/step-03-lottery-entered.png" width="50%"> | **3 — Enter the lottery**<br>Participants willing to pay the fiat bill click **🎰 Enter Lottery** and set a budget. Order submission unlocks once the first entry is in. |
 | <img src="docs/screenshots/step-04-order-placed.png" width="80%"> | **4 — Place orders**<br>Each participant opens a private chat with the bot and submits their orders. The bot confirms each order and shows a running total. Tap **✏️ Edit Order** in the status message to edit or remove individual items at any time before the order phase closes. |
-| <img src="docs/screenshots/step-05b-invoice-private.png" width="80%"><img src="docs/screenshots/step-05a-group-status.png" width="50%"> | **5 — Close the order phase**<br>The admin clicks **🏆 Close**. The phase moves to *Waiting for Payments*. Everyone who ordered receives a Lightning invoice in private chat `#1`. The group status `#2` shows 🫰 next to unpaid participants. |
+| <img src="docs/screenshots/step-05b-invoice-private.png" width="80%"><img src="docs/screenshots/step-05a-group-status.png" width="50%"> | **5 — Close the order phase**<br>The admin clicks **🏆 Close**. The phase moves to *Waiting for Payments*. Everyone who ordered receives a ⚡ Lightning invoice in private chat `#1` (🥜 Cashu eCash also supported via the preferred payment setting). The group status `#2` shows 🫰 next to unpaid participants. |
 | <img src="docs/screenshots/step-06-invoice-received.png" width="60%"> | **6 — Participants pay their invoices**<br>As payments are confirmed, the 🫰 icon changes to ✅ in the group status message. |
 | <img src="docs/screenshots/step-07-winner-drawn.png" width="80%"> | **7 — Winner drawn**<br>Once every participant has paid, the bot draws the winner from the lottery pool. The group status announces the winner and payout amount. The phase moves to *Waiting for Winner Invoice*. |
-| <img src="docs/screenshots/step-08-winner-invoice.png" width="80%"> | **8 — Winner submits payout invoice**<br>The winner receives a private message asking them to submit a Lightning invoice for the full payout amount. They paste invoices until the total is met. |
+| <img src="docs/screenshots/step-08-winner-invoice.png" width="80%"> | **8 — Winner submits payout invoice**<br>The winner receives a private message asking to submit a ⚡ Lightning invoice for the full payout amount — they can paste multiple invoices until the total is met. (If the winner's preferred payment is 🥜 Cashu, the bot sends a token directly with no invoice needed.) |
 | <img src="docs/screenshots/step-09-completed.png" width="60%"> | **9 — Session complete**<br>The bot pays the winner's invoice. The group status updates to ✅ Completed with a full session summary. |
 
 ---

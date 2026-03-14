@@ -175,6 +175,7 @@ public class ParticipantState : IUser, ITipableAmount, IOrderableAmount
     public int? OrderConfirmationMessageId { get; set; }
     public int? BudgetSelectionMessageId { get; set; }
     public int? TipSelectionMessageId { get; set; }
+    public int? PaymentMethodSelectionMessageId { get; set; }
     public int? EditPickerMessageId { get; set; }
     public PendingEditToken? PendingEdit { get; set; }
 
@@ -193,7 +194,7 @@ public record PaymentRecord() : IUser, ITipableAmount
     public long UserId => User.Id;
     
     public required string PaymentHash;
-    public required string PaymentRequest;
+    public required string? PaymentRequest;
     public required DateTimeOffset Timestamp;
     
     public required PaymentToken[] Tokens;
@@ -215,7 +216,10 @@ public class PendingPayment : IUser, ITipableAmount, IOrderableAmount
     public long UserId => User.Id;
 
     public required string PaymentHash { get; init; }
-    public required string PaymentRequest { get; init; }
+    /// <summary>
+    /// BOLT11 payment request, or null for Cashu token payments (push-based, no request string).
+    /// </summary>
+    public required string? PaymentRequest { get; init; }
     public required DateTimeOffset CreatedAt { get; init; }
 
     public bool NotifiedPaid { get; set; }

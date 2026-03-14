@@ -198,6 +198,32 @@ public interface ISupportsCancelInvoice : ILightningBackend
     /// </summary>
     Task<bool> CancelInvoiceAsync(string paymentHash, CancellationToken cancellationToken = default);
 }
+/// <summary>
+/// Interface for Cashu mint backend services.
+/// Extends <see cref="ILightningBackend"/> with eCash wallet operations:
+/// NUT-04 (mint eCash from Lightning payments) and NUT-05 (melt eCash to pay Lightning invoices).
+/// </summary>
+public interface ICashuBackend : ILightningBackend
+{
+    /// <summary>The Cashu mint URL.</summary>
+    string MintUrl { get; }
+    /// <summary>
+    /// Get the current eCash wallet balance in sats.
+    /// </summary>
+    Task<long> GetBalanceAsync(CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Receive a serialized cashuA token, validate and absorb its proofs into the bot's wallet
+    /// via NUT-03 swap (atomically burns user proofs and issues fresh ones, preventing double-spend).
+    /// Throws if the token is from a different mint, already spent, or malformed.
+    /// </summary>
+    /// <returns>Total sats received.</returns>
+    Task<long> ReceiveTokenAsync(string cashuToken, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Create a serialized cashuA token of exactly <paramref name="sats"/> from the bot's wallet
+    /// and return it as a string. The selected proofs are removed from the wallet.
+    /// </summary>
+    Task<string> SendTokenAsync(long sats, CancellationToken cancellationToken = default);
+}
 
 /// <summary>
 /// Lightning invoice details (BOLT11 payment request).

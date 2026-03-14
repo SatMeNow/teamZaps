@@ -117,18 +117,18 @@ throw new InvalidOperationException("Session is not currently accepting new part
 
 ## Key Data Models
 - `SessionState`: ChatId, Title, Participants, PendingPayments, LotteryParticipants, WinnerPayouts, OrdersFiatAmount, SatsAmount, TipAmount, Duration (Bitcoin blocks)
-- `ParticipantState`: User, Orders, Payments, Tip preference, message IDs (`OrderConfirmationMessageId`, `BudgetSelectionMessageId`, `TipSelectionMessageId`, `EditPickerMessageId`), `PendingEdit` (`PendingEditToken?`)
+- `ParticipantState`: User, Orders, Payments, Tip preference, message IDs (`OrderConfirmationMessageId`, `BudgetSelectionMessageId`, `TipSelectionMessageId`, `PaymentMethodSelectionMessageId`, `EditPickerMessageId`), `PendingEdit` (`PendingEditToken?`)
 - `OrderRecord`: FiatAmount, TipAmount, PaymentTokens, Timestamp; `RemoveToken(index, tip)` removes one token and recalculates totals
 - `PendingEditToken`: OrderIndex, TokenIndex, PromptMessageId — tracks in-progress item edit (cleared after apply or cancel)
-- `PaymentRecord`: User, SatsAmount, FiatAmount, PaymentHash, PaymentRequest, Tokens
-- `PendingPayment`: PaymentHash, Created, NotifiedPaid, Tokens, Currency
+- `PaymentRecord`: User, SatsAmount, FiatAmount, PaymentHash, `PaymentRequest` (`string?` — null for Cashu push payments), Tokens
+- `PendingPayment`: PaymentHash, Created, NotifiedPaid, Tokens, Currency, `PaymentRequest` (`string?` — null marks a Cashu push payment; skipped by Lightning poll loop)
 - `PayableAmount` / `PayableFiatAmount`: track payout progress
 - `PaymentToken`: Amount, Currency, Note — parsed from free text ("3.99 Pizza + 5€ Water")
 - `LostSatsRecord`: UserId, SatsAmount, Timestamp, Reason, notifications count
 
 ## Services
 - `TelegramBotService` — bot lifecycle, waits for backends ready, schedules daily sanity checks, notifies root users on failure
-- `PaymentMonitorService` — polls every 5s for invoice settlement; on all paid → draws lottery
+- `PaymentMonitorService` — polls every 5s for Lightning invoice settlement (skips `PendingPayment` with null `PaymentRequest`); `ConfirmPaymentAsync` is public and shared with `ProcessCashuTokenPaymentAsync`; on all paid → `DrawLotteryAsync` (Cashu winner gets immediate token DM and skips `WaitingForInvoice` if all payouts complete)
 - `RecoveryService` — daily scan for lost sats from interrupted sessions; notifies users max 3x
 - `StatisticService` — session history stats (avg duration, sats/participant, tips, max parallel sats)
 - `SessionManager` — singleton `ConcurrentDictionary<chatId, SessionState>`; enforces budget/locked sats/parallel session limits; events: OnFirstSessionCreated, OnSessionRemoved, OnLastSessionRemoved
@@ -138,9 +138,9 @@ throw new InvalidOperationException("Session is not currently accepting new part
 
 ## Update Handlers
 - `UpdateHandler.cs` — main router; validates bot recipient
-- `UpdateHandler.DirectMessage.cs` — `/start`, `/stat`, `/recover`, `/help`, `/about`, `/diag` (root-only), payment tokens, BOLT11 invoices, recovery invoices; edit order callbacks: ShowEditPicker, EditToken, RemoveToken, CancelEdit (HandleShowEditPickerAsync, HandleEditTokenAsync, HandleRemoveTokenAsync, HandleCancelEditAsync, HandleApplyEditAsync); leave session: LeaveSession (HandleLeaveSessionAsync)
-- `UpdateHandler.GroupMessage.cs` — `/startzap [title]`, `/closezap`, `/cancelzap`, `/status`, `/stat`, `/config`; callbacks: JoinSession, JoinLottery, SelectBudget, CloseSession, ForceClose, SetTip, AdminOptions
-- `MessageHelper.Status.cs` — `UserStatusMessage` (shows ✏️ Edit Order button when participant has orders; shows 🚪 Leave button during pre-payment phases; shows "left" state with no buttons after participant leaves), `EditOrderPickerMessage` (inline item picker with per-token ✏️/🗑️ buttons and ✖️ Close)
+- `UpdateHandler.DirectMessage.cs` — `/start`, `/stat`, `/recover`, `/help`, `/about`, `/diag` (root-only), payment tokens, BOLT11 invoices, recovery invoices; `cashuA` token detection → `ProcessCashuTokenPaymentAsync` (receives token via NUT-03 swap, calls `paymentMonitorService.ConfirmPaymentAsync`); edit order callbacks: ShowEditPicker, EditToken, RemoveToken, CancelEdit (HandleShowEditPickerAsync, HandleEditTokenAsync, HandleRemoveTokenAsync, HandleCancelEditAsync, HandleApplyEditAsync); leave session: LeaveSession (HandleLeaveSessionAsync); payment method: SetPaymentMethod, SelectPaymentMethod (HandlePaymentMethodSelectionAsync, HandleSetPaymentMethodAsync)
+- `UpdateHandler.GroupMessage.cs` — `/startzap [title]`, `/closezap`, `/cancelzap`, `/status`, `/stat`, `/config`; callbacks: JoinSession, JoinLottery, SelectBudget, CloseSession, ForceClose, SetTip, AdminOptions; `CreateParticipantCashuRequestAsync` creates a Cashu push-payment request (null `PaymentRequest`, random `PaymentHash`)
+- `MessageHelper.Status.cs` — `UserStatusMessage` (shows ✏️ Edit Order button when participant has orders; shows ⚡/🥜 Preferred payment button during AcceptingOrders phase; shows 🚪 Leave button during pre-payment phases; shows "left" state with no buttons after participant leaves), `EditOrderPickerMessage` (inline item picker with per-token ✏️/🗑️ buttons and ✖️ Close)
 ## Configuration Sections
 - **BotBehavior**: Locale, SanityCheckTime, Tip/Budget choices, MaxBudget, MaxLockedSats, MaxParallelSessions
 - **Telegram**: BotToken, RootUsers
@@ -148,19 +148,31 @@ throw new InvalidOperationException("Session is not currently accepting new part
 - **Backends.Yadio/CoinCap/CoinGecko**: (empty, use defaults)
 - **Backends.Lnbits**: LndhubUrl, ApiKey
 - **Backends.AlbyHub**: ConnectionString, RelayUrls[]
+- **Backends.Cashu**: MintUrl, Unit (default: "sat")
 - **Debug** (DEBUG build only): FixBudget — pin exchange rate for local testing
 - **Recovery**: Enable, DailyScanTime
 - Per-group: `BotAdminOptions` — `[Storage("adminOpt", "chat_{0}.json")]`
-- Per-user: `BotUserOptions` — `[Storage("userOpt", "user_{0}.json")]`
+- Per-user: `BotUserOptions` — `[Storage("userOpt", "user_{0}.json")]`; fields: `Tip` (byte?), `PreferredPaymentMethod` (enum `PaymentMethod { Lightning, Cashu }`, default Lightning)
 
 ## Backends
 - **AlbyHub** (`Backend.Lightning.AlbyHub.cs`): NWC over Nostr, NIP-47 encrypted, secp256k1 keys, 30s timeout; methods: get_balance, make_invoice, pay_invoice, lookup_invoice
 - **LNbits** (`Backend.Lightning.Lnbits.cs`): REST `/api/v1/payments`; supports sat, USD, EUR; converts msat↔sat
+- **Cashu** (`Backend.Cashu.cs`): Cashu mint via DotNut NuGet; NUT-04 (mint eCash from Lightning) + NUT-05 (melt eCash to pay Lightning) + NUT-03 (swap — used for atomic token receive); proof wallet at `data/wallets/cashu.json`; implements `ICashuBackend : ILightningBackend`; quoteId used as payment hash identifier; greedy coin selection for melt/swap; keyset fetched via `GetKeys`/`GetKeysets` on startup and cached; `ReceiveTokenAsync(cashuA)` — decodes, validates mint URL, NUT-03 swap to absorb proofs, returns sats received; `SendTokenAsync(sats)` — selects proofs (swap for exact change if needed), serializes to `cashuA` Base64url token; when configured as the primary Lightning backend, `cashuBackend` in `UpdateHandler`/`PaymentMonitorService` is derived via `lightningBackend as ICashuBackend` — no separate backend registration needed
 - **Exchange rate** (`Backend.ExchangeRate.*.cs`): Yadio (`api.yadio.io/exrates/BTC`), CoinCap, CoinGecko; refreshes every 3+ min and on first session
 - **ElectrumX** (`Backend.Indexer.ElectrumX.cs`): multi-host failover, TCP/TLS, 60s keepalive ping, auto-reconnect; `blockchain.headers.subscribe` stream
 - **Nostr** (`Communication/Nostr.cs`): `NostrWalletConnector` — NWC connection string parsing, NIP-04 encrypt/decrypt, subscription + response handling (30s wait)
 
 ## Backend API References
+
+### Cashu (DotNut)
+- DotNut NuGet package: https://www.nuget.org/packages/DotNut
+- DotNut source: https://github.com/Kukks/DotNut
+- **NUT-04** (Mint — Lightning → eCash): https://github.com/cashubtc/nuts/blob/main/04.md
+- **NUT-05** (Melt — eCash → Lightning): https://github.com/cashubtc/nuts/blob/main/05.md
+- **NUT-03** (Swap — atomic token exchange; used for token receive): https://github.com/cashubtc/nuts/blob/main/03.md
+- **NUT-00** (Token format / BDHKE): https://github.com/cashubtc/nuts/blob/main/00.md
+- Key DotNut types: `CashuHttpClient` (in `DotNut.Api`), `Cashu` (BDHKE math), `Proof`, `BlindedMessage`, `BlindSignature`, `Keyset`, `KeysetId`, `StringSecret`, `PubKey` (all in `DotNut`), request/response models in `DotNut.ApiModels`
+- DotNut 1.0.6 type differences from master: `PostMintBolt11Request`/`PostMintBolt11Response` (not `PostMint*`), `PostMeltBolt11Request` (not `PostMeltRequest`); `GetKeysResponse.KeysetItemResponse` lacks `Active` and `InputFeePpk` (use `GetKeysets` for fee)
 
 ### Nostr / NWC (AlbyHub)
 - NIPs repository: https://github.com/nostr-protocol/nips

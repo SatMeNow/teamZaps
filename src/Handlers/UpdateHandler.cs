@@ -38,6 +38,7 @@ public partial class UpdateHandler : IUpdateHandler
         // Extract specific backend instances:
         this.indexerBackend = backends.GetMandatoryBackend<IIndexerBackend>();
         this.lightningBackend = backends.GetMandatoryBackend<ILightningBackend>();
+        this.cashuBackend = lightningBackend as ICashuBackend;
         this.exchangeRateBackend = backends.GetMandatoryBackend<IExchangeRateBackend>();
     }
 
@@ -266,6 +267,15 @@ public partial class UpdateHandler : IUpdateHandler
             case CallbackActions.LeaveSession:
                 await HandleLeaveSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
                 break;
+
+            case CallbackActions.SetPaymentMethod:
+                await HandlePaymentMethodSelectionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case CallbackActions.SelectPaymentMethod when (data.Length == 2):
+                var payMethod = Enum.Parse<PaymentMethod>(data[1]);
+                await HandleSetPaymentMethodAsync(botClient, chatId, query.From!, payMethod, cancellationToken).ConfigureAwait(false);
+                break;
         }
     }
     
@@ -312,6 +322,7 @@ public partial class UpdateHandler : IUpdateHandler
 
     private readonly IIndexerBackend indexerBackend;
     private readonly ILightningBackend lightningBackend;
+    private readonly ICashuBackend? cashuBackend;
     private readonly IExchangeRateBackend exchangeRateBackend;
 }
 

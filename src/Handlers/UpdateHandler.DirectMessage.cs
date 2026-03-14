@@ -167,6 +167,21 @@ public partial class UpdateHandler
         }
         else
         {
+            // Check for Cashu token payment:
+            if (text.IsCashuToken())
+            {
+                switch (session.Phase)
+                {
+                    case SessionPhase.WaitingForPayments:
+                        await ProcessCashuTokenPaymentAsync(botClient, session, user, text, cancellationToken).ConfigureAwait(false);
+                        return (true);
+
+                    default:
+                        throw new InvalidOperationException($"Cashu tokens are not accepted in current session phase `{session.Phase.GetDescription()}`.")
+                            .AddLogLevel(LogLevel.Warning)
+                            .AnswerUser();
+                }
+            }
             // Check for invoice submission:
             if (text.IsLightningInvoice(out var invoice))
             {
@@ -342,6 +357,50 @@ public partial class UpdateHandler
         await userOptionsService.WriteAsync(user.Id, participant.Options).ConfigureAwait(false);
         
         // Update the user's status message to reflect the new tip:
+        await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+    }
+
+
+    private async Task HandlePaymentMethodSelectionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
+    {
+        workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
+
+        if (await botClient.DeleteMessageAsync(chatId, participant.PaymentMethodSelectionMessageId, cancellationToken).ConfigureAwait(false))
+            participant.PaymentMethodSelectionMessageId = null;
+
+        var current = participant.Options.PreferredPaymentMethod;
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            InlineKeyboardButton.WithCallbackData(
+                $"{PaymentMethod.Lightning.Format()}" + (current == PaymentMethod.Lightning ? " ✅" : ""),
+                $"{CallbackActions.SelectPaymentMethod}_{PaymentMethod.Lightning}"),
+            InlineKeyboardButton.WithCallbackData(
+                $"{PaymentMethod.Cashu.Format()}" + (current == PaymentMethod.Cashu ? " ✅" : ""),
+                $"{CallbackActions.SelectPaymentMethod}_{PaymentMethod.Cashu}")
+        });
+
+        var msg = await botClient.SendMessage(chatId,
+            "💸 *Preferred payment method*\n\n" +
+            "Choose how you prefer to pay your invoice:\n" +
+            $"• {PaymentMethod.Lightning.Format()} — standard BOLT11 invoice via the bot's Lightning node\n" +
+            $"• {PaymentMethod.Cashu.Format()} — Cashu mint invoice (falls back to Lightning if unavailable)",
+            parseMode: ParseMode.Markdown,
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        participant.PaymentMethodSelectionMessageId = msg.MessageId;
+    }
+
+    private async Task HandleSetPaymentMethodAsync(ITelegramBotClient botClient, long chatId, User user, PaymentMethod method, CancellationToken cancellationToken)
+    {
+        workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
+
+        if (await botClient.DeleteMessageAsync(chatId, participant.PaymentMethodSelectionMessageId, cancellationToken).ConfigureAwait(false))
+            participant.PaymentMethodSelectionMessageId = null;
+
+        participant.Options.PreferredPaymentMethod = method;
+        await userOptionsService.WriteAsync(user.Id, participant.Options).ConfigureAwait(false);
+
         await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
     }
 
@@ -567,6 +626,57 @@ public partial class UpdateHandler
         await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
     }
+
+    private async Task ProcessCashuTokenPaymentAsync(ITelegramBotClient botClient, SessionState session, User user, string cashuToken, CancellationToken cancellationToken)
+    {
+        if (cashuBackend is null)
+            throw new InvalidOperationException("Sorry, I do not support Cashu eCash payments currently 🤷‍♂️")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
+
+        var participant = session.Participants[user.Id];
+
+        // Find the pending Cashu payment request for this participant (PaymentRequest is null = Cashu).
+        var pending = session.PendingPayments.Values
+            .FirstOrDefault(p => p.UserId == user.Id && p.PaymentRequest is null);
+        if (pending is null)
+            throw new InvalidOperationException("No Cashu payment request found for you in this session.\n\n" +
+                "If you expected a Lightning invoice, please contact the session admin.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
+
+        // Receive and validate the token.
+        long receivedSats;
+        try
+        {
+            receivedSats = await cashuBackend.ReceiveTokenAsync(cashuToken, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex.IsUserAnswer(out _))
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("Failed to process your Cashu token.", ex)
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
+        }
+
+        if (receivedSats < pending.SatsAmount)
+            throw new InvalidOperationException(
+                $"Token amount too low.\n\n" +
+                $"Received: *{receivedSats.Format()}*\n" +
+                $"Expected: *{pending.SatsAmount.Format()}*\n\n" +
+                "Please send a new token for the correct amount.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
+
+        logger.LogInformation("Cashu token payment received from {User} in session {Session}: {Sats} sats.", user, session, receivedSats);
+
+        // Confirm via the shared payment monitor logic.
+        await paymentMonitorService.ConfirmPaymentAsync(session, pending, receivedSats, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, User user, string bolt11, CancellationToken cancellationToken)
     {
         var participant = session.Participants[user.Id];

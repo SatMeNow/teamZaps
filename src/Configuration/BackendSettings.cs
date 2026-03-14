@@ -73,6 +73,23 @@ public class AlbyHubSettings
     public string[]? RelayUrls { get; set; }
 }
 
+public class CashuSettings
+{
+    #region Constants
+    public const string SectionName = "Cashu";
+    #endregion
+
+
+    /// <summary>
+    /// Cashu mint URL (e.g. https://mint.example.com)
+    /// </summary>
+    public string MintUrl { get; set; } = string.Empty;
+    /// <summary>
+    /// Token unit used for Lightning quotes (default: sat)
+    /// </summary>
+    public string Unit { get; set; } = "sat";
+}
+
 public class TelegramSettings
 {
     #region Constants
