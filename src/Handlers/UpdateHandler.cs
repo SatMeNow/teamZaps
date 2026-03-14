@@ -262,6 +262,10 @@ public partial class UpdateHandler : IUpdateHandler
             case CallbackActions.CancelEdit:
                 await HandleCancelEditAsync(botClient, chatId, query.From, cancellationToken).ConfigureAwait(false);
                 break;
+
+            case CallbackActions.LeaveSession:
+                await HandleLeaveSessionAsync(botClient, chatId, query.From!, cancellationToken).ConfigureAwait(false);
+                break;
         }
     }
     

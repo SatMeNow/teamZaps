@@ -340,6 +340,7 @@ graph TD
 1. **User Input** - Natural language parsing (`"5.99 Beer"`) submitted as an **order** during `AcceptingOrders` phase
 2. **Order Registration** - Structured `OrderRecord` objects stored per participant with amounts and memos
 3. **Order Editing** - During `AcceptingOrders`, participants can tap **✏️ Edit Order** to open an inline item picker: edit individual tokens (sends a new value replacing the old one) or remove them with 🗑️; currency cannot be changed
+3a. **Leave Session** - During `WaitingForLotteryParticipants` or `AcceptingOrders`, participants can tap **🚪 Leave** to exit. Blocked for lottery participants if their budget removal would drop the total budget below others' already-ordered amounts. After leaving, the private status message is updated to a "left" state with no buttons.
 4. **Order Phase Closes** - Session host calls `/closezap`; the bot converts all orders to Lightning invoices
 5. **Invoice Creation** - One consolidated Lightning invoice created per participant; session enters `WaitingForPayments`
 6. **Payment Monitoring** - Background service polls payment status

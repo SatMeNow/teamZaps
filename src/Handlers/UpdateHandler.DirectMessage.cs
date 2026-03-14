@@ -346,6 +346,39 @@ public partial class UpdateHandler
     }
 
 
+    private async Task HandleLeaveSessionAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
+    {
+        workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
+
+        if (session.Phase > SessionPhase.AcceptingOrders)
+            throw new InvalidOperationException("You can no longer leave the session at this stage.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser()
+                .ExpireMessage();
+
+        if (session.LotteryParticipants.TryGetValue(participant, out var lotteryBudget))
+        {
+            var othersOrders = session.OrdersFiatAmount - participant.OrdersFiatAmount;
+            var newBudget = session.Budget - lotteryBudget;
+            if (newBudget < othersOrders)
+                throw new InvalidOperationException(
+                    $"Sorry, you can't leave 🤷‍♂️\n\n" +
+                    $"Removing your lottery budget of *{lotteryBudget.Format()}* would drop the total budget below the already ordered amounts of others.")
+                    .AddLogLevel(LogLevel.Warning)
+                    .AnswerUser()
+                    .ExpireMessage();
+        }
+        workflowService.RemoveParticipant(session, user.Id);
+
+        await botClient.SendMessage(chatId,
+            $"✅ You have left the *{session.ChatTitle}* session.",
+            parseMode: ParseMode.Markdown,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+            
+        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+        await UserStatusMessage.UpdateAsync(session, participant, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task HandleShowEditPickerAsync(ITelegramBotClient botClient, long chatId, User user, CancellationToken cancellationToken)
     {
         workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
