@@ -151,6 +151,7 @@ throw new InvalidOperationException("Session is not currently accepting new part
 - **Backends.Yadio/CoinCap/CoinGecko**: (empty, use defaults)
 - **Backends.Lnbits**: LndhubUrl, ApiKey
 - **Backends.AlbyHub**: ConnectionString, RelayUrls[]
+- **Backends.Cashu**: MintUrl, Unit (default: "sat")
 - **Debug** (DEBUG build only): FixBudget — pin exchange rate for local testing
 - **Recovery**: Enable, DailyScanTime
 - Per-group: `BotAdminOptions` — `[Storage("adminOpt", "chat_{0}.json")]`
@@ -159,11 +160,21 @@ throw new InvalidOperationException("Session is not currently accepting new part
 ## Backends
 - **AlbyHub** (`Backend.Lightning.AlbyHub.cs`): NWC over Nostr, NIP-47 encrypted, secp256k1 keys, 30s timeout; methods: get_balance, make_invoice, pay_invoice, lookup_invoice
 - **LNbits** (`Backend.Lightning.Lnbits.cs`): REST `/api/v1/payments`; supports sat, USD, EUR; converts msat↔sat
+- **Cashu** (`Backend.Cashu.cs`): Cashu mint via DotNut NuGet; NUT-04 (mint eCash from Lightning) + NUT-05 (melt eCash to pay Lightning); proof wallet at `data/wallets/cashu.json`; implements `ICashuBackend : ILightningBackend`; quoteId used as payment hash identifier; greedy coin selection for melt; keyset fetched via `GetKeys`/`GetKeysets` on startup and cached
 - **Exchange rate** (`Backend.ExchangeRate.*.cs`): Yadio (`api.yadio.io/exrates/BTC`), CoinCap, CoinGecko; refreshes every 3+ min and on first session
 - **ElectrumX** (`Backend.Indexer.ElectrumX.cs`): multi-host failover, TCP/TLS, 60s keepalive ping, auto-reconnect; `blockchain.headers.subscribe` stream
 - **Nostr** (`Communication/Nostr.cs`): `NostrWalletConnector` — NWC connection string parsing, NIP-04 encrypt/decrypt, subscription + response handling (30s wait)
 
 ## Backend API References
+
+### Cashu (DotNut)
+- DotNut NuGet package: https://www.nuget.org/packages/DotNut
+- DotNut source: https://github.com/Kukks/DotNut
+- **NUT-04** (Mint — Lightning → eCash): https://github.com/cashubtc/nuts/blob/main/04.md
+- **NUT-05** (Melt — eCash → Lightning): https://github.com/cashubtc/nuts/blob/main/05.md
+- **NUT-00** (Token format / BDHKE): https://github.com/cashubtc/nuts/blob/main/00.md
+- Key DotNut types: `CashuHttpClient` (in `DotNut.Api`), `Cashu` (BDHKE math), `Proof`, `BlindedMessage`, `BlindSignature`, `Keyset`, `KeysetId`, `StringSecret`, `PubKey` (all in `DotNut`), request/response models in `DotNut.ApiModels`
+- DotNut 1.0.6 type differences from master: `PostMintBolt11Request`/`PostMintBolt11Response` (not `PostMint*`), `PostMeltBolt11Request` (not `PostMeltRequest`); `GetKeysResponse.KeysetItemResponse` lacks `Active` and `InputFeePpk` (use `GetKeysets` for fee)
 
 ### Nostr / NWC (AlbyHub)
 - NIPs repository: https://github.com/nostr-protocol/nips

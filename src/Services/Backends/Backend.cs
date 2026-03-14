@@ -198,6 +198,20 @@ public interface ISupportsCancelInvoice : ILightningBackend
     /// </summary>
     Task<bool> CancelInvoiceAsync(string paymentHash, CancellationToken cancellationToken = default);
 }
+/// <summary>
+/// Interface for Cashu mint backend services.
+/// Extends <see cref="ILightningBackend"/> with eCash wallet operations:
+/// NUT-04 (mint eCash from Lightning payments) and NUT-05 (melt eCash to pay Lightning invoices).
+/// </summary>
+public interface ICashuBackend : ILightningBackend
+{
+    /// <summary>The Cashu mint URL.</summary>
+    string MintUrl { get; }
+    /// <summary>
+    /// Get the current eCash wallet balance in sats.
+    /// </summary>
+    Task<long> GetBalanceAsync(CancellationToken cancellationToken = default);
+}
 
 /// <summary>
 /// Lightning invoice details (BOLT11 payment request).

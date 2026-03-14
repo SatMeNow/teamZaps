@@ -40,6 +40,7 @@ src/
 │   └── Backends/                 # Pluggable backend implementations
 │       ├── Backend.cs            # Backend interfaces and base types
 │       ├── Backend.AlbyHub.cs    # AlbyHub NWC backend
+│       ├── Backend.Cashu.cs      # Cashu mint backend (NUT-04/NUT-05)
 │       ├── Backend.Lnbits.cs     # LNBits REST API backend
 │       ├── Backend.CoinGecko.cs  # CoinGecko exchange rate backend
 │       └── Backend.ElectrumX.cs  # ElectrumX blockchain data backend
@@ -109,6 +110,34 @@ LNBits uses a traditional REST API for Lightning operations. Requires a running 
 **Configuration:**
 - `LndhubUrl` - LNDhub extension URL (must end with `/lndhub/ext/`)
 - `ApiKey` - Invoice/read key from your LNbits wallet
+
+#### Cashu Mint Backend (NUT-04/NUT-05)
+
+Cashu mint backend for bi-directional eCash ↔ Lightning bridging using [DotNut](https://github.com/Kukks/DotNut). Implements `ICashuBackend : ILightningBackend`.
+
+- **NUT-04 (mint)**: Creates Lightning invoices; mints eCash proofs into a local wallet once paid.
+- **NUT-05 (melt)**: Pays Lightning invoices by melting eCash proofs from the local wallet.
+- **Proof wallet**: Persisted to `data/wallets/cashu.json`.
+
+```json
+{
+  "Backends": {
+    "Cashu": {
+      "MintUrl": "https://mint.example.com",
+      "Unit": "sat"
+    }
+  }
+}
+```
+
+**Configuration:**
+- `MintUrl` - Cashu mint base URL (e.g. `https://mint.minibits.cash/Bitcoin`)
+- `Unit` - Token denomination unit (default: `sat`)
+
+**How it works (flow):**
+1. `CreateInvoiceAsync` → `POST /v1/mint/quote/bolt11` → returns a Lightning invoice; stores `quoteId` as payment identifier
+2. `CheckPaymentStatusAsync(quoteId)` → `GET /v1/mint/quote/bolt11/{quoteId}`; if PAID → `POST /v1/mint/bolt11` with BDHKE blinded messages → unblind signatures → proofs saved to wallet
+3. `PayInvoiceAsync(bolt11)` → `POST /v1/melt/quote/bolt11`; selects proofs from wallet; `POST /v1/melt/bolt11` → proofs spent, invoice paid
 
 #### Exchange Rate Backends
 
@@ -402,6 +431,13 @@ All backends must:
   - Implements: `ILightningBackend`
   - Configuration: `Backends:AlbyHub` section
   - Features: Invoice creation, payment, status checks via Nostr relays
+
+- **Cashu** - Cashu eCash mint backend (NUT-04 mint + NUT-05 melt)
+  - Implements: `ICashuBackend : ILightningBackend`
+  - Configuration: `Backends:Cashu` section
+  - Features: Creates Lightning invoices (NUT-04), pays Lightning invoices via eCash melt (NUT-05), persists proof wallet to `data/wallets/cashu.json`
+  - Library: [DotNut](https://github.com/Kukks/DotNut) NuGet package
+  - Extra interface: `ICashuBackend` adds `MintUrl` and `GetBalanceAsync()`
 
 - **LNBits** - Traditional REST API integration
   - Implements: `ILightningBackend`

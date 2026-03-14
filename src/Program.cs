@@ -90,6 +90,7 @@ public static class Program
                 services.Configure<ElectrumXSettings>(backendsSection.GetSection(ElectrumXSettings.SectionName));
                 services.Configure<LnbitsSettings>(backendsSection.GetSection(LnbitsSettings.SectionName));
                 services.Configure<AlbyHubSettings>(backendsSection.GetSection(AlbyHubSettings.SectionName));
+                services.Configure<CashuSettings>(backendsSection.GetSection(CashuSettings.SectionName));
 
                 // Register HttpClientFactory for backend services:
                 services.AddHttpClient();
