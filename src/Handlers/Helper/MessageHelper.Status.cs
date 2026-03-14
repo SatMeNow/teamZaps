@@ -177,10 +177,10 @@ internal static class UserStatusMessage
         try
         {
             var message = await botClient.SendMessage(participant.UserId,
-                text: Build(session),
+                text: Build(session, participant),
                 parseMode: ParseMode.Markdown,
                 linkPreviewOptions: true,
-                replyMarkup: BuildKeyboard(session),
+                replyMarkup: BuildKeyboard(session, participant),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             await botClient.PinChatMessage(message.Chat.Id, message.MessageId, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -274,18 +274,23 @@ internal static class UserStatusMessage
             status.AppendLine();
         }
 
-        switch (session.Phase)
+        if ((participant is null) || (!session.Participants.ContainsKey(participant.UserId)))
+            status.AppendLine("🚪 *You have left this session.*");
+        else
         {
-            case SessionPhase.WaitingForLotteryParticipants:
-                status.AppendLine("🎰 *Enter the lottery* if you're willing to pay fiat! Set your maximum budget.\n");
-                status.AppendLine("⚠️ *Orders are blocked* until someone enters the lottery first!");
-                break;
-            case SessionPhase.AcceptingOrders:
-                status.AppendLine("📋 Use the button below to *add your orders*.");
-                break;
-            case SessionPhase.WaitingForPayments:
-                status.AppendLine("⚡ *Invoice sent!* Please pay your Lightning invoice to participate.");
-                break;
+            switch (session.Phase)
+            {
+                case SessionPhase.WaitingForLotteryParticipants:
+                    status.AppendLine("🎰 *Enter the lottery* if you're willing to pay fiat! Set your maximum budget.\n");
+                    status.AppendLine("⚠️ *Orders are blocked* until someone enters the lottery first!");
+                    break;
+                case SessionPhase.AcceptingOrders:
+                    status.AppendLine("📋 Use the button below to *add your orders*.");
+                    break;
+                case SessionPhase.WaitingForPayments:
+                    status.AppendLine("⚡ *Invoice sent!* Please pay your Lightning invoice to participate.");
+                    break;
+            }
         }
         
         return status.ToString();
@@ -294,6 +299,9 @@ internal static class UserStatusMessage
 
     private static InlineKeyboardMarkup? BuildKeyboard(SessionState session, ParticipantState? participant = null)
     {
+        if ((participant is null) || (!session.Participants.ContainsKey(participant.UserId)))
+            return (null); // Participant left session.
+
         var buttons = new List<InlineKeyboardButton>();
         if ((session.Phase <= SessionPhase.AcceptingOrders) && (participant?.JoinedLottery(session) != true))
             buttons.Add(InlineKeyboardButton.WithCallbackData("🎰 Enter Lottery", CallbackActions.JoinLottery));
@@ -304,7 +312,9 @@ internal static class UserStatusMessage
             if (participant?.HasOrders == true)
                 buttons.Add(InlineKeyboardButton.WithCallbackData("✏️ Edit Order", CallbackActions.ShowEditPicker));
         }
-        return (new InlineKeyboardMarkup(buttons));
+        if ((participant is not null) && (session.Phase <= SessionPhase.AcceptingOrders))
+            buttons.Add(InlineKeyboardButton.WithCallbackData("🚪 Leave", CallbackActions.LeaveSession));
+        return (new InlineKeyboardMarkup(buttons.Chunk(2)));
     }
 }
 

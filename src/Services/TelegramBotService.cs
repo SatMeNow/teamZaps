@@ -76,6 +76,7 @@ public static class CallbackActions
     public const string EditToken = "editToken";
     public const string RemoveToken = "removeToken";
     public const string CancelEdit = "cancelEdit";
+    public const string LeaveSession = "leaveSession";
 }
 
 public class TelegramBotService : BackgroundService

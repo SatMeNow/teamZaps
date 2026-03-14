@@ -141,8 +141,9 @@ throw new InvalidOperationException("Session is not currently accepting new part
 
 ## Update Handlers
 - `UpdateHandler.cs` — main router; validates bot recipient
-- `UpdateHandler.DirectMessage.cs` — `/start`, `/stat`, `/recover`, `/help`, `/about`, `/diag` (root-only), payment tokens, BOLT11 invoices, recovery invoices; edit order callbacks: ShowEditPicker, EditToken, RemoveToken, CancelEdit (HandleShowEditPickerAsync, HandleEditTokenAsync, HandleRemoveTokenAsync, HandleCancelEditAsync, HandleApplyEditAsync)
-- `UpdateHandler.GroupMessage.cs` — `/startzap [title]`, `/closezap`, `/cancelzap`, `/status`, `/stat`, `/config`; callbacks: JoinSession, JoinLottery, SelectBudget, CloseSession, ForceClose, SetTip, AdminOptions- `MessageHelper.Status.cs` — `UserStatusMessage` (shows ✏️ Edit Order button when participant has orders), `EditOrderPickerMessage` (inline item picker with per-token ✏️/🗑️ buttons and ✖️ Close)
+- `UpdateHandler.DirectMessage.cs` — `/start`, `/stat`, `/recover`, `/help`, `/about`, `/diag` (root-only), payment tokens, BOLT11 invoices, recovery invoices; edit order callbacks: ShowEditPicker, EditToken, RemoveToken, CancelEdit (HandleShowEditPickerAsync, HandleEditTokenAsync, HandleRemoveTokenAsync, HandleCancelEditAsync, HandleApplyEditAsync); leave session: LeaveSession (HandleLeaveSessionAsync)
+- `UpdateHandler.GroupMessage.cs` — `/startzap [title]`, `/closezap`, `/cancelzap`, `/status`, `/stat`, `/config`; callbacks: JoinSession, JoinLottery, SelectBudget, CloseSession, ForceClose, SetTip, AdminOptions
+- `MessageHelper.Status.cs` — `UserStatusMessage` (shows ✏️ Edit Order button when participant has orders; shows 🚪 Leave button during pre-payment phases; shows "left" state with no buttons after participant leaves), `EditOrderPickerMessage` (inline item picker with per-token ✏️/🗑️ buttons and ✖️ Close)
 ## Configuration Sections
 - **BotBehavior**: Locale, SanityCheckTime, Tip/Budget choices, MaxBudget, MaxLockedSats, MaxParallelSessions
 - **Telegram**: BotToken, RootUsers

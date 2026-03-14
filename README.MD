@@ -78,6 +78,7 @@ How to participate:
   - Tap **✏️** next to an item to replace it — send the new amount and note as a single entry.
   - Tap **🗑️** next to an item to remove it.
   - Tap **✖️ Close** to dismiss the picker without changes.
+- To leave a session before the order phase closes, tap **🚪 Leave** in your private status message. Leaving is blocked if you are a lottery participant and removing your budget would drop the total below what other participants have already ordered.
 - Once the order phase is closed, you'll receive a Lightning invoice in private chat — pay it to confirm your participation.
 
 Payment flow summary:
