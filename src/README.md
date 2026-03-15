@@ -139,6 +139,22 @@ Cashu mint backend for bi-directional eCash ↔ Lightning bridging using [DotNut
 2. `CheckPaymentStatusAsync(quoteId)` → `GET /v1/mint/quote/bolt11/{quoteId}`; if PAID → `POST /v1/mint/bolt11` with BDHKE blinded messages → unblind signatures → proofs saved to wallet
 3. `PayInvoiceAsync(bolt11)` → `POST /v1/melt/quote/bolt11`; selects proofs from wallet; `POST /v1/melt/bolt11` → proofs spent, invoice paid
 
+**Proof wallet format and recovery:**
+
+`cashu.json` stores proofs in their raw internal form — not the portable `cashuA…` token format that other Cashu wallets accept:
+
+```json
+{ "proofs": [{ "amount": 64, "id": "009a1f…", "secret": "a3f0…", "C": "02ab…" }] }
+```
+
+To recover funds (if required), proofs must be wrapped in the NUT-00 token envelope and base64url-encoded:
+
+```json
+{ "token": [{ "mint": "https://mint.minibits.cash/Bitcoin", "proofs": [{ "amount": 64, "id": "…", "secret": "…", "C": "…" }] }] }
+```
+
+`Sample_CashuExport.ExportTokensAsync(walletStorage, mintUrl)` (`Examples/Sample.CashuExport.cs`) does this conversion and prints one `cashuA…` string per keyset to stdout. The output can be pasted into any NUT-00-compatible wallet (Minibits, eNuts, etc.).
+
 #### Exchange Rate Backends
 
 **Yadio Backend (Recommended)**

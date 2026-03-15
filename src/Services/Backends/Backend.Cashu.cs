@@ -18,6 +18,7 @@ public class CashuWallet
 }
 public class CashuProofRecord
 {
+    public string MintUrl { get; set; } = string.Empty;
     public ulong Amount { get; set; }
     public string Id { get; set; } = string.Empty;
     public string Secret { get; set; } = string.Empty;
@@ -44,8 +45,12 @@ public class CashuService : ICashuBackend, ISanitizableBackend
         this.walletStorage = walletStorage;
 
         var httpClient = httpFactory.CreateClient();
-        httpClient.BaseAddress = new Uri(this.settings.MintUrl);
+        httpClient.BaseAddress = new Uri(this.settings.MintUrl.TrimEnd('/') + '/');
         this.client = new CashuHttpClient(httpClient);
+        
+
+        // [Testing]
+        // Examples.Sample_CashuExport.ExportTokensAsync(walletStorage).Wait();
     }
 
 
@@ -77,7 +82,7 @@ public class CashuService : ICashuBackend, ISanitizableBackend
         }
     }
 
-    public Task<long> GetBalanceAsync(CancellationToken cancellationToken = default) => Task.FromResult(proofs.Sum(p => (long)p.Amount));
+    public Task<long> GetBalanceAsync(CancellationToken cancellationToken = default) => Task.FromResult(proofs.Sum(p => (long)p.Proof.Amount));
     #endregion
 
 
@@ -133,15 +138,15 @@ public class CashuService : ICashuBackend, ISanitizableBackend
             {
                 var selected = SelectProofsGreedy(totalNeeded);
 
-                if (selected.Count == 0 || (ulong)selected.Sum(p => (long)p.Amount) < totalNeeded)
+                if (selected.Count == 0 || (ulong)selected.Sum(p => (long)p.Proof.Amount) < totalNeeded)
                     throw new InvalidOperationException(
-                        $"Insufficient Cashu tokens. Need {totalNeeded} sats but wallet only has {proofs.Sum(p => (long)p.Amount)} sats.")
+                        $"Insufficient Cashu tokens. Need {totalNeeded} sats but wallet only has {proofs.Sum(p => (long)p.Proof.Amount)} sats.")
                         .AddLogLevel(LogLevel.Warning)
                         .AnswerUser();
 
                 meltResponse = await client.Melt<PostMeltQuoteBolt11Response, PostMeltBolt11Request>(
                     "bolt11",
-                    new PostMeltBolt11Request { Quote = meltQuote.Quote, Inputs = selected.ToArray() },
+                    new PostMeltBolt11Request { Quote = meltQuote.Quote, Inputs = selected.Select(p => p.Proof).ToArray() },
                     cancellationToken).ConfigureAwait(false);
 
                 if (!string.Equals(meltResponse.State, "PAID", StringComparison.OrdinalIgnoreCase))
@@ -150,8 +155,8 @@ public class CashuService : ICashuBackend, ISanitizableBackend
                         .AddLogLevel(LogLevel.Warning);
 
                 // Remove spent proofs and persist wallet.
-                var spentCs = selected.Select(p => p.C).ToHashSet();
-                proofs.RemoveAll(p => spentCs.Contains(p.C));
+                var spentCs = selected.Select(p => p.Proof.C).ToHashSet();
+                proofs.RemoveAll(p => spentCs.Contains(p.Proof.C));
                 await SaveWalletAsync().ConfigureAwait(false);
             }
             finally
@@ -253,31 +258,33 @@ public class CashuService : ICashuBackend, ISanitizableBackend
             var (secret, r) = blindingData[i];
             ECPubKey A = activeKeyset![sig.Amount];  // PubKey → ECPubKey (implicit)
             ECPubKey C = Cashu.ComputeC(sig.C_, r, A);  // PubKey → ECPubKey (implicit), returns ECPubKey
-            proofs.Add(new Proof
-            {
-                Amount = sig.Amount,
-                Id = sig.Id,
-                Secret = new StringSecret(secret),
-                C = C  // ECPubKey → PubKey (implicit)
-            });
+            proofs.Add(new ProofWithMint(
+                new Proof
+                {
+                    Amount = sig.Amount,
+                    Id = sig.Id,
+                    Secret = new StringSecret(secret),
+                    C = C  // ECPubKey → PubKey (implicit)
+                },
+                settings.MintUrl.TrimEnd('/')));
         }
 
         await SaveWalletAsync().ConfigureAwait(false);
         logger.LogInformation("Minted {Count} proofs ({Sats} sats) from quote {QuoteId}.", mintResponse.Signatures.Length, sats, quoteId);
     }
 
-    private List<Proof> SelectProofsGreedy(ulong amount)
+    private List<ProofWithMint> SelectProofsGreedy(ulong amount)
     {
         // Greedy: take largest proofs first until we cover the requested amount.
-        var result = new List<Proof>();
+        var result = new List<ProofWithMint>();
         var remaining = (long)amount;
-        foreach (var p in proofs.OrderByDescending(p => p.Amount))
+        foreach (var p in proofs.OrderByDescending(p => p.Proof.Amount))
         {
             if (remaining <= 0) break;
             result.Add(p);
-            remaining -= (long)p.Amount;
+            remaining -= (long)p.Proof.Amount;
         }
-        return (remaining <= 0) ? result : new List<Proof>(); // empty = insufficient
+        return (remaining <= 0) ? result : new List<ProofWithMint>(); // empty = insufficient
     }
 
     private async Task RefreshKeysetAsync(CancellationToken ct)
@@ -305,15 +312,18 @@ public class CashuService : ICashuBackend, ISanitizableBackend
         var wallet = await walletStorage.ReadAsync().ConfigureAwait(false);
         if (wallet?.Proofs is { Count: > 0 } records)
         {
-            proofs = records.Select(r => new Proof
-            {
-                Amount = r.Amount,
-                Id = new KeysetId(r.Id),
-                Secret = new StringSecret(r.Secret),
-                C = new PubKey(r.C)
-            }).ToList();
+            proofs = records.Select(r => new ProofWithMint(
+                new Proof
+                {
+                    Amount = r.Amount,
+                    Id = new KeysetId(r.Id),
+                    Secret = new StringSecret(r.Secret),
+                    C = new PubKey(r.C)
+                },
+                r.MintUrl)
+            ).ToList();
             logger.LogInformation("Loaded {Count} Cashu proofs ({Sats} sats) from wallet.",
-                proofs.Count, proofs.Sum(p => (long)p.Amount));
+                proofs.Count, proofs.Sum(p => (long)p.Proof.Amount));
         }
     }
 
@@ -323,10 +333,11 @@ public class CashuService : ICashuBackend, ISanitizableBackend
         {
             Proofs = proofs.Select(p => new CashuProofRecord
             {
-                Amount = p.Amount,
-                Id = p.Id.ToString(),
-                Secret = ((StringSecret)p.Secret).Secret,
-                C = p.C.ToString()
+                MintUrl = p.MintUrl,
+                Amount = p.Proof.Amount,
+                Id = p.Proof.Id.ToString(),
+                Secret = ((StringSecret)p.Proof.Secret).Secret,
+                C = p.Proof.C.ToString()
             }).ToList()
         };
         return walletStorage.WriteAsync(wallet);
@@ -372,14 +383,18 @@ public class CashuService : ICashuBackend, ISanitizableBackend
     private readonly IExchangeRateBackend exchangeRate;
     private readonly CashuHttpClient client;
     private readonly FileService<CashuWallet> walletStorage;
-    private List<Proof> proofs = new();
+    private List<ProofWithMint> proofs = new();
     private readonly SemaphoreSlim walletLock = new(1, 1);
     private readonly ConcurrentDictionary<string, long> pendingMints = new();  // quoteId → sats
     private Keyset? activeKeyset;
     private KeysetId activeKeysetId = default!;
     private ulong inputFeePpk;
     private bool initialized;
+
+    private sealed record ProofWithMint(Proof Proof, string MintUrl);
 }
+
+// --- File-private types ---
 
 // --- File-private response models ---
 
