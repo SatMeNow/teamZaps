@@ -1169,6 +1169,16 @@ Use the commands below in the appropriate context — group chats or private/dir
   **Implementation**: Uses `HandleGroupStatisticsAsync()` which checks permissions via `BotAdminOptions` before calling `GroupStatisticsMessage.SendAsync()`. If the group has no completed sessions yet, an error message is returned. Statistics are automatically calculated after each session completion by the `StatisticService`.
 
 ### Private commands (use in a direct/private chat with the bot)
+- `/topup <cashuA...>` - Top up the Cashu wallet (root users only)
+
+  Deposits a `cashuA` Cashu token into the bot's eCash wallet. Only available when Cashu is the active Lightning backend.
+
+  The token is absorbed via a NUT-03 swap (atomically burns the submitted proofs and issues fresh ones to the bot wallet). On success the bot replies with the received amount and new wallet balance.
+
+  Use this to replenish the wallet when the balance drops below `MinimumReserve` — for example after a period of heavy winner payouts caused the Cashu `fee_reserve` to erode the balance.
+
+  Only root users can run this command, and only in a private chat with the bot.
+
 - `/diag` - Show diagnostics (root users only)
 
   This command returns detailed runtime diagnostics intended for the bot operator (root user) only. It includes:
@@ -1176,6 +1186,7 @@ Use the commands below in the appropriate context — group chats or private/dir
   - Active sessions and their phases
   - Recovery queue status and lost sats summary
   - Registered backends and their health status
+  - When Cashu is the active Lightning backend: wallet balance and minimum reserve status (⚠️ if below reserve)
   
   Only root user IDs (configured in `appsettings.*.json` under `Telegram:RootUsers`) can run `/diag`. The output may contain sensitive operational details — do not share publicly.
 

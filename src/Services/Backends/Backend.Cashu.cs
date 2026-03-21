@@ -93,7 +93,11 @@ public class CashuService : ICashuBackend, ISanitizableBackend
         }
     }
 
-    public Task<long> GetBalanceAsync(CancellationToken cancellationToken = default) => Task.FromResult(proofs.Sum(p => (long)p.Proof.Amount));
+    public async Task<long> GetBalanceAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+        return proofs.Sum(p => (long)p.Proof.Amount);
+    }
     #endregion
 
 

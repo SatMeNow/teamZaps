@@ -943,8 +943,19 @@ public partial class UpdateHandler
             diag.AppendLine($"• Fiat rate: *{exchangeRateBackend.FiatRate!.Value.FormatFiatRate()}*");
 
         // Lightning backend Information
-        diag.AppendLine("\n⚡ *Lightning backend status:*");
+        var icon = (cashuBackend is null) ? "⚡" : "🥜⚡";
+        diag.AppendLine($"\n{icon} *Lightning backend status:*");
         appendBackendInfo(lightningBackend);
+
+        // Cashu wallet details (only when Cashu is the active Lightning backend)
+        if (cashuBackend is not null)
+        {
+            var cashuBalance = await cashuBackend.GetBalanceAsync(cancellationToken).ConfigureAwait(false);
+            var reserveOk = cashuBalance >= cashuBackend.MinimumReserve;
+            diag.AppendLine($"• Mint URL: *{cashuBackend.MintUrl}*");
+            diag.AppendLine($"• Wallet balance: {(reserveOk ? "✅" : "⚠️")} *{cashuBalance.Format()}*");
+            diag.AppendLine($"• Minimum reserve: *{cashuBackend.MinimumReserve.Format()}*");
+        }
 
         await botClient.SendMessage(command.ChatId,
             diag.ToString(),
