@@ -276,6 +276,10 @@ public partial class UpdateHandler : IUpdateHandler
                 var payMethod = Enum.Parse<PaymentMethod>(data[1]);
                 await HandleSetPaymentMethodAsync(botClient, chatId, query.From!, payMethod, cancellationToken).ConfigureAwait(false);
                 break;
+
+            case CallbackActions.PayoutViaCashu:
+                await HandlePayoutViaCashuAsync(botClient, chatId, query.From!, query.Message!, cancellationToken).ConfigureAwait(false);
+                break;
         }
     }
     

@@ -682,6 +682,72 @@ public partial class UpdateHandler
         await paymentMonitorService.ConfirmPaymentAsync(session, pending, receivedSats, cancellationToken).ConfigureAwait(false);
     }
 
+    private async Task HandlePayoutViaCashuAsync(ITelegramBotClient botClient, long chatId, User user, Message summaryMessage, CancellationToken cancellationToken)
+    {
+        if (cashuBackend is null)
+            throw new InvalidOperationException("Cashu backend is not available.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
+
+        workflowService.GetSessionParticipant(user.Id, out var session, out var participant);
+
+        if (session.Phase != SessionPhase.WaitingForInvoice)
+            throw new InvalidOperationException("The session is no longer waiting for a payout.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
+
+        if (!session.WinnerPayouts.TryGetValue(participant, out var winnerPayout))
+            throw new InvalidOperationException("You are not a winner in the current session.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
+
+        if (winnerPayout.PaymentCompleted)
+            throw new InvalidOperationException("Your payout has already been completed.")
+                .AddLogLevel(LogLevel.Information)
+                .AnswerUser();
+
+        logger.LogInformation("Winner {Participant} requested Cashu payout for session {Session}.", participant, session);
+
+        // Remove the Cashu button from the summary message
+        await botClient.EditMessageReplyMarkup(chatId, summaryMessage.MessageId, replyMarkup: null, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        var payoutSats = winnerPayout.RemainingAmount;
+        var token = await cashuBackend.SendTokenAsync(payoutSats, cancellationToken).ConfigureAwait(false);
+        winnerPayout.AddPayment(payoutSats);
+
+        await botClient.SendMessage(chatId,
+            $"🏆 *Payout received!* Here are your sats:\n\n`{token}`\n\n" +
+            $"Import this token into any Cashu wallet.\n" +
+            $"• Amount: *{payoutSats.Format()}* ({winnerPayout.FiatAmount.Format()})",
+            parseMode: ParseMode.Markdown,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        recoveryService.ClearLostSats([participant]);
+        logger.LogInformation("Cashu payout sent to winner {Participant} for session {Session}: {Sats} sats.", participant, session, payoutSats);
+
+        var currentBlock = await indexerBackend.GetCurrentBlockAsync(cancellationToken).ConfigureAwait(false);
+
+        if (session.PayoutCompleted)
+        {
+            session.Phase = SessionPhase.Completed;
+            session.CompletedAtBlock = currentBlock;
+
+            await WinnerMessage.UpdateAsync(session, PaymentStatus.Paid, null, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+            await CancelPendingInvoicesAsync(botClient, session, cancellationToken).ConfigureAwait(false);
+            workflowService.TryCloseSession(session, false);
+
+            await statisticService.OnSessionCompleteAsync(session).ConfigureAwait(false);
+
+            await GroupStatisticsMessage.SendIfAsync(botClient, statisticService, session, cancellationToken).ConfigureAwait(false);
+            foreach (var p in session.Participants.Values)
+                await UserStatisticsMessage.SendIfAsync(botClient, statisticService, p, cancellationToken).ConfigureAwait(false);
+        }
+
+        await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
+        await UpdateAllParticipantStatusesAsync(session, botClient, cancellationToken).ConfigureAwait(false);
+        await liquidityLogService.LogAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task ProcessWinnerInvoiceAsync(ITelegramBotClient botClient, SessionState session, User user, string bolt11, CancellationToken cancellationToken)
     {
         var participant = session.Participants[user.Id];
@@ -703,7 +769,26 @@ public partial class UpdateHandler
 
         // Decode and validate the invoice amount
         var invoiceSats = lightningBackend.GetInvoiceAmount(bolt11);
-        ValidateInvoiceAmount(winnerPayout.RemainingAmount, invoiceSats);
+
+        long meltFee = 0;
+        if (cashuBackend is not null)
+        {
+            meltFee = await cashuBackend.QueryMeltFeeAsync(bolt11, cancellationToken).ConfigureAwait(false);
+            var maxInvoice = (winnerPayout.RemainingAmount - meltFee);
+            if (invoiceSats > maxInvoice)
+                throw new InvalidOperationException(
+                    $"Invoice amount too high after the Cashu melt fee.\n\n" +
+                    $"• Your invoice: *{invoiceSats.Format()}*\n" +
+                    $"• Cashu melt fee for this invoice: *{meltFee.Format()}*\n" +
+                    $"• Maximum invoice: *{maxInvoice.Format()}*\n\n" +
+                    $"Please create a new invoice for exactly *{maxInvoice.Format()}* and send it to me.")
+                    .AnswerUser()
+                    .AddLogLevel(LogLevel.Warning);
+        }
+        else
+        {
+            ValidateInvoiceAmount(winnerPayout.RemainingAmount, invoiceSats);
+        }
 
         var statusText = "✅ Invoice received!\n" +
             "⏳ Processing payout...";
@@ -716,7 +801,7 @@ public partial class UpdateHandler
                 throw new InvalidOperationException("Failed to execute payout. Please retry with sending a new invoice.");
 
             logger.LogInformation("Payout executed successfully by {Participant} for session {Session}.", participant, session);
-            winnerPayout.AddPayment(invoiceSats);
+            winnerPayout.AddPayment(invoiceSats + meltFee); // fee counts against entitlement, preserving bot reserve
 
             if (winnerPayout.PaymentCompleted)
             {
@@ -751,8 +836,9 @@ public partial class UpdateHandler
 
                 // Notify winner about partial payout
                 statusText += "\n\n" +
-                    $"✅ Partially paid out *{invoiceSats.Format()}*.\n" +
-                    $"⚡ Please send me a new invoice for the remaining amount of *{winnerPayout.RemainingAmount.Format()}*.";
+                    $"✅ Partially paid out *{invoiceSats.Format()}*" +
+                    (meltFee > 0 ? $" (Cashu melt fee: *{meltFee.Format()}*)" : "") + ".\n" +
+                    $"⚡ Please send me a new invoice for up to *{winnerPayout.RemainingAmount.Format()}*.";
                 await botClient.EditMessageText(user.Id,
                     statusMessage.MessageId,
                     statusText,

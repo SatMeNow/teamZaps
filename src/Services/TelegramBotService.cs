@@ -80,6 +80,7 @@ public static class CallbackActions
     public const string LeaveSession = "leaveSession";
     public const string SetPaymentMethod = "setPayMethod";
     public const string SelectPaymentMethod = "selPayMethod";
+    public const string PayoutViaCashu = "payoutViaCashu";
 }
 
 public class TelegramBotService : BackgroundService

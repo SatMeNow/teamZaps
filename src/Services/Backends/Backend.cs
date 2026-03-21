@@ -228,6 +228,11 @@ public interface ICashuBackend : ILightningBackend
     /// and return it as a string. The selected proofs are removed from the wallet.
     /// </summary>
     Task<string> SendTokenAsync(long sats, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Query the Cashu melt fee for a given BOLT11 invoice without paying it (NUT-05 quote).
+    /// </summary>
+    /// <returns>The <c>fee_reserve</c> in sats the mint will charge on top of the invoice amount.</returns>
+    Task<long> QueryMeltFeeAsync(string bolt11, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

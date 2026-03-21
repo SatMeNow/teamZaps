@@ -4,6 +4,7 @@ using System.Text;
 using TeamZaps.Services;
 using TeamZaps.Session;
 using TeamZaps.Utils;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace TeamZaps.Handlers;
 
@@ -13,16 +14,25 @@ namespace TeamZaps.Handlers;
 /// </summary>
 internal static class SessionSummaryMessage
 {
-    public static async Task SendAsync(ITelegramBotClient botClient, ILogger logger, SessionState session, CancellationToken cancellationToken)
+    public static async Task SendAsync(ITelegramBotClient botClient, ILogger logger, SessionState session, bool cashuAvailable, CancellationToken cancellationToken)
     {
         foreach (var payout in session.WinnerPayouts)
         {
+            if (payout.Value.PaymentCompleted)
+                continue; // Already paid out via Cashu in DrawLotteryAsync
+
             try
             {
+                ReplyMarkup? keyboard = cashuAvailable
+                    ? new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(
+                        "🥜 Receive as Cashu token (no fee)", CallbackActions.PayoutViaCashu))
+                    : null;
+
                 await botClient.SendMessage(
                     payout.Key.UserId,
-                    text: BuildSummary(session, payout.Value),
+                    text: BuildSummary(session, payout.Value, cashuAvailable),
                     parseMode: ParseMode.Markdown,
+                    replyMarkup: keyboard,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
                     
                 logger.LogDebug("Summary message sent to winner {Winner} for session {Session}.", payout.Key, session);
@@ -34,7 +44,7 @@ internal static class SessionSummaryMessage
         }
     }
 
-    private static string BuildSummary(SessionState session, PayableFiatAmount winnerInfo)
+    private static string BuildSummary(SessionState session, PayableFiatAmount winnerInfo, bool cashuAvailable)
     {
         Debug.Assert(session.WinnerPayouts.Count > 0);
         Debug.Assert(session.HasPayments);
@@ -65,8 +75,21 @@ internal static class SessionSummaryMessage
         
         summary.AppendLine($"Total: 💶 {session.FormatOrderedAmount()}");
         summary.AppendLine();
-        summary.AppendLine($"⚡ Please create a *lightning invoice* for *{winnerSats.Format()}* and send it to me now.");
-        summary.AppendLine($"ℹ️ Feel free to split the payout into multiple invoices if needed.");
+        if (cashuAvailable)
+        {
+            summary.AppendLine($"*Your payout: {winnerSats.Format()}*");
+            summary.AppendLine();
+            summary.AppendLine($"🥜 Tap the button below for an instant *Cashu token* — no fee.");
+            summary.AppendLine($"⚡ Or send me a *Lightning invoice* to be paid via Lightning.");
+            summary.AppendLine($"   ⚠️ The Cashu mint charges a melt fee (~1–2%) on Lightning payouts.");
+            summary.AppendLine($"   Send any invoice ≤ *{winnerSats.Format()}* and I'll tell you the exact");
+            summary.AppendLine($"   net amount after the fee is known.");
+        }
+        else
+        {
+            summary.AppendLine($"⚡ Please create a *lightning invoice* for *{winnerSats.Format()}* and send it to me now.");
+            summary.AppendLine($"ℹ️ Feel free to split the payout into multiple invoices if needed.");
+        }
         
         return (summary.ToString());
     }

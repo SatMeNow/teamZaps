@@ -136,12 +136,17 @@ Cashu mint backend for bi-directional eCash ↔ Lightning bridging using [DotNut
 - `Unit` - Token denomination unit (default: `sat`)
 - `MinimumReserve` - Minimum sats the bot's wallet must hold before new sessions are allowed (default: `100`). The Cashu mint charges a `fee_reserve` on top of every winner payout (NUT-05 melt) to cover Lightning routing costs. If the wallet drops below this threshold, `/startzap` is rejected and root users are notified.
 
+**Fee asymmetry:**
+- **Inbound (mint, NUT-04):** User pays Lightning → bot receives full amount as eCash. No fee charged by the mint for minting.
+- **Outbound (melt, NUT-05):** Bot pays Lightning from eCash → mint charges a `fee_reserve` per invoice (~1–2%, depends on routing). This fee is deducted from the winner's payout when they choose Lightning. Cashu token payouts (NUT-03 send) are always fee-free.
+
 **How it works (flow):**
 1. `CreateInvoiceAsync` → `POST /v1/mint/quote/bolt11` → returns a Lightning invoice; stores `quoteId` as payment identifier
 2. `CheckPaymentStatusAsync(quoteId)` → `GET /v1/mint/quote/bolt11/{quoteId}`; if PAID → `POST /v1/mint/bolt11` with BDHKE blinded messages → unblind signatures → proofs saved to wallet
 3. `PayInvoiceAsync(bolt11)` → `POST /v1/melt/quote/bolt11`; selects proofs from wallet; `POST /v1/melt/bolt11` → proofs spent, invoice paid
-4. `ReceiveTokenAsync` — NUT-03 swap: decodes cashuA (v3/JSON) or cashuB (v4/CBOR) Base64url token, validates mint URL matches, creates fresh blinded outputs for the same total amount, calls `POST /v1/swap` to atomically burn input proofs and issue new ones, absorbs new proofs into wallet; returns sats received
-5. `SendTokenAsync(sats)` — greedy coin selection; if overshoot, NUT-03 swap to get exact change; serializes selected proofs to NUT-00 cashuA Base64url token string (v3/JSON); removes proofs from wallet
+4. `QueryMeltFeeAsync(bolt11)` → `POST /v1/melt/quote/bolt11` only; returns `fee_reserve` without paying — used to pre-check the melt cost before committing to a Lightning payout
+5. `ReceiveTokenAsync` — NUT-03 swap: decodes cashuA (v3/JSON) or cashuB (v4/CBOR) Base64url token, validates mint URL matches, creates fresh blinded outputs for the same total amount, calls `POST /v1/swap` to atomically burn input proofs and issue new ones, absorbs new proofs into wallet; returns sats received
+6. `SendTokenAsync(sats)` — greedy coin selection; if overshoot, NUT-03 swap to get exact change; serializes selected proofs to NUT-00 cashuA Base64url token string (v3/JSON); removes proofs from wallet
 
 **Proof wallet format and recovery:**
 

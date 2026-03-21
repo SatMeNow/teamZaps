@@ -81,7 +81,6 @@ internal static class WinnerMessage
                 break;
 
             case PaymentStatus.Paid:
-                Debug.Assert(paymentResult is not null);    
                 message.AppendLine("🎉🏆 *PAYOUT COMPLETED!* 🏆🎉\n");
                 
                 if (session.WinnerPayouts.Count == 1)

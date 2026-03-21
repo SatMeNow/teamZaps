@@ -324,6 +324,25 @@ public class CashuService : ICashuBackend, ISanitizableBackend
         }
     }
 
+    public async Task<long> QueryMeltFeeAsync(string bolt11, CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var meltQuote = await client.CreateMeltQuote<PostMeltQuoteBolt11Response, PostMeltQuoteBolt11Request>(
+                "bolt11",
+                new PostMeltQuoteBolt11Request { Request = bolt11, Unit = settings.Unit },
+                cancellationToken).ConfigureAwait(false);
+            SentRequests++;
+            return meltQuote.FeeReserve;
+        }
+        catch
+        {
+            FailedRequests++;
+            throw;
+        }
+    }
+
     public async Task<IPaymentResponse> PayInvoiceAsync(string bolt11, CancellationToken cancellationToken = default)
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);

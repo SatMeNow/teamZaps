@@ -186,7 +186,7 @@ public class PaymentMonitorService : BackgroundService
         }
 
         // Send winner notifications:
-        await SessionSummaryMessage.SendAsync(botClient, logger, session, cancellationToken).ConfigureAwait(false);
+        await SessionSummaryMessage.SendAsync(botClient, logger, session, cashuBackend is not null, cancellationToken).ConfigureAwait(false);
         await WinnerMessage.SendAsync(session, botClient, workflowService, cancellationToken).ConfigureAwait(false);
         await SessionStatusMessage.UpdateAsync(session, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
 
