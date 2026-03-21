@@ -134,7 +134,9 @@ public static partial class Extensions
             
         return (true);
     }
-    public static bool IsCashuToken(this string source) => source.StartsWith("cashuA", StringComparison.Ordinal) && (source.Length > 10);
+    public static bool IsCashuToken(this string source) =>
+        (source.StartsWith("cashuA", StringComparison.Ordinal) || source.StartsWith("cashuB", StringComparison.Ordinal))
+        && source.Length > 10;
 
     public static string ObfuscatePaymentRequest(this string source)
     {

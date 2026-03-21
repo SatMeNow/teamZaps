@@ -7,7 +7,7 @@ namespace TeamZaps.Examples;
 
 /// <summary>
 /// Reads the local Cashu proof wallet (data/wallets/cashu.json) and serializes its
-/// proofs into standard NUT-00 cashuA tokens that any compatible wallet can import.
+/// proofs into standard NUT-00 Cashu tokens (cashuA/cashuB) that any compatible wallet can import.
 ///
 /// Background:
 ///   CashuWallet stores raw BDHKE proof components (amount, id, secret, C) — the
@@ -16,7 +16,7 @@ namespace TeamZaps.Examples;
 ///
 ///     { "token": [{ "mint": "<mintUrl>", "proofs": [...] }] }
 ///
-///   base64url-encoded and prefixed with "cashuA".
+///   base64url-encoded and prefixed with "cashuA" (v3/JSON) or "cashuB" (v4/CBOR).
 ///
 ///   This sample performs that conversion so you can recover funds from the wallet
 ///   file if the bot's Cashu backend holds unspent proofs.
@@ -24,7 +24,7 @@ namespace TeamZaps.Examples;
 public class Sample_CashuExport
 {
     /// <summary>
-    /// Reads all proofs from the wallet storage and prints one cashuA token per
+    /// Reads all proofs from the wallet storage and prints one Cashu token (cashuA/cashuB) per
     /// distinct mint URL. Each proof carries the URL of its mint, so the output
     /// is correct even when proofs span multiple mints.
     /// </summary>
@@ -42,7 +42,7 @@ public class Sample_CashuExport
         Console.WriteLine($"Found {wallet.Proofs.Count} proofs ({totalSats} sats total)");
         Console.WriteLine();
 
-        // One cashuA token per mint — group by the per-proof MintUrl.
+        // One Cashu token (cashuA/cashuB) per mint — group by the per-proof MintUrl.
         foreach (var mintGroup in wallet.Proofs.GroupBy(p => p.MintUrl))
         {
             var proofNodes = mintGroup.Select(p => new
@@ -81,7 +81,7 @@ public class Sample_CashuExport
     {
         var bytes  = Encoding.UTF8.GetBytes(json);
         var base64 = Convert.ToBase64String(bytes);
-        // URL-safe alphabet, no padding — standard for cashuA tokens.
+        // URL-safe alphabet, no padding — standard for Cashu tokens (cashuA/cashuB).
         return base64.Replace('+', '-').Replace('/', '_').TrimEnd('=');
     }
 }

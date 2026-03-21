@@ -794,7 +794,7 @@ public partial class UpdateHandler
 
         var token = command.Arguments.Length > 0 ? string.Join("", command.Arguments) : null;
         if (string.IsNullOrWhiteSpace(token) || !token.IsCashuToken())
-            throw new InvalidOperationException($"Usage: `{BotRootCommand.TopUp} cashuA...`\n\nProvide a valid Cashu token as argument.")
+            throw new InvalidOperationException($"Usage: `{BotRootCommand.TopUp} cashuA... or cashuB...`\n\nProvide a valid Cashu token as argument.")
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser();
 

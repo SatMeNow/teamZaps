@@ -217,7 +217,7 @@ public interface ICashuBackend : ILightningBackend
     /// </summary>
     Task<long> GetBalanceAsync(CancellationToken cancellationToken = default);
     /// <summary>
-    /// Receive a serialized cashuA token, validate and absorb its proofs into the bot's wallet
+    /// Receive a serialized Cashu token (cashuA/cashuB), validate and absorb its proofs into the bot's wallet
     /// via NUT-03 swap (atomically burns user proofs and issues fresh ones, preventing double-spend).
     /// Throws if the token is from a different mint, already spent, or malformed.
     /// </summary>

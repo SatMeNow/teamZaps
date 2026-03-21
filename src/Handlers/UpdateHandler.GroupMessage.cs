@@ -566,7 +566,7 @@ public partial class UpdateHandler
         var totalSats = exchangeRateBackend.ToSats(totalFiat);
         var allTokens = participant.Orders.SelectMany(o => o.Tokens).ToArray();
 
-        // Push-based: no invoice is created; the user will paste a cashuA token to the bot.
+        // Push-based: no invoice is created; the user will paste a Cashu token (cashuA/cashuB) to the bot.
         var pending = new PendingPayment
         {
             Participant = participant,
@@ -581,7 +581,7 @@ public partial class UpdateHandler
         };
         session.PendingPayments.TryAdd(pending.PaymentHash, pending);
 
-        // Prompt participant to paste a cashuA token:
+        // Prompt participant to paste a Cashu token (cashuA/cashuB):
         var message = await CashuPaymentMessage.SendAsync(pending, botClient, cancellationToken).ConfigureAwait(false);
         pending.MessageId = message.MessageId;
 

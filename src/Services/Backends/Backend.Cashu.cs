@@ -106,38 +106,38 @@ public class CashuService : ICashuBackend, ISanitizableBackend
     {
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
-        // Decode the cashuA token envelope.
         if (!cashuToken.IsCashuToken())
-            throw new FormatException("Invalid Cashu token: must start with 'cashuA'.")
+            throw new FormatException("Invalid Cashu token: must start with 'cashuA' or 'cashuB'.")
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser();
 
-        var json = Encoding.UTF8.GetString(Base64UrlDecode(cashuToken[6..]));
-        var envelope = JsonSerializer.Deserialize<CashuTokenEnvelope>(json)
-            ?? throw new FormatException("Invalid Cashu token: failed to deserialize envelope.")
-                .AddLogLevel(LogLevel.Warning)
-                .AnswerUser();
-
-        // Validate mint URL.
-        var expectedMint = settings.MintUrl.TrimEnd('/');
-        var inputProofs = new List<(Proof Proof, string MintUrl)>();
-        foreach (var entry in envelope.token)
+        // Decode cashuA (v3/JSON) or cashuB (v4/CBOR) using DotNut's unified decoder.
+        DotNut.CashuToken decoded;
+        try
         {
-            var entryMint = entry.mint.TrimEnd('/');
+            decoded = CashuTokenHelper.Decode(cashuToken, out _, null!);
+        }
+        catch (Exception ex)
+        {
+            throw new FormatException("Invalid Cashu token: failed to deserialize.", ex)
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
+        }
+
+        // Validate mint URL and collect proofs.
+        var expectedMint = settings.MintUrl.TrimEnd('/');
+        var inputProofs = new List<Proof>();
+        foreach (var entry in decoded.Tokens)
+        {
+            var entryMint = entry.Mint.TrimEnd('/');
             if (!string.Equals(entryMint, expectedMint, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(
-                    $"Token mint *{entry.mint}* does not match my configured mint.\n\n" +
+                    $"Token mint *{entry.Mint}* does not match my configured mint.\n\n" +
                     $"Only tokens from *{settings.MintUrl}* are accepted.")
                     .AddLogLevel(LogLevel.Warning)
                     .AnswerUser();
 
-            inputProofs.AddRange(entry.proofs.Select(p => (new Proof
-            {
-                Amount = p.amount,
-                Id = new KeysetId(p.id),
-                Secret = new StringSecret(p.secret),
-                C = new PubKey(p.C)
-            }, entryMint)));
+            inputProofs.AddRange(entry.Proofs);
         }
 
         if (inputProofs.Count == 0)
@@ -145,7 +145,7 @@ public class CashuService : ICashuBackend, ISanitizableBackend
                 .AddLogLevel(LogLevel.Warning)
                 .AnswerUser();
 
-        var totalSats = inputProofs.Sum(p => (long)p.Proof.Amount);
+        var totalSats = inputProofs.Sum(p => (long)p.Amount);
 
         // NUT-03 swap: burn user's proofs and mint fresh ones for us atomically.
         var denominations = GetDenominations((ulong)totalSats).ToList();
@@ -165,7 +165,7 @@ public class CashuService : ICashuBackend, ISanitizableBackend
         try
         {
             var swapResponse = await client.Swap(
-                new PostSwapRequest { Inputs = inputProofs.Select(p => p.Proof).ToArray(), Outputs = blindedMessages },
+                new PostSwapRequest { Inputs = inputProofs.ToArray(), Outputs = blindedMessages },
                 cancellationToken).ConfigureAwait(false);
 
             for (int i = 0; i < swapResponse.Signatures.Length; i++)
@@ -286,13 +286,6 @@ public class CashuService : ICashuBackend, ISanitizableBackend
         var json = JsonSerializer.Serialize(envelope);
         var bytes = Encoding.UTF8.GetBytes(json);
         return "cashuA" + Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=');
-    }
-
-    private static byte[] Base64UrlDecode(string input)
-    {
-        var s = input.Replace('-', '+').Replace('_', '/');
-        s = s.PadRight(s.Length + ((4 - s.Length % 4) % 4), '=');
-        return Convert.FromBase64String(s);
     }
     #endregion
 
@@ -603,29 +596,6 @@ public class CashuService : ICashuBackend, ISanitizableBackend
 
     private sealed record ProofWithMint(Proof Proof, string MintUrl);
 }
-
-// --- File-private types ---
-
-// Token deserialisation envelope for receiving cashuA tokens.
-file class CashuTokenEnvelope
-{
-    public CashuTokenEntry[] token { get; set; } = [];
-}
-file class CashuTokenEntry
-{
-    public string mint { get; set; } = string.Empty;
-    public CashuProofDto[] proofs { get; set; } = [];
-}
-file class CashuProofDto
-{
-    public ulong amount { get; set; }
-    public string id { get; set; } = string.Empty;
-    public string secret { get; set; } = string.Empty;
-    public string C { get; set; } = string.Empty;
-}
-
-// Swap request/response (NUT-03).
-// Note: DotNut 1.0.6 exposes PostSwapRequest and PostSwapResponse directly in DotNut.ApiModels.
 
 // --- File-private response models ---
 

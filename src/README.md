@@ -117,7 +117,7 @@ Cashu mint backend for bi-directional eCash ↔ Lightning bridging using [DotNut
 
 - **NUT-04 (mint)**: Creates Lightning invoices; mints eCash proofs into a local wallet once paid.
 - **NUT-05 (melt)**: Pays Lightning invoices by melting eCash proofs from the local wallet.
-- **NUT-03 (swap)**: Atomically exchanges proofs — used for receiving `cashuA` tokens (burn user's proofs, issue fresh ones to bot wallet) and for obtaining exact change when sending tokens.
+- **NUT-03 (swap)**: Atomically exchanges proofs — used for receiving Cashu tokens (cashuA/cashuB) (burn user's proofs, issue fresh ones to bot wallet) and for obtaining exact change when sending tokens.
 - **Proof wallet**: Persisted to `data/wallets/cashu.json`.
 
 ```json
@@ -140,12 +140,12 @@ Cashu mint backend for bi-directional eCash ↔ Lightning bridging using [DotNut
 1. `CreateInvoiceAsync` → `POST /v1/mint/quote/bolt11` → returns a Lightning invoice; stores `quoteId` as payment identifier
 2. `CheckPaymentStatusAsync(quoteId)` → `GET /v1/mint/quote/bolt11/{quoteId}`; if PAID → `POST /v1/mint/bolt11` with BDHKE blinded messages → unblind signatures → proofs saved to wallet
 3. `PayInvoiceAsync(bolt11)` → `POST /v1/melt/quote/bolt11`; selects proofs from wallet; `POST /v1/melt/bolt11` → proofs spent, invoice paid
-4. `ReceiveTokenAsync(cashuA)` — NUT-03 swap: decodes Base64url token, validates mint URL matches, creates fresh blinded outputs for the same total amount, calls `POST /v1/swap` to atomically burn input proofs and issue new ones, absorbs new proofs into wallet; returns sats received
-5. `SendTokenAsync(sats)` — greedy coin selection; if overshoot, NUT-03 swap to get exact change; serializes selected proofs to NUT-00 `cashuA` Base64url token string; removes proofs from wallet
+4. `ReceiveTokenAsync` — NUT-03 swap: decodes cashuA (v3/JSON) or cashuB (v4/CBOR) Base64url token, validates mint URL matches, creates fresh blinded outputs for the same total amount, calls `POST /v1/swap` to atomically burn input proofs and issue new ones, absorbs new proofs into wallet; returns sats received
+5. `SendTokenAsync(sats)` — greedy coin selection; if overshoot, NUT-03 swap to get exact change; serializes selected proofs to NUT-00 cashuA Base64url token string (v3/JSON); removes proofs from wallet
 
 **Proof wallet format and recovery:**
 
-`cashu.json` stores proofs in their raw internal form — not the portable `cashuA…` token format that other Cashu wallets accept:
+`cashu.json` stores proofs in their raw internal form — not the portable Cashu token format (`cashuA…`/`cashuB…`) that other Cashu wallets accept:
 
 ```json
 { "proofs": [{ "amount": 64, "id": "009a1f…", "secret": "a3f0…", "C": "02ab…" }] }
@@ -157,7 +157,7 @@ To recover funds (if required), proofs must be wrapped in the NUT-00 token envel
 { "token": [{ "mint": "https://mint.minibits.cash/Bitcoin", "proofs": [{ "amount": 64, "id": "…", "secret": "…", "C": "…" }] }] }
 ```
 
-`Sample_CashuExport.ExportTokensAsync(walletStorage, mintUrl)` (`Examples/Sample.CashuExport.cs`) does this conversion and prints one `cashuA…` string per keyset to stdout. The output can be pasted into any NUT-00-compatible wallet (Minibits, eNuts, etc.).
+`Sample_CashuExport.ExportTokensAsync(walletStorage, mintUrl)` (`Examples/Sample.CashuExport.cs`) does this conversion and prints one Cashu token string (`cashuA…`/`cashuB…`) per keyset to stdout. The output can be pasted into any NUT-00-compatible wallet (Minibits, eNuts, etc.).
 
 #### Exchange Rate Backends
 
@@ -1169,9 +1169,9 @@ Use the commands below in the appropriate context — group chats or private/dir
   **Implementation**: Uses `HandleGroupStatisticsAsync()` which checks permissions via `BotAdminOptions` before calling `GroupStatisticsMessage.SendAsync()`. If the group has no completed sessions yet, an error message is returned. Statistics are automatically calculated after each session completion by the `StatisticService`.
 
 ### Private commands (use in a direct/private chat with the bot)
-- `/topup <cashuA...>` - Top up the Cashu wallet (root users only)
+- `/topup <cashuA or cashuB...>` - Top up the Cashu wallet (root users only)
 
-  Deposits a `cashuA` Cashu token into the bot's eCash wallet. Only available when Cashu is the active Lightning backend.
+  Deposits a Cashu token (`cashuA` or `cashuB`) into the bot's eCash wallet. Only available when Cashu is the active Lightning backend.
 
   The token is absorbed via a NUT-03 swap (atomically burns the submitted proofs and issues fresh ones to the bot wallet). On success the bot replies with the received amount and new wallet balance.
 
