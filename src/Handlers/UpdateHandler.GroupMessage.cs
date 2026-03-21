@@ -90,6 +90,32 @@ public partial class UpdateHandler
                 .ExpireMessage();
         }
 
+        // Check Cashu wallet reserve — the mint charges a fee_reserve on each winner payout (NUT-05 melt)
+        if (cashuBackend is not null)
+        {
+            var walletBalance = await cashuBackend.GetBalanceAsync(cancellationToken).ConfigureAwait(false);
+            if (walletBalance < cashuBackend.MinimumReserve)
+            {
+                var notif = $"⚠️ A session start was rejected: Cashu wallet balance {walletBalance.Format()} is below the minimum reserve of {cashuBackend.MinimumReserve.Format()}. Please top up the wallet now!";
+                foreach (var rootUser in telegramSettings.RootUsers)
+                {
+                    try
+                    {
+                        await botClient.SendMessage(rootUser, notif, parseMode: ParseMode.Markdown, cancellationToken: cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to notify root user {RootUser} about Cashu reserve shortage.", rootUser);
+                    }
+                }
+                throw new InvalidOperationException("I'm sorry, my Cashu wallet is running low and *cannot cover winner payouts* right now.")
+                    .AddHelp("Please try again in a few minutes or contact support.")
+                    .AddLogLevel(LogLevel.Warning)
+                    .AnswerUser()
+                    .ExpireMessage();
+            }
+        }
+
         // Obtain block header at session start
         var currentBlock = await indexerBackend.GetCurrentBlockAsync(cancellationToken).ConfigureAwait(false);
 

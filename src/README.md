@@ -134,6 +134,7 @@ Cashu mint backend for bi-directional eCash ↔ Lightning bridging using [DotNut
 **Configuration:**
 - `MintUrl` - Cashu mint base URL (e.g. `https://mint.minibits.cash/Bitcoin`)
 - `Unit` - Token denomination unit (default: `sat`)
+- `MinimumReserve` - Minimum sats the bot's wallet must hold before new sessions are allowed (default: `100`). The Cashu mint charges a `fee_reserve` on top of every winner payout (NUT-05 melt) to cover Lightning routing costs. If the wallet drops below this threshold, `/startzap` is rejected and root users are notified.
 
 **How it works (flow):**
 1. `CreateInvoiceAsync` → `POST /v1/mint/quote/bolt11` → returns a Lightning invoice; stores `quoteId` as payment identifier

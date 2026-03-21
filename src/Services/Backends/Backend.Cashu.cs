@@ -62,6 +62,7 @@ public class CashuService : ICashuBackend, ISanitizableBackend
     #endregion
     #region Properties
     public string MintUrl => settings.MintUrl;
+    public long MinimumReserve => settings.MinimumReserve;
     public long SentRequests { get; private set; }
     public long FailedRequests { get; private set; }
     #endregion
@@ -77,6 +78,13 @@ public class CashuService : ICashuBackend, ISanitizableBackend
             await LoadWalletAsync().ConfigureAwait(false);
             initialized = true;
             SentRequests++;
+
+            // Warn root users if the wallet is below the minimum reserve needed for winner payouts.
+            var balance = proofs.Sum(p => (long)p.Proof.Amount);
+            if (balance < settings.MinimumReserve)
+                throw new InvalidOperationException(
+                    $"Cashu wallet balance {balance.Format()} is below the minimum reserve of {settings.MinimumReserve.Format()}. " +
+                    $"Please top up the wallet at {settings.MintUrl} to allow winner payouts.");
         }
         catch
         {
@@ -332,7 +340,6 @@ public class CashuService : ICashuBackend, ISanitizableBackend
             var totalNeeded = meltQuote.Amount + (ulong)meltQuote.FeeReserve;
 
             await walletLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-            PostMeltQuoteBolt11Response meltResponse;
             try
             {
                 var selected = SelectProofsGreedy(totalNeeded);
@@ -343,7 +350,7 @@ public class CashuService : ICashuBackend, ISanitizableBackend
                         .AddLogLevel(LogLevel.Warning)
                         .AnswerUser();
 
-                meltResponse = await client.Melt<PostMeltQuoteBolt11Response, PostMeltBolt11Request>(
+                var meltResponse = await client.Melt<PostMeltQuoteBolt11Response, PostMeltBolt11Request>(
                     "bolt11",
                     new PostMeltBolt11Request { Quote = meltQuote.Quote, Inputs = selected.Select(p => p.Proof).ToArray() },
                     cancellationToken).ConfigureAwait(false);

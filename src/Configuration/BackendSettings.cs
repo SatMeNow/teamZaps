@@ -88,6 +88,13 @@ public class CashuSettings
     /// Token unit used for Lightning quotes (default: sat)
     /// </summary>
     public string Unit { get; set; } = "sat";
+    /// <summary>
+    /// Minimum sats the bot's Cashu wallet must hold before new sessions are allowed.
+    /// Needed because the mint charges a <c>fee_reserve</c> on top of each melt (NUT-05) to cover Lightning routing fees.
+    /// If the wallet drops below this threshold, session starts are rejected and root users are notified.
+    /// Default: 100 sats.
+    /// </summary>
+    public long MinimumReserve { get; set; } = 100;
 }
 
 public class TelegramSettings

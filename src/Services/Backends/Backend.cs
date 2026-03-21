@@ -208,6 +208,11 @@ public interface ICashuBackend : ILightningBackend
     /// <summary>The Cashu mint URL.</summary>
     string MintUrl { get; }
     /// <summary>
+    /// Minimum sats the wallet must hold before new sessions are permitted.
+    /// Covers the <c>fee_reserve</c> the mint charges on NUT-05 melt operations.
+    /// </summary>
+    long MinimumReserve { get; }
+    /// <summary>
     /// Get the current eCash wallet balance in sats.
     /// </summary>
     Task<long> GetBalanceAsync(CancellationToken cancellationToken = default);

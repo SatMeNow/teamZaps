@@ -148,7 +148,7 @@ throw new InvalidOperationException("Session is not currently accepting new part
 - **Backends.Yadio/CoinCap/CoinGecko**: (empty, use defaults)
 - **Backends.Lnbits**: LndhubUrl, ApiKey
 - **Backends.AlbyHub**: ConnectionString, RelayUrls[]
-- **Backends.Cashu**: MintUrl, Unit (default: "sat")
+- **Backends.Cashu**: MintUrl, Unit (default: "sat"), MinimumReserve (default: 100 sats — wallet must stay above this for `/startzap` to succeed; covers Cashu `fee_reserve` on winner payouts; sanity check throws + notifies root users if violated)
 - **Debug** (DEBUG build only): FixBudget — pin exchange rate for local testing
 - **Recovery**: Enable, DailyScanTime
 - Per-group: `BotAdminOptions` — `[Storage("adminOpt", "chat_{0}.json")]`
