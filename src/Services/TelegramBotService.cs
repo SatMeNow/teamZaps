@@ -58,6 +58,7 @@ public static class BotPmCommand
 public static class BotRootCommand
 {
     public const string Diagnosis = "/diag";
+    public const string TopUp = "/topup";
 }
 public static class CallbackActions
 {

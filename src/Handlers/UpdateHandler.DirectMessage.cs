@@ -135,6 +135,11 @@ public partial class UpdateHandler
                     await HandleDiagnosisAsync(botClient, command, cancellationToken).ConfigureAwait(false);
                 break;
 
+            case BotRootCommand.TopUp:
+                if (await IsRootUserAsync(botClient, command, cancellationToken).ConfigureAwait(false))
+                    await HandleTopUpAsync(botClient, command, cancellationToken).ConfigureAwait(false);
+                break;
+
             default: return (false);
         }
         return (true);
@@ -780,6 +785,33 @@ public partial class UpdateHandler
         }
     }
     /// <summary>
+    private async Task HandleTopUpAsync(ITelegramBotClient botClient, CommandMessage command, CancellationToken cancellationToken)
+    {
+        if (cashuBackend is null)
+            throw new InvalidOperationException("Cashu backend is not configured.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
+
+        var token = command.Arguments.Length > 0 ? string.Join("", command.Arguments) : null;
+        if (string.IsNullOrWhiteSpace(token) || !token.IsCashuToken())
+            throw new InvalidOperationException($"Usage: `{BotRootCommand.TopUp} cashuA...`\n\nProvide a valid Cashu token as argument.")
+                .AddLogLevel(LogLevel.Warning)
+                .AnswerUser();
+
+        var received = await cashuBackend.ReceiveTokenAsync(token, cancellationToken).ConfigureAwait(false);
+        var newBalance = await cashuBackend.GetBalanceAsync(cancellationToken).ConfigureAwait(false);
+        await botClient.SendMessage(
+            command.ChatId,
+            $"✅ Top-up successful: *+{received.Format()}* received.\nNew wallet balance: *{newBalance.Format()}*",
+            parseMode: ParseMode.Markdown,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        logger.LogInformation("Root user {User} topped up Cashu wallet: +{Received} sats. New balance: {Balance} sats.", command.From, received, newBalance);
+
+        // Delete the user's command message to keep the chat clean
+        await botClient.DeleteMessageAsync(command.Source, cancellationToken).ConfigureAwait(false);
+    }
+
     /// Shows diagnostic information about the current session and system state.
     /// </summary>
     /// <remarks>
