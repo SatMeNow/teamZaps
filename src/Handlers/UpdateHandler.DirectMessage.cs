@@ -770,25 +770,7 @@ public partial class UpdateHandler
         // Decode and validate the invoice amount
         var invoiceSats = lightningBackend.GetInvoiceAmount(bolt11);
 
-        long meltFee = 0;
-        if (cashuBackend is not null)
-        {
-            meltFee = await cashuBackend.QueryMeltFeeAsync(bolt11, cancellationToken).ConfigureAwait(false);
-            var maxInvoice = (winnerPayout.RemainingAmount - meltFee);
-            if (invoiceSats > maxInvoice)
-                throw new InvalidOperationException(
-                    $"Invoice amount too high after the Cashu melt fee.\n\n" +
-                    $"• Your invoice: *{invoiceSats.Format()}*\n" +
-                    $"• Cashu melt fee for this invoice: *{meltFee.Format()}*\n" +
-                    $"• Maximum invoice: *{maxInvoice.Format()}*\n\n" +
-                    $"Please create a new invoice for exactly *{maxInvoice.Format()}* and send it to me.")
-                    .AnswerUser()
-                    .AddLogLevel(LogLevel.Warning);
-        }
-        else
-        {
-            ValidateInvoiceAmount(winnerPayout.RemainingAmount, invoiceSats);
-        }
+        ValidateInvoiceAmount(winnerPayout.RemainingAmount, invoiceSats);
 
         var statusText = "✅ Invoice received!\n" +
             "⏳ Processing payout...";
@@ -801,7 +783,7 @@ public partial class UpdateHandler
                 throw new InvalidOperationException("Failed to execute payout. Please retry with sending a new invoice.");
 
             logger.LogInformation("Payout executed successfully by {Participant} for session {Session}.", participant, session);
-            winnerPayout.AddPayment(invoiceSats + meltFee); // fee counts against entitlement, preserving bot reserve
+            winnerPayout.AddPayment(invoiceSats);
 
             if (winnerPayout.PaymentCompleted)
             {
@@ -836,9 +818,8 @@ public partial class UpdateHandler
 
                 // Notify winner about partial payout
                 statusText += "\n\n" +
-                    $"✅ Partially paid out *{invoiceSats.Format()}*" +
-                    (meltFee > 0 ? $" (Cashu melt fee: *{meltFee.Format()}*)" : "") + ".\n" +
-                    $"⚡ Please send me a new invoice for up to *{winnerPayout.RemainingAmount.Format()}*.";
+                    $"✅ Partially paid out *{invoiceSats.Format()}*.\n" +
+                    $"⚡ Please send me a new invoice for up to *{winnerPayout.RemainingAmount.Format()}*.*";
                 await botClient.EditMessageText(user.Id,
                     statusMessage.MessageId,
                     statusText,

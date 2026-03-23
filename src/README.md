@@ -111,12 +111,13 @@ LNBits uses a traditional REST API for Lightning operations. Requires a running 
 - `LndhubUrl` - LNDhub extension URL (must end with `/lndhub/ext/`)
 - `ApiKey` - Invoice/read key from your LNbits wallet
 
-#### Cashu Mint Backend (NUT-04/NUT-05)
+#### Cashu Mint Backend (NUT-04/NUT-05/NUT-08)
 
 Cashu mint backend for bi-directional eCash ↔ Lightning bridging using [DotNut](https://github.com/Kukks/DotNut). Implements `ICashuBackend : ILightningBackend`.
 
 - **NUT-04 (mint)**: Creates Lightning invoices; mints eCash proofs into a local wallet once paid.
 - **NUT-05 (melt)**: Pays Lightning invoices by melting eCash proofs from the local wallet.
+- **NUT-08 (fee return)**: On every melt, blank outputs are included so the mint returns any overpaid `fee_reserve` as change proofs back into the bot's wallet. The winner's invoice is paid in full; only the actual routing fee (typically 1 sat) is consumed from the reserve.
 - **NUT-03 (swap)**: Atomically exchanges proofs — used for receiving Cashu tokens (cashuA/cashuB) (burn user's proofs, issue fresh ones to bot wallet) and for obtaining exact change when sending tokens.
 - **Proof wallet**: Persisted to `data/wallets/cashu.json`.
 
@@ -138,13 +139,13 @@ Cashu mint backend for bi-directional eCash ↔ Lightning bridging using [DotNut
 
 **Fee asymmetry:**
 - **Inbound (mint, NUT-04):** User pays Lightning → bot receives full amount as eCash. No fee charged by the mint for minting.
-- **Outbound (melt, NUT-05):** Bot pays Lightning from eCash → mint charges a `fee_reserve` per invoice (~1–2%, depends on routing). This fee is deducted from the winner's payout when they choose Lightning. Cashu token payouts (NUT-03 send) are always fee-free.
+- **Outbound (melt, NUT-05+NUT-08):** Bot pays Lightning from eCash → mint reserves a `fee_reserve` per invoice. Thanks to NUT-08, any unused portion is returned as change proofs, so the net cost is only the actual routing fee (typically ~1 sat). The winner always receives their full entitlement. Cashu token payouts (NUT-03 send) are always fee-free.
 
 **How it works (flow):**
 1. `CreateInvoiceAsync` → `POST /v1/mint/quote/bolt11` → returns a Lightning invoice; stores `quoteId` as payment identifier
 2. `CheckPaymentStatusAsync(quoteId)` → `GET /v1/mint/quote/bolt11/{quoteId}`; if PAID → `POST /v1/mint/bolt11` with BDHKE blinded messages → unblind signatures → proofs saved to wallet
-3. `PayInvoiceAsync(bolt11)` → `POST /v1/melt/quote/bolt11`; selects proofs from wallet; `POST /v1/melt/bolt11` → proofs spent, invoice paid
-4. `QueryMeltFeeAsync(bolt11)` → `POST /v1/melt/quote/bolt11` only; returns `fee_reserve` without paying — used to pre-check the melt cost before committing to a Lightning payout
+3. `PayInvoiceAsync(bolt11)` → `POST /v1/melt/quote/bolt11`; generates `max(ceil(log2(fee_reserve)), 1)` blank outputs (NUT-08); selects proofs from wallet; `POST /v1/melt/bolt11` with blank outputs → proofs spent, invoice paid; unblind any `change` signatures returned by the mint and absorb them back into the wallet
+4. `QueryMeltFeeAsync(bolt11)` → `POST /v1/melt/quote/bolt11` only; returns `fee_reserve` without paying — available for diagnostic/display purposes
 5. `ReceiveTokenAsync` — NUT-03 swap: decodes cashuA (v3/JSON) or cashuB (v4/CBOR) Base64url token, validates mint URL matches, creates fresh blinded outputs for the same total amount, calls `POST /v1/swap` to atomically burn input proofs and issue new ones, absorbs new proofs into wallet; returns sats received
 6. `SendTokenAsync(sats)` — greedy coin selection; if overshoot, NUT-03 swap to get exact change; serializes selected proofs to NUT-00 cashuA Base64url token string (v3/JSON); removes proofs from wallet
 

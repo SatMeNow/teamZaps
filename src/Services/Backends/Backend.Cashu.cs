@@ -354,6 +354,7 @@ public class CashuService : ICashuBackend, ISanitizableBackend
                 cancellationToken).ConfigureAwait(false);
 
             var totalNeeded = meltQuote.Amount + (ulong)meltQuote.FeeReserve;
+            long feeReturn = 0;
 
             await walletLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -366,9 +367,17 @@ public class CashuService : ICashuBackend, ISanitizableBackend
                         .AddLogLevel(LogLevel.Warning)
                         .AnswerUser();
 
+                // NUT-08: include blank outputs so the mint returns any overpaid fee_reserve as change proofs.
+                var (blankMessages, blankSecrets, blankRs) = GenerateBlankOutputs(meltQuote.FeeReserve);
+
                 var meltResponse = await client.Melt<PostMeltQuoteBolt11Response, PostMeltBolt11Request>(
                     "bolt11",
-                    new PostMeltBolt11Request { Quote = meltQuote.Quote, Inputs = selected.Select(p => p.Proof).ToArray() },
+                    new PostMeltBolt11Request
+                    {
+                        Quote = meltQuote.Quote,
+                        Inputs = selected.Select(p => p.Proof).ToArray(),
+                        Outputs = blankMessages.Length > 0 ? blankMessages : null
+                    },
                     cancellationToken).ConfigureAwait(false);
 
                 if (!string.Equals(meltResponse.State, "PAID", StringComparison.OrdinalIgnoreCase))
@@ -376,9 +385,25 @@ public class CashuService : ICashuBackend, ISanitizableBackend
                         $"Melt request returned state '{meltResponse.State}' (expected PAID).")
                         .AddLogLevel(LogLevel.Warning);
 
-                // Remove spent proofs and persist wallet.
+                // Remove spent proofs.
                 var spentCs = selected.Select(p => p.Proof.C).ToHashSet();
                 proofs.RemoveAll(p => spentCs.Contains(p.Proof.C));
+
+                // NUT-08: unblind any change signatures returned by the mint and absorb them back into the wallet.
+                if (meltResponse.Change is { Length: > 0 })
+                {
+                    for (int i = 0; i < meltResponse.Change.Length; i++)
+                    {
+                        var sig = meltResponse.Change[i];
+                        ECPubKey A = activeKeyset![sig.Amount];
+                        ECPubKey C = Cashu.ComputeC(sig.C_, blankRs[i], A);
+                        proofs.Add(new ProofWithMint(
+                            new Proof { Amount = sig.Amount, Id = sig.Id, Secret = new StringSecret(blankSecrets[i]), C = C },
+                            settings.MintUrl.TrimEnd('/')));
+                        feeReturn += (long)sig.Amount;
+                    }
+                }
+
                 await SaveWalletAsync().ConfigureAwait(false);
             }
             finally
@@ -386,14 +411,15 @@ public class CashuService : ICashuBackend, ISanitizableBackend
                 walletLock.Release();
             }
 
-            logger.LogInformation("Melt completed for quote {QuoteId} ({Amount} sats, {Fee} sats fee).",
-                meltQuote.Quote, meltQuote.Amount, meltQuote.FeeReserve);
+            var actualFee = meltQuote.FeeReserve - feeReturn;
+            logger.LogInformation("Melt completed for quote {QuoteId} ({Amount} sats, {ActualFee} sats actual fee, {FeeReturn} sats fee returned).",
+                meltQuote.Quote, meltQuote.Amount, actualFee, feeReturn);
             SentRequests++;
             return new CashuPaymentResponse
             {
                 PaymentHash = meltQuote.Quote,  // Quote ID used as payment identifier.
                 Amount = (long)meltQuote.Amount,
-                Fee = meltQuote.FeeReserve
+                Fee = actualFee
             };
         }
         catch
@@ -596,6 +622,29 @@ public class CashuService : ICashuBackend, ISanitizableBackend
             yield return denom;
             amount -= denom;
         }
+    }
+
+    // NUT-08: generate blank outputs whose amounts are filled in by the mint from the overpaid fee_reserve.
+    // count = max(ceil(log2(fee_reserve)), 1) — enough slots to represent any binary decomposition of the change.
+    private (BlindedMessage[] Outputs, string[] Secrets, ECPrivKey[] Rs) GenerateBlankOutputs(int feeReserve)
+    {
+        var count = feeReserve == 0 ? 0 : Math.Max((int)Math.Ceiling(Math.Log2(feeReserve)), 1);
+        if (count == 0)
+            return ([], [], []);
+
+        var secrets = new string[count];
+        var rs = new ECPrivKey[count];
+        var outputs = new BlindedMessage[count];
+        for (int i = 0; i < count; i++)
+        {
+            secrets[i] = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLower();
+            rs[i] = ECPrivKey.Create(RandomNumberGenerator.GetBytes(32));
+            var Y = Cashu.MessageToCurve(secrets[i]);
+            var B_ = Cashu.ComputeB_(Y, rs[i]);
+            // NUT-08: amount is ignored by the mint; set to 1 for JSON validation compatibility.
+            outputs[i] = new BlindedMessage { Amount = 1, Id = activeKeysetId, B_ = B_ };
+        }
+        return (outputs, secrets, rs);
     }
     #endregion
 

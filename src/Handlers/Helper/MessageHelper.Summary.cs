@@ -80,10 +80,7 @@ internal static class SessionSummaryMessage
             summary.AppendLine($"*Your payout: {winnerSats.Format()}*");
             summary.AppendLine();
             summary.AppendLine($"🥜 Tap the button below for an instant *Cashu token* — no fee.");
-            summary.AppendLine($"⚡ Or send me a *Lightning invoice* to be paid via Lightning.");
-            summary.AppendLine($"   ⚠️ The Cashu mint charges a melt fee (~1–2%) on Lightning payouts.");
-            summary.AppendLine($"   Send any invoice ≤ *{winnerSats.Format()}* and I'll tell you the exact");
-            summary.AppendLine($"   net amount after the fee is known.");
+            summary.AppendLine($"⚡ Or send me a *Lightning invoice* for exactly *{winnerSats.Format()}*.");
         }
         else
         {
