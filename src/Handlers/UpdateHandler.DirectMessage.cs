@@ -175,6 +175,9 @@ public partial class UpdateHandler
             // Check for Cashu token payment:
             if (text.IsCashuToken())
             {
+                // Delete the message immediately to prevent the token from being readable in chat history.
+                await botClient.DeleteMessageAsync(user.Id, message.MessageId, cancellationToken).ConfigureAwait(false);
+
                 switch (session.Phase)
                 {
                     case SessionPhase.WaitingForPayments:

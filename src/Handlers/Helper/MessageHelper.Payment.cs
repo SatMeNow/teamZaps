@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using TeamZaps.Backends;
 using TeamZaps.Configuration;
@@ -45,19 +46,22 @@ internal static class LightningPaymentMessage
     }
     private static string Build(PendingPayment payment, PaymentStatus status)
     {
+        if (payment.Method != PaymentMethod.Lightning)
+            throw new InvalidOperationException("Only Lightning payments are supported.");
+        if (payment.PaymentRequest is null)
+            throw new InvalidOperationException("Payment request should not be null for Lightning payments.");
+
         var paymentReq = payment.PaymentRequest;
         if (status != PaymentStatus.Pending)
-            paymentReq = paymentReq.ObfuscatePaymentRequest();
+            paymentReq = paymentReq!.ObfuscatePaymentRequest();
             
         var notes = payment.Tokens
             .Select(t => t.Note)
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .ToArray();
 
-            
-            
         return (new StringBuilder()
-            .AppendLine($"*{PaymentMethod.Lightning.Format()} invoice*")
+            .AppendLine($"*{payment.Method.Format()} invoice*")
             .AppendLine()
             .AppendLineIf("• Notes: *{0}*", !notes.IsEmpty(), string.Join(", ", notes))
             .AppendLine($"• Amount: {payment.FormatOrderedAmount()}")
@@ -109,6 +113,11 @@ internal static class CashuPaymentMessage
 
     private static string Build(PendingPayment payment, PaymentStatus status)
     {
+        if (payment.Method != PaymentMethod.Cashu)
+            throw new InvalidOperationException("Only Cashu payments are supported.");
+        if (payment.PaymentRequest is not null)
+            throw new InvalidOperationException("Payment request should be null for Cashu payments.");
+
         var notes = payment.Tokens
             .Select(t => t.Note)
             .Where(n => !string.IsNullOrWhiteSpace(n))
@@ -123,10 +132,21 @@ internal static class CashuPaymentMessage
             .AppendLine();
 
         if (status == PaymentStatus.Pending)
-            sb.AppendLine($"Send me a Cashu token (`cashuA…` or `cashuB…`) for exact {payment.FormatAmount()}.");
+            sb.AppendLine($"Send me a Cashu token (`cashuA…` or `cashuB…`) for exact *{payment.SatsAmount.Format()}*.");
         else
             sb.AppendLine($"{status.GetIcon()} {status.GetDescription()}");
 
         return sb.ToString();
     }
+}
+
+internal static partial class Ext
+{
+    public static Task UpdatePaymentMessageAsync<TLogger>(this PendingPayment pending, PaymentStatus status, ITelegramBotClient botClient, ILogger<TLogger> logger, CancellationToken cancellationToken) =>
+        pending.Method switch
+        {
+            PaymentMethod.Lightning => LightningPaymentMessage.UpdateAsync(pending, status, botClient, logger, cancellationToken),
+            PaymentMethod.Cashu => CashuPaymentMessage.UpdateAsync(pending, status, botClient, logger, cancellationToken),
+            _ => throw new InvalidOperationException($"Unsupported payment method: {pending.Method}")
+        };
 }

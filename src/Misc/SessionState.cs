@@ -215,6 +215,7 @@ public class PendingPayment : IUser, ITipableAmount, IOrderableAmount
     public User User => Participant.User;
     public long UserId => User.Id;
 
+    public PaymentMethod Method => (PaymentRequest is null) ? PaymentMethod.Cashu : PaymentMethod.Lightning;
     public required string PaymentHash { get; init; }
     /// <summary>
     /// BOLT11 payment request, or null for Cashu token payments (push-based, no request string).

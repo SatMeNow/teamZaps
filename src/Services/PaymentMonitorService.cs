@@ -85,7 +85,7 @@ public class PaymentMonitorService : BackgroundService
         pending.PaidAt = DateTimeOffset.Now;
 
         // Update the payment message to show paid status
-        await LightningPaymentMessage.UpdateAsync(pending, PaymentStatus.Paid, botClient, logger, cancellationToken).ConfigureAwait(false);
+        await pending.UpdatePaymentMessageAsync(PaymentStatus.Paid, botClient, logger, cancellationToken).ConfigureAwait(false);
         var payment = new PaymentRecord()
         {
             User = pending.User,
@@ -194,7 +194,6 @@ public class PaymentMonitorService : BackgroundService
         foreach (var p in session.Participants.Values)
             await UserStatusMessage.UpdateAsync(session, p, botClient, workflowService, logger, cancellationToken).ConfigureAwait(false);
     }
-
 
     private readonly LiquidityLogService liquidityLogService;
     private readonly SessionManager sessionManager;
