@@ -25,7 +25,7 @@ internal static class SessionSummaryMessage
             {
                 ReplyMarkup? keyboard = cashuAvailable
                     ? new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(
-                        "🥜 Receive as Cashu token (no fee)", CallbackActions.PayoutViaCashu))
+                        "Receive as 🥜 Cashu token", CallbackActions.PayoutViaCashu))
                     : null;
 
                 await botClient.SendMessage(
@@ -79,8 +79,9 @@ internal static class SessionSummaryMessage
         {
             summary.AppendLine($"*Your payout: {winnerSats.Format()}*");
             summary.AppendLine();
-            summary.AppendLine($"🥜 Tap the button below for an instant *Cashu token* — no fee.");
-            summary.AppendLine($"⚡ Or send me a *Lightning invoice* for exactly *{winnerSats.Format()}*.");
+            summary.AppendLine($"How would you like to receive your *{winnerSats.Format()} payout*?");
+            summary.AppendLine($"• Tap the button below for an instant *🥜 Cashu token*.");
+            summary.AppendLine($"• Or send me a *⚡ Lightning invoice* for exactly *{winnerSats.Format()}*.");
         }
         else
         {

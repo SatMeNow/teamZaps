@@ -123,7 +123,7 @@ internal static class CashuPaymentMessage
             .AppendLine();
 
         if (status == PaymentStatus.Pending)
-            sb.AppendLine("Send me a Cashu token (`cashuA…` or `cashuB…`) for the exact amount above.");
+            sb.AppendLine($"Send me a Cashu token (`cashuA…` or `cashuB…`) for exact {payment.FormatAmount()}.");
         else
             sb.AppendLine($"{status.GetIcon()} {status.GetDescription()}");
 
